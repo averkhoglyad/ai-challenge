@@ -100,31 +100,51 @@ object Menu {
      *  - `Exit` — пользователь хочет выйти (`:quit` / `:q`);
      *  - `SwitchTask` — пользователь хочет сменить задачу (`:t` / `:task`);
      *  - `Help` — напечатать подсказку (`:help` / `:h`);
+     *  - `TaskCommand(text)` — команда для текущей задачи;
      *  - `Prompt(text)` — обычный промпт; пустой ввод → [DEFAULT_PROMPT].
      */
-    private fun readCommand(): ReplCommand {
+    private fun readCommand(currentTask: Task): ReplCommand {
         mordantTerminal.print(bold(yellow("❯ ")))
-        mordantTerminal.print(gray("Введите промпт (Enter — дефолтный, :q — выход, :t — сменить задачу): "))
+        
+        // Используем специфичное приглашение задачи, если доступно
+        val promptHint = currentTask.getPromptHint()
+        if (promptHint != null) {
+            mordantTerminal.println(gray("[$promptHint]"))
+            mordantTerminal.print(gray("Введите промпт: "))
+        } else {
+            mordantTerminal.print(gray("Введите промпт (Enter — дефолтный, :q — выход, :t — сменить задачу): "))
+        }
+        
         val input = readlnOrNull()?.trim().orEmpty()
         return when {
             input.isEmpty() -> ReplCommand.Prompt(DEFAULT_PROMPT)
             input == ":quit" || input == ":q" -> ReplCommand.Exit
             input == ":task" || input == ":t" -> ReplCommand.SwitchTask
             input == ":help" || input == ":h" -> ReplCommand.Help
+            input.startsWith(":") -> ReplCommand.TaskCommand(input)
             else -> ReplCommand.Prompt(input)
         }
     }
 
-    private fun printHelp() {
+    private fun printHelp(currentTask: Task? = null) {
         mordantTerminal.println()
         
         val helpContent = buildString {
             appendLine()
+            appendLine("  ${bold("Глобальные команды:")}")
             appendLine("  ${bold("<текст>")}        — отправить промпт текущей задаче")
             appendLine("  ${bold("(пустой Enter)")} — отправить дефолтный промпт")
             appendLine("  ${bold(":help / :h")}     — эта подсказка")
             appendLine("  ${bold(":task / :t")}     — выбрать другую задачу")
             appendLine("  ${bold(":quit / :q")}     — выйти из приложения")
+            
+            // Добавляем специфичные команды задачи, если они есть
+            currentTask?.getHelpText()?.let { taskHelp ->
+                appendLine()
+                appendLine("  ${bold("Команды текущей задачи (${currentTask.title}):")}")
+                append(taskHelp)
+            }
+            
             appendLine()
         }
         
@@ -160,7 +180,7 @@ object Menu {
         mordantTerminal.println()
 
         while (true) {
-            val command = readCommand()
+            val command = readCommand(task)
             when (command) {
                 is ReplCommand.Exit -> {
                     mordantTerminal.println()
@@ -179,7 +199,14 @@ object Menu {
                     mordantTerminal.println(bold(green("✓ Активная задача: ")) + bold(white(task.title)))
                     mordantTerminal.println()
                 }
-                is ReplCommand.Help -> printHelp()
+                is ReplCommand.Help -> printHelp(task)
+                is ReplCommand.TaskCommand -> {
+                    // Пытаемся обработать команду задачей
+                    if (!task.handleCommand(command.text)) {
+                        mordantTerminal.println(red("✗ Неизвестная команда: ${command.text}"))
+                        mordantTerminal.println(gray("Введите :help для списка доступных команд"))
+                    }
+                }
                 is ReplCommand.Prompt -> {
                     mordantTerminal.println()
                     mordantTerminal.println(bold(blue("📤 Промпт: ")) + white(command.text))
@@ -194,6 +221,7 @@ object Menu {
     /** Внутреннее представление одной пользовательской команды в REPL. */
     private sealed interface ReplCommand {
         data class Prompt(val text: String) : ReplCommand
+        data class TaskCommand(val text: String) : ReplCommand
         data object Exit : ReplCommand
         data object SwitchTask : ReplCommand
         data object Help : ReplCommand
