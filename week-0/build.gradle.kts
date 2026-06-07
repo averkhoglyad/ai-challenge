@@ -18,6 +18,9 @@ dependencies {
 
     // Shared utilities and config component.
     implementation(project(":utils"))
+    
+    // Testing
+    testImplementation(kotlin("test"))
 }
 
 application {

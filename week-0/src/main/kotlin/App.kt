@@ -1,6 +1,7 @@
 package io.averkhogliad.ai.challenge.week0
 
 import io.averkhogliad.ai.challenge.utils.config.*
+import io.averkhogliad.ai.challenge.utils.llm.LlmClient
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -49,7 +50,10 @@ fun main(args: Array<String>) {
     // Валидация обязательных ключей конфигурации
     validateConfig(config)
     
-    Menu.mainLoop(config)
+    // Создаём LlmClient один раз для всего приложения
+    val llmClient = LlmClient(config)
+    
+    Menu.mainLoop(config, llmClient)
 }
 
 /**

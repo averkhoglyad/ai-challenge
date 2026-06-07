@@ -11,6 +11,9 @@ import io.averkhogliad.ai.challenge.utils.llm.LlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmException
 import io.averkhogliad.ai.challenge.utils.sanitizeForDisplay
 import io.averkhogliad.ai.challenge.week0.Task
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -77,58 +80,83 @@ class Task4(
         terminal.println(bold(yellow("🌡️ Значения temperature: ")) + white(temperatures.toString()))
         terminal.println(bold(yellow("📏 Max tokens: ")) + white(maxTokens.toString()))
         terminal.println()
+        terminal.println(cyan("⏳ Отправляю ${temperatures.size} запросов параллельно..."))
+        terminal.println()
 
-        val results = mutableListOf<TemperatureResult>()
-
-        runBlocking {
-            for (temp in temperatures) {
-                terminal.println(HorizontalRule(bold(cyan("🌡️ Temperature: $temp (${describeTemperature(temp)})"))))
-                terminal.println()
-
-                try {
-                    val parameters = ChatParameters(
-                        temperature = temp,
-                        maxTokens = maxTokens
-                    )
-
-                    terminal.println(bold(yellow("⏳ Отправляю запрос к модели...")))
-
-                    val response = llmClient.chat(
-                        prompt,
-                        parameters = parameters
-                    )
-
-                    terminal.println()
-                    terminal.println(bold(green("✓ Ответ модели:")))
-                    terminal.println()
-                    terminal.println(white(response.content))
-                    terminal.println()
-
-                    // Статистика токенов
-                    terminal.println(bold(gray("📊 Статистика:")))
-                    terminal.println(gray("  - Токенов в промпте: ${response.usage?.promptTokens ?: "N/A"}"))
-                    terminal.println(gray("  - Токенов в ответе: ${response.usage?.completionTokens ?: "N/A"}"))
-                    terminal.println(gray("  - Всего токенов: ${response.usage?.totalTokens ?: "N/A"}"))
-                    terminal.println(gray("  - Причина завершения: ${response.finishReason ?: "N/A"}"))
-
-                    results.add(TemperatureResult(temp, response.content, response.usage))
-
-                } catch (e: LlmException) {
-                    terminal.println()
-                    terminal.println(bold(red("✗ Ошибка: ")) + red(sanitizeForDisplay(e.message ?: "неизвестная ошибка")))
-                    if (System.getProperty("debug") != null) {
-                        e.printStackTrace()
+        // Фаза 1: Параллельный сбор результатов
+        val results = runBlocking {
+            coroutineScope {
+                temperatures.mapIndexed { index, temp ->
+                    async {
+                        val result = queryWithTemperature(prompt, temp)
+                        // Потокобезопасный прогресс-индикатор
+                        synchronized(terminal) {
+                            if (result != null) {
+                                terminal.println(green("  ✓ [${index + 1}/${temperatures.size}] temperature=$temp — готово"))
+                            } else {
+                                terminal.println(red("  ✗ [${index + 1}/${temperatures.size}] temperature=$temp — ошибка"))
+                            }
+                        }
+                        result
                     }
-                }
+                }.awaitAll()
+            }
+        }
 
-                terminal.println()
+        terminal.println()
+
+        // Фаза 2: Последовательный вывод детальных результатов
+        val successfulResults = mutableListOf<TemperatureResult>()
+        for (result in results) {
+            if (result != null) {
+                printDetailedResult(result)
+                successfulResults.add(result)
             }
         }
 
         // Автоматический вывод самари
-        if (results.size > 1) {
-            printComparison(results)
+        if (successfulResults.size > 1) {
+            printComparison(successfulResults)
         }
+    }
+
+    /**
+     * Выполняет запрос с определённым значением temperature.
+     *
+     * @param prompt Пользовательский промпт
+     * @param temperature Значение temperature
+     * @return Результат запроса или null при ошибке
+     */
+    private suspend fun queryWithTemperature(prompt: String, temperature: Double): TemperatureResult? {
+        return try {
+            val parameters = ChatParameters(
+                temperature = temperature,
+                maxTokens = maxTokens
+            )
+            val response = llmClient.chat(prompt, parameters = parameters)
+            TemperatureResult(temperature, response.content, response.usage)
+        } catch (e: LlmException) {
+            null
+        }
+    }
+
+    /**
+     * Выводит детальный результат запроса с определённым значением temperature.
+     */
+    private fun printDetailedResult(result: TemperatureResult) {
+        terminal.println(HorizontalRule(bold(cyan("🌡️ Temperature: ${result.temperature} (${describeTemperature(result.temperature)})"))))
+        terminal.println()
+        terminal.println(bold(green("✓ Ответ модели:")))
+        terminal.println()
+        terminal.println(white(result.content))
+        terminal.println()
+
+        // Статистика токенов
+        terminal.println(bold(gray("📊 Статистика:")))
+        terminal.println(gray("  - Токенов в промпте: ${result.usage?.promptTokens ?: "N/A"}"))
+        terminal.println(gray("  - Токенов в ответе: ${result.usage?.completionTokens ?: "N/A"}"))
+        terminal.println(gray("  - Всего токенов: ${result.usage?.totalTokens ?: "N/A"}"))
+        terminal.println()
     }
 
     /**

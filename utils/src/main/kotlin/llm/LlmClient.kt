@@ -130,20 +130,25 @@ class LlmClient(private val config: Config) : AutoCloseable {
      * @param prompt Пользовательский промпт (сообщение от user)
      * @param systemPrompt Опциональное системное сообщение для установки контекста
      * @param parameters Параметры генерации (temperature, maxTokens, stop, responseFormat)
+     * @param model Опциональный ID модели для переопределения (null — используется модель из конфига)
      * @return Ответ от модели с метаданными
      * @throws LlmException если произошла ошибка при запросе или парсинге ответа
      */
     suspend fun chat(
         prompt: String,
         systemPrompt: String? = null,
-        parameters: ChatParameters = ChatParameters.DEFAULT
+        parameters: ChatParameters = ChatParameters.DEFAULT,
+        model: String? = null
     ): ChatResponse {
+        val effectiveModel = (model?.takeIf { it.isNotBlank() } ?: this.model)
+        require(effectiveModel.isNotBlank()) { "Model ID cannot be blank" }
+        
         val messages = buildList {
             systemPrompt?.let { add(ChatMessage.system(it)) }
             add(ChatMessage.user(prompt))
         }
         
-        val request = ChatRequest.create(model, messages, parameters)
+        val request = ChatRequest.create(effectiveModel, messages, parameters)
         return sendRequest(request)
     }
     
@@ -154,14 +159,19 @@ class LlmClient(private val config: Config) : AutoCloseable {
      *
      * @param messages Список сообщений в диалоге
      * @param parameters Параметры генерации
+     * @param model Опциональный ID модели для переопределения (null — используется модель из конфига)
      * @return Ответ от модели с метаданными
      * @throws LlmException если произошла ошибка при запросе или парсинге ответа
      */
     suspend fun chatWithMessages(
         messages: List<ChatMessage>,
-        parameters: ChatParameters = ChatParameters.DEFAULT
+        parameters: ChatParameters = ChatParameters.DEFAULT,
+        model: String? = null
     ): ChatResponse {
-        val request = ChatRequest.create(model, messages, parameters)
+        val effectiveModel = (model?.takeIf { it.isNotBlank() } ?: this.model)
+        require(effectiveModel.isNotBlank()) { "Model ID cannot be blank" }
+        
+        val request = ChatRequest.create(effectiveModel, messages, parameters)
         return sendRequest(request)
     }
     

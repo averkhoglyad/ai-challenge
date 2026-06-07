@@ -58,3 +58,4 @@ config/application.properties
 /.idea/misc.xml
 /.idea/vcs.xml
 /.idea/WebToolsSettings.xml
+/.kilocode/

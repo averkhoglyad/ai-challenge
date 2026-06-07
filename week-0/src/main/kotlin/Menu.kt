@@ -5,6 +5,7 @@ import com.github.ajalt.mordant.rendering.TextStyles.*
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Panel
 import io.averkhogliad.ai.challenge.utils.config.Config
+import io.averkhogliad.ai.challenge.utils.llm.LlmClient
 
 /**
  * Интерактивное меню выбора задачи и ввода промпта.
@@ -35,6 +36,9 @@ object Menu {
 
     /** Конфигурация приложения, устанавливается при вызове [mainLoop]. */
     private lateinit var config: Config
+
+    /** LLM клиент, устанавливается при вызове [mainLoop]. */
+    private lateinit var llmClient: LlmClient
 
     /**
      * Показывает меню с вводом номера задачи.
@@ -89,8 +93,8 @@ object Menu {
      * @return выбранная задача, либо `null`, если пользователь хочет выйти.
      */
     fun selectTask(): Task? {
-        val tasks = TaskRegistry.all(config)
-        require(tasks.isNotEmpty()) { "TaskRegistry.all(config) пуст — не зарегистрировано ни одной задачи." }
+        val tasks = TaskRegistry.all(config, llmClient)
+        require(tasks.isNotEmpty()) { "TaskRegistry.all(config, llmClient) пуст — не зарегистрировано ни одной задачи." }
 
         return numericSelect(tasks)
     }
@@ -159,9 +163,13 @@ object Menu {
      * затем крутим REPL-цикл: пользователь шлёт промпты подряд, пока не выйдет.
      * Из REPL-цикла можно сменить задачу командой `:t` (`:task`) — и тоже
      * выйти из программы, если на этом этапе выберет `:q`.
+     *
+     * @param config Конфигурация приложения
+     * @param llmClient LLM клиент для выполнения запросов
      */
-    fun mainLoop(config: Config) {
+    fun mainLoop(config: Config, llmClient: LlmClient) {
         this.config = config
+        this.llmClient = llmClient
         mordantTerminal.println()
         mordantTerminal.println(bold(green("🤖 Добро пожаловать в AI Challenge!")))
         mordantTerminal.println(gray("Интерактивный режим работы с языковыми моделями"))

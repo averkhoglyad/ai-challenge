@@ -10,6 +10,9 @@ import io.averkhogliad.ai.challenge.utils.llm.LlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmException
 import io.averkhogliad.ai.challenge.utils.sanitizeForDisplay
 import io.averkhogliad.ai.challenge.week0.Task
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -163,40 +166,41 @@ class Task3(
      * Каждый эксперт получает один и тот же промпт, но с разной ролью (system prompt).
      */
     private suspend fun runExperts(prompt: String) {
-        val responses = mutableListOf<Pair<String, String>>()
-        
         // Применяем мета-промпт один раз до цикла экспертов
         var effectivePrompt = prompt
         if (metaPrompt) {
             effectivePrompt = applyMetaPrompt(prompt)
         }
         
-        for (expert in experts) {
-            try {
-                // Строим system prompt для эксперта
-                val systemPrompt = expert.systemPrompt + if (stepByStep) "\nРешай пошагово." else ""
-                
-                terminal.println(bold(yellow("⏳ [${expert.name}] Генерирую ответ...")))
-                
-                val response = llmClient.chat(
-                    effectivePrompt,
-                    systemPrompt = systemPrompt,
-                    parameters = ChatParameters.DEFAULT
-                )
-                
-                responses.add(expert.name to response.content)
-                
-                // Выводим ответ эксперта с заголовком и разделителями
-                terminal.println()
-                terminal.println(HorizontalRule(bold(cyan("🔍 ${expert.name}"))))
-                terminal.println()
-                terminal.println(response.content)
-                terminal.println()
-                terminal.println(HorizontalRule())
-                terminal.println()
-                
-            } catch (e: LlmException) {
-                terminal.println(red("✗ Ошибка при запросе к эксперту ${expert.name}: ${sanitizeForDisplay(e.message ?: "неизвестная ошибка")}"))
+        terminal.println(cyan("⏳ Опрашиваю ${experts.size} экспертов параллельно..."))
+        terminal.println()
+        
+        // Фаза 1: Параллельный сбор ответов экспертов
+        val expertResults = coroutineScope {
+            experts.mapIndexed { index, expert ->
+                async {
+                    val result = queryExpert(effectivePrompt, expert)
+                    // Потокобезопасный прогресс-индикатор
+                    synchronized(terminal) {
+                        if (result != null) {
+                            terminal.println(green("  ✓ [${index + 1}/${experts.size}] ${expert.name} — готово"))
+                        } else {
+                            terminal.println(red("  ✗ [${index + 1}/${experts.size}] ${expert.name} — ошибка"))
+                        }
+                    }
+                    expert.name to result
+                }
+            }.awaitAll()
+        }
+        
+        terminal.println()
+        
+        // Фаза 2: Последовательный вывод ответов экспертов
+        val responses = mutableListOf<Pair<String, String>>()
+        for ((expertName, content) in expertResults) {
+            if (content != null) {
+                responses.add(expertName to content)
+                printExpertResponse(expertName, content)
             }
         }
         
@@ -216,6 +220,40 @@ class Task3(
         } else if (summaryEnabled && responses.size == 1) {
             terminal.println(gray("ℹ️ Summary пропущен: только один эксперт, синтез не требуется"))
         }
+    }
+    
+    /**
+     * Выполняет запрос к одному эксперту.
+     *
+     * @param prompt Пользовательский промпт
+     * @param expert Конфигурация эксперта (имя и system prompt)
+     * @return Ответ эксперта или null при ошибке
+     */
+    private suspend fun queryExpert(prompt: String, expert: ExpertConfig): String? {
+        return try {
+            val systemPrompt = expert.systemPrompt + if (stepByStep) "\nРешай пошагово." else ""
+            val response = llmClient.chat(
+                prompt,
+                systemPrompt = systemPrompt,
+                parameters = ChatParameters.DEFAULT
+            )
+            response.content
+        } catch (e: LlmException) {
+            null
+        }
+    }
+    
+    /**
+     * Выводит ответ эксперта с заголовком и разделителями.
+     */
+    private fun printExpertResponse(expertName: String, content: String) {
+        terminal.println()
+        terminal.println(HorizontalRule(bold(cyan("🔍 $expertName"))))
+        terminal.println()
+        terminal.println(content)
+        terminal.println()
+        terminal.println(HorizontalRule())
+        terminal.println()
     }
 
     /**

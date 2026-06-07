@@ -6,6 +6,7 @@ import io.averkhogliad.ai.challenge.week0.task1.Task1
 import io.averkhogliad.ai.challenge.week0.task2.Task2
 import io.averkhogliad.ai.challenge.week0.task3.Task3
 import io.averkhogliad.ai.challenge.week0.task4.Task4
+import io.averkhogliad.ai.challenge.week0.task5.Task5
 
 /**
  * Контракт учебной задачи в модуле `week-0`.
@@ -67,13 +68,13 @@ interface Task {
  * 2) добавить её в список, возвращаемый функцией [all].
  */
 object TaskRegistry {
-    fun all(config: Config): List<Task> {
-        val llmClient = LlmClient(config)
+    fun all(config: Config, llmClient: LlmClient): List<Task> {
         return listOf(
             Task1(config, llmClient),
             Task2(config, llmClient),
             Task3(config, llmClient),
             Task4(config, llmClient),
+            Task5(config, llmClient)
         )
     }
 }
