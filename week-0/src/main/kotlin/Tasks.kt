@@ -68,6 +68,7 @@ object TaskRegistry {
         return listOf(
             Task1(config, llmClient),
             Task2(config, llmClient),
+            Task3(config, llmClient),
         )
     }
 }

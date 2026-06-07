@@ -1,23 +1,66 @@
-# ai-challenge
+# AI Challenge
 
-This project uses [Gradle](https://gradle.org/).
-To build and run the application, use the *Gradle* tool window by clicking the Gradle icon in the right-hand toolbar,
-or run it directly from the terminal:
+Учебный проект для изучения работы с LLM API через OpenAI-совместимый интерфейс.
 
-* Run `./gradlew run` to build and run the application.
-* Run `./gradlew build` to only build the application.
-* Run `./gradlew check` to run all checks, including tests.
-* Run `./gradlew clean` to clean all build outputs.
+## Структура проекта
 
-Note the usage of the Gradle Wrapper (`./gradlew`).
-This is the suggested way to use Gradle in production projects.
+Проект использует [Gradle](https://gradle.org/) и состоит из двух модулей:
 
-[Learn more about the Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html).
+- **`week-0`** — основное приложение с интерактивным меню и учебными задачами
+- **`utils`** — общие утилиты: клиент LLM API, система конфигурации, вспомогательные функции
 
-[Learn more about Gradle tasks](https://docs.gradle.org/current/userguide/command_line_interface.html#common_tasks).
+Общая логика сборки вынесена в convention plugin в `buildSrc`.
 
-This project follows the suggested multi-module setup and consists of the `app` and `utils` subprojects.
-The shared build logic was extracted to a convention plugin located in `buildSrc`.
+## Учебные задачи
 
-This project uses a version catalog (see `gradle/libs.versions.toml`) to declare and version dependencies
-and both a build cache and a configuration cache (see `gradle.properties`).
+### Task 1: Простой chat-completion
+Минимальная реализация — один запрос, один ответ. Демонстрирует базовое взаимодействие с LLM API.
+
+### Task 2: Расширенный chat-completion с параметрами
+Добавляет интерактивный контроль параметров генерации:
+- `temperature` — контроль случайности (0.0–2.0)
+- `maxTokens` — ограничение длины ответа
+- `stop` — стоп-последовательности
+
+### Task 3: Промпт-инжиниринг с модульными модификаторами
+Демонстрирует техники промпт-инжиниринга:
+- **Zero-shot** — прямой запрос без модификаторов
+- **Chain-of-thought** — пошаговое решение (`:step`)
+- **Meta-prompting** — генерация оптимального промпта (`:meta`)
+- **Role-playing** — установка роли (`:role`)
+- **Multi-persona** — группа экспертов (`:mode experts`)
+- **Synthesis** — итоговое заключение (`:summary`)
+
+## Запуск
+
+Используйте Gradle Wrapper (`./gradlew`) для сборки и запуска:
+
+* `./gradlew run` — собрать и запустить приложение
+* `./gradlew build` — только сборка
+* `./gradlew check` — все проверки, включая тесты
+* `./gradlew clean` — очистить артефакты сборки
+
+## Конфигурация
+
+Параметры API задаются в файле `application.properties`:
+
+```properties
+api.base-url=https://api.openai.com
+api.key=your-api-key
+api.model=gpt-4
+api.connect-timeout=PT10S
+api.request-timeout=PT30S
+```
+
+Файлы конфигурации ищутся в следующем порядке (каждый следующий переопределяет предыдущие):
+1. `classpath:application.properties` (в ресурсах)
+2. `~/.ai-challenge/application.properties` (user-level)
+3. `./application.properties` (project-level)
+4. `./config/application.properties` (project config dir)
+5. `--config=/path/to/file.properties` (CLI аргумент, высший приоритет)
+
+## Дополнительные ссылки
+
+- [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html)
+- [Gradle Tasks](https://docs.gradle.org/current/userguide/command_line_interface.html#common_tasks)
+- [Version Catalog](gradle/libs.versions.toml) — управление зависимостями
