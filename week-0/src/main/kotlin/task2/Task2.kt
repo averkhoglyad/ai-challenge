@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week0
+package io.averkhogliad.ai.challenge.week0.task2
 
 import com.github.ajalt.mordant.rendering.TextColors.*
 import com.github.ajalt.mordant.rendering.TextStyles.*
@@ -7,6 +7,7 @@ import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.ChatParameters
 import io.averkhogliad.ai.challenge.utils.llm.LlmClient
 import io.averkhogliad.ai.challenge.utils.sanitizeForDisplay
+import io.averkhogliad.ai.challenge.week0.Task
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -21,7 +22,7 @@ import kotlinx.coroutines.runBlocking
  *
  * Параметры настраиваются через команды в REPL:
  * - `:temp <value>` — установить температуру (0.0-2.0), например `:temp 0.7`
- * - `:max <value>` — установить max tokens (1-128000), например `:max 500`
+ * - `:maxTokens <value>` — установить max tokens (1-128000), например `:maxTokens 500`
  * - `:stop <seq1,seq2,...>` — установить стоп-последовательности (максимум 4), например `:stop END,STOP`
  * - `:reset` — сбросить все параметры к значениям по умолчанию
  * - `:params` — показать текущие параметры
@@ -86,7 +87,7 @@ class Task2(
      *
      * Поддерживаемые команды:
      * - `:temp <value>` — установить температуру (0.0-2.0)
-     * - `:max <value>` — установить max tokens (1-128000)
+     * - `:maxTokens <value>` — установить max tokens (1-128000)
      * - `:stop <seq1,seq2,...>` — установить стоп-последовательности (максимум 4)
      * - `:reset` — сбросить все параметры к значениям по умолчанию
      * - `:params` — показать текущие параметры
@@ -100,8 +101,8 @@ class Task2(
                 handleTempCommand(input.removePrefix(":temp").trim())
                 true
             }
-            input.startsWith(":max") -> {
-                handleMaxCommand(input.removePrefix(":max").trim())
+            input.startsWith(":maxTokens") -> {
+                handleMaxTokensCommand(input.removePrefix(":maxTokens").trim())
                 true
             }
             input.startsWith(":stop") -> {
@@ -125,11 +126,11 @@ class Task2(
      */
     override fun getHelpText(): String {
         return buildString {
-            appendLine("  ${bold(":temp <value>")}    — установить температуру (0.0-2.0)")
-            appendLine("  ${bold(":max <value>")}     — установить max tokens (1-$MAX_TOKENS_UPPER_BOUND)")
-            appendLine("  ${bold(":stop <seq,...>")}  — установить стоп-последовательности (максимум $MAX_STOP_SEQUENCES)")
-            appendLine("  ${bold(":reset")}           — сбросить все параметры")
-            appendLine("  ${bold(":params")}          — показать текущие параметры")
+            appendLine("  ${bold(":temp <value>")}       — установить температуру (0.0-2.0)")
+            appendLine("  ${bold(":maxTokens <value>")}  — установить max tokens (1-$MAX_TOKENS_UPPER_BOUND)")
+            appendLine("  ${bold(":stop <seq,...>")}     — установить стоп-последовательности (максимум $MAX_STOP_SEQUENCES)")
+            appendLine("  ${bold(":reset")}              — сбросить все параметры")
+            appendLine("  ${bold(":params")}             — показать текущие параметры")
         }
     }
 
@@ -141,7 +142,7 @@ class Task2(
         val maxStr = currentMaxTokens?.toString() ?: "default"
         val stopStr = currentStopSequences?.joinToString(",") ?: "none"
         
-        return "temp=$tempStr, max=$maxStr, stop=$stopStr | :temp :max :stop :reset :params"
+        return "temp=$tempStr, maxTokens=$maxStr, stop=$stopStr | :temp :maxTokens :stop :reset :params"
     }
 
     private fun handleTempCommand(value: String) {
@@ -159,7 +160,7 @@ class Task2(
         }
     }
 
-    private fun handleMaxCommand(value: String) {
+    private fun handleMaxTokensCommand(value: String) {
         if (value.isEmpty()) {
             currentMaxTokens = null
             terminal.println(green("✓ Max tokens сброшен (будет использоваться значение API по умолчанию)"))

@@ -1,11 +1,15 @@
 package io.averkhogliad.ai.challenge.utils.llm
 
 import io.averkhogliad.ai.challenge.utils.config.Config
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.time.Instant
 import kotlin.time.Duration
 import kotlin.time.toJavaDuration
 
@@ -21,6 +25,13 @@ import kotlin.time.toJavaDuration
  * - `api.model` - идентификатор модели (например, "gpt-4", "minimax/minimax-m3")
  * - `api.connect-timeout` - таймаут подключения (ISO-8601 Duration, например "PT10S")
  * - `api.request-timeout` - таймаут запроса (ISO-8601 Duration, например "PT30S")
+ * - `api.rate-limit.enabled` - включить/выключить rate limiting (по умолчанию true)
+ * - `api.rate-limit.min-interval` - минимальный интервал между запросами (ISO-8601 Duration, по умолчанию "PT0.5S")
+ * - `api.rate-limit.max-requests-per-minute` - максимальное количество запросов в минуту (по умолчанию 60)
+ *
+ * Rate limiting обеспечивает потокобезопасность через Mutex и проверяет два ограничения:
+ * 1. Минимальный интервал между последовательными запросами
+ * 2. Максимальное количество запросов в скользящем окне 1 минуты
  *
  * Пример использования:
  * ```kotlin
@@ -43,6 +54,14 @@ class LlmClient(private val config: Config) : AutoCloseable {
     private val connectTimeout: Duration = Duration.parse(config.get("api.connect-timeout"))
     private val requestTimeout: Duration = Duration.parse(config.get("api.request-timeout"))
     
+    // Rate limiting
+    private val rateLimitEnabled: Boolean = config.getOrDefault("api.rate-limit.enabled", "true").toBoolean()
+    private val minInterval: Duration = Duration.parse(config.getOrDefault("api.rate-limit.min-interval", "PT0.5S"))
+    private val maxRequestsPerMinute: Int = config.getOrDefault("api.rate-limit.max-requests-per-minute", "60").toInt()
+    private var lastRequestTime: Instant = Instant.MIN
+    private val requestTimestamps: MutableList<Instant> = mutableListOf()
+    private val rateLimitMutex = Mutex()
+    
     private val httpClient: HttpClient = HttpClient.newBuilder()
         .connectTimeout(connectTimeout.toJavaDuration())
         .build()
@@ -50,6 +69,59 @@ class LlmClient(private val config: Config) : AutoCloseable {
     private val json: Json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = false
+    }
+    
+    /**
+     * Применяет rate-limit перед отправкой запроса.
+     *
+     * Проверяет два ограничения:
+     * 1. Минимальный интервал между запросами (minInterval)
+     * 2. Максимальное количество запросов в минуту (maxRequestsPerMinute)
+     *
+     * Если какое-либо ограничение нарушено, ждёт необходимое время.
+     * Потокобезопасен: использует Mutex для защиты общего состояния.
+     */
+    private suspend fun applyRateLimit() {
+        if (!rateLimitEnabled) return
+        
+        rateLimitMutex.withLock {
+            val now = Instant.now()
+            
+            // 1. Проверка минимального интервала между запросами
+            val elapsed = java.time.Duration.between(lastRequestTime, now)
+            val minIntervalJava = java.time.Duration.ofMillis(minInterval.inWholeMilliseconds)
+            
+            if (elapsed < minIntervalJava) {
+                val delayTime = minIntervalJava - elapsed
+                delay(delayTime.toMillis())
+            }
+            
+            // 2. Проверка максимального количества запросов в минуту
+            val oneMinuteAgo = now.minusSeconds(60)
+            // Удаляем timestamps старше 1 минуты
+            requestTimestamps.removeAll { it.isBefore(oneMinuteAgo) }
+            
+            // Если превышен лимит запросов в минуту, ждём
+            if (requestTimestamps.size >= maxRequestsPerMinute) {
+                // Ждём до тех пор, пока самый старый запрос не станет старше 1 минуты
+                val oldestRequest = requestTimestamps.minOrNull()
+                if (oldestRequest != null) {
+                    val waitUntil = oldestRequest.plusSeconds(60)
+                    val waitDuration = java.time.Duration.between(Instant.now(), waitUntil)
+                    if (waitDuration.toMillis() > 0) {
+                        delay(waitDuration.toMillis())
+                    }
+                    // Очищаем старые timestamps после ожидания
+                    val newOneMinuteAgo = Instant.now().minusSeconds(60)
+                    requestTimestamps.removeAll { it.isBefore(newOneMinuteAgo) }
+                }
+            }
+            
+            // Записываем timestamp текущего запроса
+            val requestTime = Instant.now()
+            lastRequestTime = requestTime
+            requestTimestamps.add(requestTime)
+        }
     }
     
     /**
@@ -94,6 +166,8 @@ class LlmClient(private val config: Config) : AutoCloseable {
     }
     
     private suspend fun sendRequest(request: ChatRequest): ChatResponse {
+        applyRateLimit()  // Применяем rate-limit перед каждым запросом
+        
         val requestBody = json.encodeToString(ChatRequest.serializer(), request)
         
         val httpRequest = HttpRequest.newBuilder()

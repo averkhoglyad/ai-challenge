@@ -2,6 +2,10 @@ package io.averkhogliad.ai.challenge.week0
 
 import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.LlmClient
+import io.averkhogliad.ai.challenge.week0.task1.Task1
+import io.averkhogliad.ai.challenge.week0.task2.Task2
+import io.averkhogliad.ai.challenge.week0.task3.Task3
+import io.averkhogliad.ai.challenge.week0.task4.Task4
 
 /**
  * Контракт учебной задачи в модуле `week-0`.
@@ -69,6 +73,7 @@ object TaskRegistry {
             Task1(config, llmClient),
             Task2(config, llmClient),
             Task3(config, llmClient),
+            Task4(config, llmClient),
         )
     }
 }

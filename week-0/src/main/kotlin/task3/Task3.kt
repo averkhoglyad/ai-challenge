@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week0
+package io.averkhogliad.ai.challenge.week0.task3
 
 import com.github.ajalt.mordant.rendering.TextColors.*
 import com.github.ajalt.mordant.rendering.TextStyles.*
@@ -9,6 +9,7 @@ import io.averkhogliad.ai.challenge.utils.llm.ChatParameters
 import io.averkhogliad.ai.challenge.utils.llm.LlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmException
 import io.averkhogliad.ai.challenge.utils.sanitizeForDisplay
+import io.averkhogliad.ai.challenge.week0.Task
 import kotlinx.coroutines.runBlocking
 
 /**
