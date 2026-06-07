@@ -9,12 +9,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Unit-тесты для Task5.
+ * Unit tests for Task5.
  */
 class Task5Test {
 
     /**
-     * Простая реализация Config для тестирования.
+     * Simple Config implementation for testing.
      */
     private class TestConfig(private val properties: Map<String, String>) : Config {
         override fun get(key: String): String = properties[key] ?: throw NoSuchElementException("Key not found: $key")
@@ -29,10 +29,10 @@ class Task5Test {
                 if (model.name != model.modelId) {
                     append(":${model.name}")
                 }
-                if (model.costPer1kInputTokens != null) {
-                    append("(${model.costPer1kInputTokens}")
-                    if (model.costPer1kOutputTokens != null && model.costPer1kOutputTokens != model.costPer1kInputTokens) {
-                        append(",${model.costPer1kOutputTokens}")
+                if (model.costPerMillionInputTokens != null) {
+                    append("(${model.costPerMillionInputTokens}")
+                    if (model.costPerMillionOutputTokens != null && model.costPerMillionOutputTokens != model.costPerMillionInputTokens) {
+                        append(",${model.costPerMillionOutputTokens}")
                     }
                     append(")")
                 }
@@ -51,13 +51,13 @@ class Task5Test {
         return Task5(config, llmClient)
     }
 
-    // ==================== Тесты formatTime ====================
+    // ==================== Tests formatTime ====================
 
     @Test
-    fun `formatTime - миллисекунды меньше 1000`() {
+    fun `formatTime - milliseconds less than 1000`() {
         val task = createTask5WithModels(listOf(ModelInfo("test-model")))
-        
-        // Используем reflection для доступа к private методу
+
+        // Use reflection to access private method
         val method = Task5::class.java.getDeclaredMethod("formatTime", Long::class.java)
         method.isAccessible = true
         
@@ -67,7 +67,7 @@ class Task5Test {
     }
 
     @Test
-    fun `formatTime - секунды`() {
+    fun `formatTime - seconds`() {
         val task = createTask5WithModels(listOf(ModelInfo("test-model")))
         
         val method = Task5::class.java.getDeclaredMethod("formatTime", Long::class.java)
@@ -79,10 +79,10 @@ class Task5Test {
         assertEquals("10.0 сек", method.invoke(task, 10000L) as String)
     }
 
-    // ==================== Тесты handleCommand ====================
+    // ==================== Tests handleCommand ====================
 
     @Test
-    fun `handleCommand - распознает команду models`() {
+    fun `handleCommand - recognizes models command`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1"), ModelInfo("model2")))
         
         assertTrue(task.handleCommand(":models"))
@@ -90,7 +90,7 @@ class Task5Test {
     }
 
     @Test
-    fun `handleCommand - распознает команду maxTokens`() {
+    fun `handleCommand - recognizes maxTokens command`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
         
         assertTrue(task.handleCommand(":maxTokens"))
@@ -98,21 +98,21 @@ class Task5Test {
     }
 
     @Test
-    fun `handleCommand - распознает команду reset`() {
+    fun `handleCommand - recognizes reset command`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
         
         assertTrue(task.handleCommand(":reset"))
     }
 
     @Test
-    fun `handleCommand - распознает команду params`() {
+    fun `handleCommand - recognizes params command`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
         
         assertTrue(task.handleCommand(":params"))
     }
 
     @Test
-    fun `handleCommand - не распознает неизвестную команду`() {
+    fun `handleCommand - does not recognize unknown command`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
         
         assertFalse(task.handleCommand(":unknown"))
@@ -120,123 +120,123 @@ class Task5Test {
         assertFalse(task.handleCommand(""))
     }
 
-    // ==================== Тесты selectModels ====================
+    // ==================== Tests selectModels ====================
 
     @Test
-    fun `selectModels - валидные индексы`() {
+    fun `selectModels - valid indices`() {
         val models = listOf(
             ModelInfo("model1", "Model 1"),
             ModelInfo("model2", "Model 2"),
             ModelInfo("model3", "Model 3")
         )
         val task = createTask5WithModels(models)
-        
-        // Вызываем handleCommand с валидными индексами
+
+        // Call handleCommand with valid indices
         val result = task.handleCommand(":models 1,3")
         assertTrue(result)
-        
-        // Проверяем через getPromptHint, что выбрано 2 модели
+
+        // Check via getPromptHint that 2 models are selected
         val hint = task.getPromptHint()
         assertTrue(hint.contains("models=2"))
     }
 
     @Test
-    fun `selectModels - дубликаты индексов удаляются`() {
+    fun `selectModels - duplicate indices are removed`() {
         val models = listOf(
             ModelInfo("model1", "Model 1"),
             ModelInfo("model2", "Model 2")
         )
         val task = createTask5WithModels(models)
-        
-        // Вызываем с дубликатами
+
+        // Call with duplicates
         task.handleCommand(":models 1,1,2")
-        
-        // Проверяем, что выбрано 2 модели (дубликат удален)
+
+        // Check that 2 models are selected (duplicate removed)
         val hint = task.getPromptHint()
         assertTrue(hint.contains("models=2"))
     }
 
     @Test
-    fun `selectModels - невалидный индекс игнорируется`() {
+    fun `selectModels - invalid index is ignored`() {
         val models = listOf(
             ModelInfo("model1", "Model 1"),
             ModelInfo("model2", "Model 2")
         )
         val task = createTask5WithModels(models)
-        
-        // Вызываем с невалидным индексом
+
+        // Call with invalid index
         task.handleCommand(":models 1,5")
-        
-        // Проверяем, что модели не изменились (остались все)
+
+        // Check that models haven't changed (all remain)
         val hint = task.getPromptHint()
         assertTrue(hint.contains("models=2"))
     }
 
-    // ==================== Тесты handleMaxTokensCommand ====================
+    // ==================== Tests handleMaxTokensCommand ====================
 
     @Test
-    fun `handleMaxTokensCommand - валидное значение`() {
+    fun `handleMaxTokensCommand - valid value`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
-        
-        // Устанавливаем maxTokens
+
+        // Set maxTokens
         task.handleCommand(":maxTokens 1000")
-        
-        // Проверяем через getPromptHint
+
+        // Check via getPromptHint
         val hint = task.getPromptHint()
         assertTrue(hint.contains("maxTokens=1000"))
     }
 
     @Test
-    fun `handleMaxTokensCommand - значение вне диапазона`() {
+    fun `handleMaxTokensCommand - value out of range`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
-        
-        // Пытаемся установить значение вне диапазона
+
+        // Try to set value out of range
         task.handleCommand(":maxTokens 200000")
-        
-        // Проверяем, что значение осталось по умолчанию (500)
+
+        // Check that value remains default (500)
         val hint = task.getPromptHint()
         assertTrue(hint.contains("maxTokens=500"))
     }
 
     @Test
-    fun `handleMaxTokensCommand - невалидное значение`() {
+    fun `handleMaxTokensCommand - invalid value`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
-        
-        // Пытаемся установить невалидное значение
+
+        // Try to set invalid value
         task.handleCommand(":maxTokens abc")
-        
-        // Проверяем, что значение осталось по умолчанию (500)
+
+        // Check that value remains default (500)
         val hint = task.getPromptHint()
         assertTrue(hint.contains("maxTokens=500"))
     }
 
-    // ==================== Тесты handleResetCommand ====================
+    // ==================== Tests handleResetCommand ====================
 
     @Test
-    fun `handleResetCommand - сбрасывает параметры`() {
+    fun `handleResetCommand - resets parameters`() {
         val models = listOf(
             ModelInfo("model1", "Model 1"),
             ModelInfo("model2", "Model 2")
         )
         val task = createTask5WithModels(models)
-        
-        // Изменяем параметры
+
+        // Change parameters
         task.handleCommand(":models 1")
         task.handleCommand(":maxTokens 1000")
-        
-        // Сбрасываем
+
+        // Reset
         task.handleCommand(":reset")
-        
-        // Проверяем, что параметры сброшены
+
+        // Check that parameters are reset
         val hint = task.getPromptHint()
-        assertTrue(hint.contains("models=2"))  // Все модели
-        assertTrue(hint.contains("maxTokens=500"))  // Значение по умолчанию
+        assertTrue(hint.contains("models=2"))  // All models
+        assertTrue(hint.contains("maxTokens=500"))  // Default value
     }
 
-    // ==================== Тесты getHelpText ====================
+    // ==================== Tests getHelpText ====================
 
     @Test
-    fun `getHelpText - содержит все команды`() {
+    fun `getHelpText - contains all commands`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
         
         val helpText = task.getHelpText()
@@ -247,10 +247,10 @@ class Task5Test {
         assertTrue(helpText.contains(":params"))
     }
 
-    // ==================== Тесты getPromptHint ====================
+    // ==================== Tests getPromptHint ====================
 
     @Test
-    fun `getPromptHint - показывает текущие параметры`() {
+    fun `getPromptHint - shows current parameters`() {
         val models = listOf(
             ModelInfo("model1", "Model 1"),
             ModelInfo("model2", "Model 2")
@@ -267,10 +267,10 @@ class Task5Test {
         assertTrue(hint.contains(":params"))
     }
 
-    // ==================== Тесты title ====================
+    // ==================== Tests title ====================
 
     @Test
-    fun `title - возвращает правильное название`() {
+    fun `title - returns the correct name`() {
         val task = createTask5WithModels(listOf(ModelInfo("model1")))
         
         assertEquals("Task 5: Сравнение производительности моделей", task.title)

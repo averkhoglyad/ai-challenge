@@ -1,56 +1,63 @@
 package io.averkhogliad.ai.challenge.utils.llm
 
 import io.averkhogliad.ai.challenge.utils.config.Config
-import java.util.Locale
+import java.util.*
 
 /**
  * Информация о модели LLM, включая идентификатор, имя и стоимость.
  *
  * Формат записи в конфигурации: `{id}[:{name}][({costIn},{costOut})]`
+ * Стоимость указывается в ₽ за 1 000 000 (1M) токенов.
  *
  * Примеры:
  * - `minimax/minimax-m3` — только ID
  * - `minimax/minimax-m3:Minimax M3` — ID + имя
- * - `minimax/minimax-m3(0.0001)` — ID + одинаковая стоимость
- * - `openai/gpt-4o(0.0025,0.01)` — ID + разная стоимость input/output
- * - `minimax/minimax-m3:Minimax M3(0.0001)` — полный формат
+ * - `minimax/minimax-m3(100)` — ID + одинаковая стоимость за 1M токенов
+ * - `openai/gpt-4o(238,955)` — ID + разная стоимость input/output за 1M токенов
+ * - `minimax/minimax-m3:Minimax M3(28,114)` — полный формат
  *
  * @property modelId Идентификатор модели для API (например, "minimax/minimax-m3")
  * @property name Человекочитаемое имя модели (по умолчанию совпадает с modelId)
- * @property costPer1kInputTokens Стоимость за 1000 токенов входных данных (USD), null если не указана
- * @property costPer1kOutputTokens Стоимость за 1000 токенов выходных данных (USD), null если не указана
+ * @property costPerMillionInputTokens Стоимость за 1 000 000 токенов входных данных (₽), null если не указана
+ * @property costPerMillionOutputTokens Стоимость за 1 000 000 токенов выходных данных (₽), null если не указана
  */
 data class ModelInfo(
     val modelId: String,
     val name: String = modelId,
-    val costPer1kInputTokens: Double? = null,
-    val costPer1kOutputTokens: Double? = null
+    val costPerMillionInputTokens: Double? = null,
+    val costPerMillionOutputTokens: Double? = null
 ) {
     /**
      * Рассчитывает стоимость запроса на основе количества токенов.
      *
      * @param promptTokens Количество токенов в запросе
      * @param completionTokens Количество токенов в ответе
-     * @return Стоимость в USD, или null если тариф не указан
+     * @return Стоимость в ₽, или null если тариф не указан
      */
     fun calculateCost(promptTokens: Int, completionTokens: Int): Double? {
-        val inputCost = costPer1kInputTokens ?: return null
-        val outputCost = costPer1kOutputTokens ?: inputCost
-        return (promptTokens / 1000.0) * inputCost + (completionTokens / 1000.0) * outputCost
+        val inputCost = costPerMillionInputTokens ?: return null
+        val outputCost = costPerMillionOutputTokens ?: inputCost
+        return (promptTokens / 1_000_000.0) * inputCost + (completionTokens / 1_000_000.0) * outputCost
     }
 
     /**
      * Форматирует информацию о тарифе для отображения.
      *
-     * @return Строка с описанием тарифа, например "$0.0001/1K токенов" или "$0.0025/1K input, $0.01/1K output"
+     * @return Строка с описанием тарифа, например "₽0.10/1M токенов" или "₽2.50/1M input, ₽10.00/1M output"
      */
     fun formatTariff(): String {
-        val inputCost = costPer1kInputTokens ?: return "бесплатно"
-        val outputCost = costPer1kOutputTokens
+        val inputCost = costPerMillionInputTokens ?: return "бесплатно"
+        val outputCost = costPerMillionOutputTokens
         return if (outputCost == null || outputCost == inputCost) {
-            "$${String.format(Locale.US, "%.4f", inputCost)}/1K токенов"
+            "₽${String.format(Locale.US, "%.2f", inputCost)}/1M токенов"
         } else {
-            "$${String.format(Locale.US, "%.4f", inputCost)}/1K input, $${String.format(Locale.US, "%.4f", outputCost)}/1K output"
+            "₽${String.format(Locale.US, "%.2f", inputCost)}/1M input, ₽${
+                String.format(
+                    Locale.US,
+                    "%.2f",
+                    outputCost
+                )
+            }/1M output"
         }
     }
 
@@ -121,8 +128,8 @@ data class ModelInfo(
             return ModelInfo(
                 modelId = modelId,
                 name = name,
-                costPer1kInputTokens = costIn,
-                costPer1kOutputTokens = costOut
+                costPerMillionInputTokens = costIn,
+                costPerMillionOutputTokens = costOut
             )
         }
 
@@ -178,7 +185,7 @@ data class ModelInfo(
  *
  * Пример использования:
  * ```kotlin
- * val model = "minimax/minimax-m3:Minimax M3(0.0001)".toModelInfo()
+ * val model = "minimax/minimax-m3:Minimax M3(28)".toModelInfo()
  * ```
  *
  * @return [ModelInfo] с распарсенными данными
@@ -193,7 +200,7 @@ fun String.toModelInfo(): ModelInfo = ModelInfo.parse(this)
  *
  * Пример использования:
  * ```kotlin
- * val models = "model1,model2(0.001),model3:Name(0.002,0.01)".toModelInfoList()
+ * val models = "model1,model2(1.0),model3:Name(2.0,10.0)".toModelInfoList()
  * ```
  *
  * @return Список [ModelInfo]

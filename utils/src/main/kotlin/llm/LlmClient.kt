@@ -2,6 +2,7 @@ package io.averkhogliad.ai.challenge.utils.llm
 
 import io.averkhogliad.ai.challenge.utils.config.Config
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.*
@@ -83,44 +84,54 @@ class LlmClient(private val config: Config) : AutoCloseable {
      */
     private suspend fun applyRateLimit() {
         if (!rateLimitEnabled) return
-        
-        rateLimitMutex.withLock {
+
+        // Вычисляем необходимую задержку под мьютексом, но delay выполняем вне его
+        val delayMillis = rateLimitMutex.withLock {
             val now = Instant.now()
-            
+
             // 1. Проверка минимального интервала между запросами
             val elapsed = java.time.Duration.between(lastRequestTime, now)
             val minIntervalJava = java.time.Duration.ofMillis(minInterval.inWholeMilliseconds)
-            
+            var needDelay = 0L
+
             if (elapsed < minIntervalJava) {
-                val delayTime = minIntervalJava - elapsed
-                delay(delayTime.toMillis())
+                val remaining = minIntervalJava - elapsed
+                if (remaining.toMillis() > needDelay) {
+                    needDelay = remaining.toMillis()
+                }
             }
-            
+
             // 2. Проверка максимального количества запросов в минуту
             val oneMinuteAgo = now.minusSeconds(60)
-            // Удаляем timestamps старше 1 минуты
             requestTimestamps.removeAll { it.isBefore(oneMinuteAgo) }
-            
-            // Если превышен лимит запросов в минуту, ждём
+
             if (requestTimestamps.size >= maxRequestsPerMinute) {
-                // Ждём до тех пор, пока самый старый запрос не станет старше 1 минуты
                 val oldestRequest = requestTimestamps.minOrNull()
                 if (oldestRequest != null) {
                     val waitUntil = oldestRequest.plusSeconds(60)
                     val waitDuration = java.time.Duration.between(Instant.now(), waitUntil)
-                    if (waitDuration.toMillis() > 0) {
-                        delay(waitDuration.toMillis())
+                    if (waitDuration.toMillis() > needDelay) {
+                        needDelay = waitDuration.toMillis()
                     }
-                    // Очищаем старые timestamps после ожидания
-                    val newOneMinuteAgo = Instant.now().minusSeconds(60)
-                    requestTimestamps.removeAll { it.isBefore(newOneMinuteAgo) }
                 }
             }
-            
-            // Записываем timestamp текущего запроса
-            val requestTime = Instant.now()
+
+            // Регистрируем timestamp будущего запроса прямо сейчас
+            // (чтобы другие корутины видели актуальную картину)
+            val requestTime = Instant.now().plusMillis(needDelay)
             lastRequestTime = requestTime
             requestTimestamps.add(requestTime)
+
+            // Очищаем старые timestamps с учётом будущей задержки
+            val cleanUntil = requestTime.minusSeconds(60)
+            requestTimestamps.removeAll { it.isBefore(cleanUntil) }
+
+            needDelay
+        }
+
+        // Выполняем delay вне мьютекса
+        if (delayMillis > 0) {
+            delay(delayMillis)
         }
     }
     
@@ -189,7 +200,7 @@ class LlmClient(private val config: Config) : AutoCloseable {
             .build()
         
         val response = try {
-            httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString())
+            httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString()).await()
         } catch (e: Exception) {
             throw LlmException("Ошибка при отправке запроса: ${e.message}", e)
         }

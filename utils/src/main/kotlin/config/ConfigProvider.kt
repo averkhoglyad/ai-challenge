@@ -13,7 +13,7 @@ package io.averkhogliad.ai.challenge.utils.config
  * val provider = ConfigProvider()
  *     .addSource(
  *         ClasspathConfigSource("application.properties"),
- *         UserHomeConfigSource(".my-app", "application.properties"),
+ *         FileConfigSource(Path.of(System.getProperty("user.home"), ".my-app", "application.properties")),
  *         FileConfigSource("application.properties")
  *     )
  *

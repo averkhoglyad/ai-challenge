@@ -1,21 +1,19 @@
 package io.averkhogliad.ai.challenge.week0.task5
 
 import com.github.ajalt.mordant.rendering.TextColors.*
-import com.github.ajalt.mordant.rendering.TextStyles.*
+import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.HorizontalRule
 import io.averkhogliad.ai.challenge.utils.config.Config
-import io.averkhogliad.ai.challenge.utils.llm.ChatParameters
-import io.averkhogliad.ai.challenge.utils.llm.LlmClient
-import io.averkhogliad.ai.challenge.utils.llm.LlmException
-import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
-import io.averkhogliad.ai.challenge.utils.llm.loadModels
+import io.averkhogliad.ai.challenge.utils.llm.*
 import io.averkhogliad.ai.challenge.week0.Task
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
-import java.util.Locale
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.*
 
 /**
  * Учебная задача #5: Сравнение производительности LLM моделей.
@@ -51,6 +49,9 @@ class Task5(
     /** Максимальное количество токенов в ответе */
     private var maxTokens: Int = DEFAULT_MAX_TOKENS
 
+    /** Мьютекс для потокобезопасного вывода прогресса */
+    private val printMutex = Mutex()
+
     companion object {
         /** Значение max tokens по умолчанию */
         private const val DEFAULT_MAX_TOKENS = 500
@@ -76,7 +77,7 @@ class Task5(
                     async {
                         val result = benchmarkModel(modelInfo, prompt)
                         // Потокобезопасный прогресс-индикатор
-                        synchronized(terminal) {
+                        printMutex.withLock {
                             if (result.response != null) {
                                 terminal.println(green("  ✓ [${index + 1}/${selectedModels.size}] ${modelInfo.name} — готово (${formatTime(result.responseTimeMs)})"))
                             } else {
@@ -145,7 +146,7 @@ class Task5(
         terminal.println(HorizontalRule(bold(cyan("Модель: ${result.modelInfo.name}"))))
         terminal.println(gray("   ID: ${result.modelInfo.modelId}"))
 
-        if (result.modelInfo.costPer1kInputTokens != null) {
+        if (result.modelInfo.costPerMillionInputTokens != null) {
             terminal.println(cyan("   💰 Тариф: ${result.modelInfo.formatTariff()}"))
         }
 
@@ -155,7 +156,7 @@ class Task5(
             terminal.println(green("✓ Время ответа: ${formatTime(result.responseTimeMs)}"))
             terminal.println(green("✓ Токенов: ${result.response.usage?.totalTokens ?: "N/A"}"))
             if (result.estimatedCost != null) {
-                terminal.println(green("✓ Стоимость: \$${String.format(Locale.US, "%.6f", result.estimatedCost)}"))
+                terminal.println(green("✓ Стоимость: ₽${String.format(Locale.US, "%.4f", result.estimatedCost)}"))
             }
             if (result.response.finishReason == "length") {
                 terminal.println(yellow("⚠️  Ответ обрезан: достигнут лимит maxTokens ($maxTokens)"))
@@ -187,7 +188,13 @@ class Task5(
             val name = result.modelInfo.name.take(19).padEnd(19)
             val time = if (result.response != null) formatTime(result.responseTimeMs).padEnd(8) else "ОШИБКА".padEnd(8)
             val tokens = if (result.response != null) (result.response.usage?.totalTokens?.toString() ?: "N/A").padEnd(8) else "-".padEnd(8)
-            val cost = if (result.estimatedCost != null) "\$${String.format(Locale.US, "%.6f", result.estimatedCost)}".padEnd(10) else "N/A".padEnd(10)
+            val cost = if (result.estimatedCost != null) "₽${
+                String.format(
+                    Locale.US,
+                    "%.4f",
+                    result.estimatedCost
+                )
+            }".padEnd(10) else "N/A".padEnd(10)
 
             terminal.println("│ $name │ $time │ $tokens │ $cost │")
         }
@@ -223,7 +230,15 @@ class Task5(
             .filter { it.estimatedCost != null }
             .minByOrNull { it.estimatedCost ?: Double.MAX_VALUE }
         if (cheapest != null) {
-            terminal.println("- Самая экономичная: ${cheapest.modelInfo.name} (\$${String.format(Locale.US, "%.6f", cheapest.estimatedCost)})")
+            terminal.println(
+                "- Самая экономичная: ${cheapest.modelInfo.name} (₽${
+                    String.format(
+                        Locale.US,
+                        "%.4f",
+                        cheapest.estimatedCost
+                    )
+                })"
+            )
         }
 
         // Наибольшее количество токенов
@@ -290,7 +305,7 @@ class Task5(
         terminal.println()
         terminal.println(bold(cyan("📋 Доступные модели:")))
         for ((index, model) in allModels.withIndex()) {
-            val costInfo = if (model.costPer1kInputTokens != null) " — ${model.formatTariff()}" else ""
+            val costInfo = if (model.costPerMillionInputTokens != null) " — ${model.formatTariff()}" else ""
             terminal.println("  ${index + 1}. ${model.name} (${model.modelId})$costInfo")
         }
         terminal.println()

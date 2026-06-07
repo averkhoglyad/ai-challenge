@@ -1,17 +1,19 @@
 package io.averkhogliad.ai.challenge.week0
 
 import com.github.ajalt.mordant.rendering.TextColors.*
-import com.github.ajalt.mordant.rendering.TextStyles.*
+import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.terminal.Terminal
 import com.github.ajalt.mordant.widgets.Panel
 import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.LlmClient
+import io.averkhogliad.ai.challenge.week0.Menu.DEFAULT_PROMPT
+import io.averkhogliad.ai.challenge.week0.Menu.mainLoop
 
 /**
  * Интерактивное меню выбора задачи и ввода промпта.
  *
  * Использует Mordant для красивого консольного UI:
- * - Выбор задачи вводом номера
+ * - Выбор задачи вводом номера (или 0 для выхода)
  * - Цветной вывод с подсветкой
  * - Панели и разделители
  *
@@ -23,8 +25,11 @@ import io.averkhogliad.ai.challenge.utils.llm.LlmClient
  *  - `:quit` (или `:q`) — выйти из приложения;
  *  - `:help` (или `:h`) — напечатать подсказку.
  *
+ * Команды, специфичные для этапа выбора задачи:
+ *  - `0` — выйти из приложения (аналог `:q` на этапе выбора задачи).
+ *
  * Команды REPL (доступны только после выбора задачи):
- *  - `:t` (или `:task`) — выбрать другую задачу (игнорируется на этапе выбора задачи).
+ *  - `:t` (или `:task`) — выбрать другую задачу (возвращает в меню выбора).
  */
 object Menu {
 
