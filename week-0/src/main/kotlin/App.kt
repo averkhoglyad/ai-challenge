@@ -1,7 +1,10 @@
 package io.averkhogliad.ai.challenge.week0
 
-import io.averkhogliad.ai.challenge.utils.config.*
-import io.averkhogliad.ai.challenge.utils.llm.LlmClient
+import io.averkhogliad.ai.challenge.utils.config.ClasspathConfigSource
+import io.averkhogliad.ai.challenge.utils.config.ConfigProvider
+import io.averkhogliad.ai.challenge.utils.config.FileConfigSource
+import io.averkhogliad.ai.challenge.week0.bootstrap.ApplicationBootstrap
+import io.averkhogliad.ai.challenge.week0.cli.CliApplication
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -11,20 +14,17 @@ private const val USER_CONFIG_DIR = ".ai-challenge"
 private const val CLI_CONFIG_PREFIX = "--config="
 
 /**
- * Обязательные ключи конфигурации для работы приложения.
+ * Точка входа приложения AI Challenge.
+ *
+ * Использует [ApplicationBootstrap] — composition root, который:
+ * 1. Загружает конфигурацию через [ConfigProvider]
+ * 2. Собирает все компоненты Clean Architecture
+ *    (ConfigAdapter → LlmAdapter → domain services → executors → CliApplication)
  */
-private val REQUIRED_CONFIG_KEYS = listOf(
-    "api.base-url",
-    "api.key",
-    "api.model",
-    "api.connect-timeout",
-    "api.request-timeout"
-)
-
 fun main(args: Array<String>) {
     val userHome = System.getProperty("user.home")
     val userConfigPath = Path.of(userHome, USER_CONFIG_DIR, CONFIG_FILE_NAME)
-    
+
     val provider = ConfigProvider()
         .addSource(ClasspathConfigSource(CONFIG_FILE_NAME))
         .addSource(FileConfigSource(userConfigPath))
@@ -46,39 +46,10 @@ fun main(args: Array<String>) {
     }
 
     val config = provider.load()
-    
-    // Валидация обязательных ключей конфигурации
-    validateConfig(config)
-    
-    // Создаём LlmClient один раз для всего приложения
-    val llmClient = LlmClient(config)
-    
-    Menu.mainLoop(config, llmClient)
-}
 
-/**
- * Проверяет наличие всех обязательных ключей в конфигурации.
- * 
- * @throws IllegalStateException если отсутствует хотя бы один обязательный ключ
- */
-private fun validateConfig(config: Config) {
-    val missingKeys = REQUIRED_CONFIG_KEYS.filter { key ->
-        config.getOrNull(key).isNullOrBlank()
-    }
-    
-    if (missingKeys.isNotEmpty()) {
-        val message = buildString {
-            appendLine("Отсутствуют обязательные параметры конфигурации:")
-            missingKeys.forEach { key ->
-                appendLine("  - $key")
-            }
-            appendLine()
-            appendLine("Укажите их в одном из файлов конфигурации:")
-            appendLine("  ~/.ai-challenge/application.properties   (user-level)")
-            appendLine("  ./application.properties                 (project-level)")
-            appendLine("  ./config/application.properties          (project config dir)")
-            appendLine("  --config=/path/to/file.properties        (CLI argument)")
-        }
-        throw IllegalStateException(message)
-    }
+    // ApplicationBootstrap (composition root) создаёт CliApplication
+    val app: CliApplication = ApplicationBootstrap.createApplication(config)
+
+    // Запуск приложения с автоматическим освобождением ресурсов
+    app.use { it.run(args) }
 }
