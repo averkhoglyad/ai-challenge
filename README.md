@@ -105,6 +105,31 @@ Rate limiting потокобезопасен и работает коррект�
 4. `./config/application.properties` (project config dir)
 5. `--config=/path/to/file.properties` (CLI аргумент, высший приоритет)
 
+## Архитектура
+
+Проект `week-0` построен по принципам **Clean Architecture** с разделением на слои:
+
+| Слой               | Пакет             | Ответственность                                   |
+|--------------------|-------------------|---------------------------------------------------|
+| **Domain**         | `domain/`         | Бизнес-логика, модели, порты (интерфейсы)         |
+| **Infrastructure** | `infrastructure/` | Адаптеры к внешним системам (utils, LLM API)      |
+| **Application**    | `application/`    | Use cases (TaskExecutors)                         |
+| **CLI**            | `cli/`            | Пользовательский интерфейс (typed commands, REPL) |
+| **Bootstrap**      | `bootstrap/`      | Composition root (сборка зависимостей)            |
+
+### Ключевые порты (Hexagonal Architecture)
+
+| Порт                                                                          | Назначение                                | Реализация                                                                                          |
+|-------------------------------------------------------------------------------|-------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| [`LlmPort`](week-0/src/main/kotlin/domain/service/LlmPort.kt)                 | Абстракция LLM-клиента                    | [`LlmAdapter`](week-0/src/main/kotlin/infrastructure/llm/LlmAdapter.kt)                             |
+| [`ConfigPort`](week-0/src/main/kotlin/domain/service/ConfigPort.kt)           | Абстракция конфигурации                   | [`ConfigAdapter`](week-0/src/main/kotlin/infrastructure/config/ConfigAdapter.kt)                    |
+| [`ResourceManager`](week-0/src/main/kotlin/domain/service/ResourceManager.kt) | Управление ресурсами (в т.ч. `LlmClient`) | [`LlmClientResourceManager`](week-0/src/main/kotlin/infrastructure/llm/LlmClientResourceManager.kt) |
+
+**Важно:** CLI-слой зависит только от domain-интерфейсов (включая `ResourceManager`) и не импортирует `utils.llm`
+напрямую.
+
+Подробности архитектуры см. в [`arch/refactoring-completion-report.md`](arch/refactoring-completion-report.md).
+
 ## Дополнительные ссылки
 
 - [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html)

@@ -59,3 +59,4 @@ config/application.properties
 /.idea/vcs.xml
 /.idea/WebToolsSettings.xml
 /.kilocode/
+/arch/

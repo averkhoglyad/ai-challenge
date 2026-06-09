@@ -21,6 +21,7 @@ dependencies {
     
     // Testing
     testImplementation(kotlin("test"))
+    testImplementation(testFixtures(project(":utils")))
 }
 
 application {
