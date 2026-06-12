@@ -1,12 +1,13 @@
-package io.averkhogliad.ai.challenge.week0.cli
+package io.averkhogliad.ai.challenge.week1.cli
 
-import io.averkhogliad.ai.challenge.week0.application.executor.TaskExecutor
-import io.averkhogliad.ai.challenge.week0.cli.commands.Command
-import io.averkhogliad.ai.challenge.week0.cli.commands.CommandContext
-import io.averkhogliad.ai.challenge.week0.cli.commands.CommandParser
-import io.averkhogliad.ai.challenge.week0.domain.TaskId
-import io.averkhogliad.ai.challenge.week0.domain.service.LlmPort
-import io.averkhogliad.ai.challenge.week0.domain.service.ResourceManager
+import io.averkhogliad.ai.challenge.week1.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week1.cli.commands.Command
+import io.averkhogliad.ai.challenge.week1.cli.commands.CommandContext
+import io.averkhogliad.ai.challenge.week1.cli.commands.CommandParser
+import io.averkhogliad.ai.challenge.week1.domain.TaskId
+import io.averkhogliad.ai.challenge.week1.domain.TaskResult
+import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
+import io.averkhogliad.ai.challenge.week1.domain.service.ResourceManager
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -103,11 +104,6 @@ class CliApplication(
 
     /**
      * Обрабатывает команду и выполняет соответствующий рендеринг.
-     *
-     * Логика:
-     * - Команды, меняющие состояние → handler.handle() + опциональный рендеринг
-     * - UserInput → handler.executeUserInput() + renderResult
-     * - Render-only команды → только рендеринг (состояние не меняется)
      */
     private suspend fun handleCommandWithRendering(command: Command, state: CliState): CliState {
         return when (command) {
@@ -121,24 +117,6 @@ class CliApplication(
 
             is Command.ShowParameters -> {
                 renderer.renderParameters(state)
-                state
-            }
-
-            is Command.ShowConfig -> {
-                renderer.renderTask3Config(state)
-                state
-            }
-
-            is Command.ShowModels -> {
-                val models = llmPort?.let { port ->
-                    try {
-                        port.listModels()
-                    } catch (e: Exception) {
-                        renderer.renderError("Ошибка получения списка моделей: ${e.message}")
-                        emptyList()
-                    }
-                } ?: emptyList()
-                renderer.renderAvailableModels(models)
                 state
             }
 
@@ -175,32 +153,23 @@ class CliApplication(
             // UserInput — выполнение задачи
             // ═══════════════════════════════════════════════════════
             is Command.UserInput -> {
-                // Показываем отправляемый промпт и параметры
-                println()
-                println("═══ Отправка запроса ═══")
-                println("Промпт: ${command.text}")
-                println("Параметры: температура=${state.executionConfig.temperature}, maxTokens=${state.executionConfig.maxTokens}")
-                if (state.executionConfig.modelId != null) {
-                    println("Модель: ${state.executionConfig.modelId!!.value}")
-                }
-                println("═══════════════════════")
-                println()
+                // Показываем отправляемый промпт и параметры через renderer
+                renderer.renderRequestInfo(command.text, state.executionConfig)
                 val (newState, result) = handler.executeUserInput(command, state)
                 when (result) {
-                    is io.averkhogliad.ai.challenge.week0.domain.TaskResult.Success -> {
+                    is TaskResult.Success -> {
                         renderer.renderResult(result)
                     }
 
-                    is io.averkhogliad.ai.challenge.week0.domain.TaskResult.Error -> {
+                    is TaskResult.Error -> {
                         renderer.renderError(result.message)
                     }
 
-                    is io.averkhogliad.ai.challenge.week0.domain.TaskResult.Partial -> {
+                    is TaskResult.Partial -> {
                         renderer.renderResult(result)
                     }
 
                     null -> {
-                        // Нет активной задачи — показываем меню
                         renderer.renderMenu(handler.getAllExecutors())
                     }
                 }
@@ -210,34 +179,10 @@ class CliApplication(
             // ═══════════════════════════════════════════════════════
             // Команды параметров — обновление состояния
             // ═══════════════════════════════════════════════════════
-            is Command.SetModels -> {
-                // Преобразуем индексы моделей в ModelId и сохраняем в executionConfig
-                val models = llmPort?.let { port ->
-                    try {
-                        port.listModels()
-                    } catch (e: Exception) {
-                        renderer.renderError("Ошибка получения списка моделей: ${e.message}")
-                        emptyList()
-                    }
-                } ?: emptyList()
-
-                val selectedModelIds = command.modelIndices
-                    .filter { it in 1..models.size }
-                    .map { models[it - 1] }
-
-                val newState = state.copy(
-                    task5SelectedModels = command.modelIndices,
-                    executionConfig = state.executionConfig.copy(
-                        task5 = state.executionConfig.task5.copy(modelIds = selectedModelIds)
-                    )
-                )
-                renderer.renderResult(io.averkhogliad.ai.challenge.week0.domain.TaskResult.Success("Выбрано моделей: ${selectedModelIds.size}"))
-                newState
-            }
-
-            else -> {
-                // SetTemperature, SetMaxTokens, SetStopSequences, ResetParameters,
-                // SetMode, SetStep, SetMeta, SetRole, SetExperts, ToggleSummary
+            is Command.SetTemperature,
+            is Command.SetMaxTokens,
+            is Command.SetStopSequences,
+            is Command.ResetParameters -> {
                 handler.handle(command, state)
             }
         }
@@ -252,21 +197,11 @@ class CliApplication(
             return CommandContext.TASK_SELECTION
         }
 
-        // Все задачи имеют базовый набор команд
+        // Базовый набор команд для всех задач
         val commands = mutableSetOf(
             "help", "h", "quit", "q", "back", "b", "task", "t",
             "temp", "maxtokens", "reset", "params", "stop"
         )
-
-        // Task3 специфичные команды
-        if (taskId == 3) {
-            commands.addAll(listOf("mode", "step", "meta", "role", "experts", "summary", "config"))
-        }
-
-        // Task5 специфичные команды
-        if (taskId == 5) {
-            commands.add("models")
-        }
 
         return CommandContext(
             currentTaskId = taskId,

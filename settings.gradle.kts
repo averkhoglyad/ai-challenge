@@ -21,5 +21,6 @@ plugins {
 // Learn more about structuring projects with Gradle - https://docs.gradle.org/8.7/userguide/multi_project_builds.html
 include(":utils")
 include(":week-0")
+include(":week-1")
 
 rootProject.name = "ai-challenge"

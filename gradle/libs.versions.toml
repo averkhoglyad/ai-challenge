@@ -13,6 +13,7 @@ kotlinGradlePlugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", ver
 kotlinxSerialization = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJSON" }
 kotlinxCoroutines = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-coroutines-jdk8 = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-jdk8", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 mordant = { module = "com.github.ajalt.mordant:mordant", version.ref = "mordant" }
 
 # Libraries can be bundled together for easier import
