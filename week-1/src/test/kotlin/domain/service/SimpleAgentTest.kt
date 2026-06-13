@@ -6,6 +6,7 @@ import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 
 class SimpleAgentTest {
@@ -62,12 +63,10 @@ class SimpleAgentTest {
         // When & Then
         // SimpleAgent не обрабатывает исключения — это делает LlmAdapter
         // Поэтому исключение должно проброситься наружу
-        try {
+        val exception = assertFailsWith<RuntimeException> {
             agent.process(prompt, config)
-            throw AssertionError("Expected RuntimeException to be thrown")
-        } catch (e: RuntimeException) {
-            assertEquals("API error", e.message)
         }
+        assertEquals("API error", exception.message)
     }
 }
 
@@ -109,19 +108,4 @@ private class ThrowingLlmPort(
 
     override suspend fun listModels(): List<io.averkhogliad.ai.challenge.week1.domain.ModelId> = emptyList()
 }
-}
-
-override suspend fun listModels(): List<io.averkhogliad.ai.challenge.week1.domain.ModelId> = emptyList()
-}
-}
-
-
-}
-}
-
-
-override suspend fun listModels(): List<io.averkhogliad.ai.challenge.week1.domain.ModelId> = emptyList()
-}
-}
-
 

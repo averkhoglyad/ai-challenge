@@ -1,20 +1,23 @@
 package io.averkhogliad.ai.challenge.week1.bootstrap
 
 import io.averkhogliad.ai.challenge.utils.config.Config
-import io.averkhogliad.ai.challenge.utils.llm.DefaultLlmClient
-import io.averkhogliad.ai.challenge.utils.llm.LlmClient
-import io.averkhogliad.ai.challenge.utils.llm.LlmClientConfig
+import io.averkhogliad.ai.challenge.utils.llm.*
+import io.averkhogliad.ai.challenge.week1.application.DialogManager
 import io.averkhogliad.ai.challenge.week1.application.executor.Task1Executor
+import io.averkhogliad.ai.challenge.week1.application.executor.Task2Executor
+import io.averkhogliad.ai.challenge.week1.application.executor.Task3Executor
 import io.averkhogliad.ai.challenge.week1.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week1.cli.CliApplication
 import io.averkhogliad.ai.challenge.week1.cli.ConsoleCliRenderer
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.service.ConfigPort
+import io.averkhogliad.ai.challenge.week1.domain.service.ConversationalAgent
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week1.domain.service.SimpleAgent
 import io.averkhogliad.ai.challenge.week1.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmClientResourceManager
+import io.averkhogliad.ai.challenge.week1.infrastructure.persistence.SqliteDialogRepository
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import io.averkhogliad.ai.challenge.week1.domain.config.LlmConfig as DomainLlmConfig
@@ -100,18 +103,64 @@ object ApplicationBootstrap {
             defaultModelId = domainLlmConfig.defaultModelId
         )
 
-        // 4. Domain: агент
+        // 4. Domain: агент для Task 1
         val agent = SimpleAgent(llmPort)
 
-        // 5. Application: executor'ы
-        val executors: Map<TaskId, TaskExecutor> = mapOf(
-            TaskId(1) to Task1Executor(agent)
+        // 5. Infrastructure: persistence для диалогов (Task 2)
+        val dialogRepository = SqliteDialogRepository()
+        val dialogManager = DialogManager(dialogRepository)
+        val conversationalAgent = ConversationalAgent(llmPort, dialogRepository)
+
+        // 5b. Load ModelInfo for default model (used by Task3Executor for cost calculation)
+        val models = config.loadModels()
+        val defaultModelId = domainLlmConfig.defaultModelId.value
+
+        // Ищем модель в списке models
+        val modelFromList = models.find { it.modelId == defaultModelId }
+
+        // Парсим api.model — он может содержать стоимость (даже если models-запись без стоимости)
+        val apiModelInfo = config.getOrNull("api.model")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { ModelInfo.parse(it) }
+            ?.takeIf { it.modelId == defaultModelId }
+
+        val modelInfo = when {
+            // Модель найдена в models и имеет стоимость
+            modelFromList != null && modelFromList.costPerMillionInputTokens != null -> modelFromList
+            // Модель найдена в models, но без стоимости — обогащаем из api.model
+            modelFromList != null && apiModelInfo?.costPerMillionInputTokens != null ->
+                modelFromList.copy(
+                    costPerMillionInputTokens = apiModelInfo.costPerMillionInputTokens,
+                    costPerMillionOutputTokens = apiModelInfo.costPerMillionOutputTokens
+                )
+            // Модель найдена в models (пусть и без стоимости, и api.model не помог)
+            modelFromList != null -> modelFromList
+            // Модель не найдена в models, но есть в api.model
+            apiModelInfo != null -> apiModelInfo
+            // Нигде не найдена
+            else -> throw IllegalStateException(
+                "Default model '$defaultModelId' not found in 'models' or 'api.model' configuration. " +
+                        "Please add it to your application.properties."
+            )
+        }
+
+        // 5c. Load context window from config (default: 16384)
+        val contextWindow = config.getOrDefault("api.context-window", "16384")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid api.context-window: '${config.getOrNull("api.context-window")}'"
         )
 
-        // 6. CLI: renderer + facade
+        // 6. Application: executor'ы
+        val executors: Map<TaskId, TaskExecutor> = mapOf(
+            TaskId(1) to Task1Executor(agent),
+            TaskId(2) to Task2Executor(conversationalAgent, dialogManager),
+            TaskId(3) to Task3Executor(conversationalAgent, dialogManager, modelInfo, contextWindow)
+        )
+
+        // 7. CLI: renderer + facade
         val renderer = ConsoleCliRenderer()
 
-        // 6b. Infrastructure: ResourceManager (обёртка для LlmClient)
+        // 7b. Infrastructure: ResourceManager (обёртка для LlmClient)
         val resourceManager = LlmClientResourceManager(llmClient)
 
         return CliApplication(

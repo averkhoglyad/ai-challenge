@@ -3,6 +3,7 @@ package io.averkhogliad.ai.challenge.week1.domain.service
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
 import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
 
 /**
  * Простой агент для одиночного запроса к LLM.
@@ -26,7 +27,7 @@ class SimpleAgent(
     private val systemPrompt: String? = null
 ) : Agent {
 
-    override suspend fun process(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+    override suspend fun process(prompt: Prompt, config: TaskExecutionConfig, dialogId: DialogId?): TaskResult {
         // LlmPort (реализуемый LlmAdapter) уже обрабатывает все исключения
         // и возвращает TaskResult.Error, поэтому дополнительный try-catch не нужен
         return if (systemPrompt != null) {

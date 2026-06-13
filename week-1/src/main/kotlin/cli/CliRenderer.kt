@@ -3,6 +3,8 @@ package io.averkhogliad.ai.challenge.week1.cli
 import io.averkhogliad.ai.challenge.week1.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week1.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
+import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
+import io.averkhogliad.ai.challenge.week1.domain.model.DialogSummary
 
 /**
  * Интерфейс рендеринга CLI вывода (View).
@@ -49,8 +51,8 @@ interface CliRenderer {
      * Отображает промпт для ввода пользователя.
      *
      * Формат промпта зависит от текущего состояния:
-     * - На этапе выбора задачи: "Выберите задачу (1, 0=выход):"
-     * - Внутри задачи: "Введите промпт (пустая строка = дефолтный, :help = помощь):"
+     * - На этапе выбора задачи: "Выберите задачу (номер, 0=выход, :help=помощь):"
+     * - Внутри задачи: "prompt>"
      *
      * @param state текущее состояние CLI
      */
@@ -87,4 +89,25 @@ interface CliRenderer {
      * @param config конфигурация выполнения (temperature, maxTokens, modelId)
      */
     fun renderRequestInfo(prompt: String, config: io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig)
+
+    /**
+     * Отображает список диалогов.
+     *
+     * @param dialogs список кратких представлений диалогов
+     */
+    fun renderDialogList(dialogs: List<DialogSummary>)
+
+    /**
+     * Отображает историю сообщений диалога.
+     *
+     * @param dialog полный диалог с историей сообщений
+     */
+    fun renderDialogHistory(dialog: Dialog)
+
+    /**
+     * Отображает информацию о текущем активном диалоге.
+     *
+     * @param dialogId ID текущего диалога (null если не выбран)
+     */
+    fun renderCurrentDialogInfo(dialogId: io.averkhogliad.ai.challenge.week1.domain.model.DialogId?)
 }

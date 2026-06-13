@@ -211,7 +211,7 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
         applyRateLimit()  // Применяем rate-limit перед каждым запросом
 
         val requestBody = json.encodeToString(ChatRequest.serializer(), request)
-
+        5
         val httpRequest = HttpRequest.newBuilder()
             .uri(URI.create("${clientConfig.baseUrl}/v1/chat/completions"))
             .timeout(clientConfig.requestTimeout.toJavaDuration())

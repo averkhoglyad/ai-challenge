@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.cli
 
+import io.averkhogliad.ai.challenge.week1.application.executor.DialogManagerAccessor
 import io.averkhogliad.ai.challenge.week1.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week1.cli.commands.Command
 import io.averkhogliad.ai.challenge.week1.cli.commands.CommandContext
@@ -185,6 +186,44 @@ class CliApplication(
             is Command.ResetParameters -> {
                 handler.handle(command, state)
             }
+
+            // ═══════════════════════════════════════════════════════
+            // Команды управления диалогами (для задач с поддержкой DialogManagerAccessor)
+            // ═══════════════════════════════════════════════════════
+            is Command.NewDialog -> {
+                val newState = handler.handle(command, state)
+                renderer.renderCurrentDialogInfo(newState.currentDialogId)
+                newState
+            }
+
+            is Command.ListDialogs -> {
+                val dialogManagerAccessor = handler.getAccessorForCurrentTask(state) as? DialogManagerAccessor
+                if (dialogManagerAccessor != null) {
+                    val dialogs = dialogManagerAccessor.getDialogManager().listDialogs()
+                    renderer.renderDialogList(dialogs)
+                } else {
+                    renderer.renderError("Управление диалогами не доступно в текущей задаче")
+                }
+                state
+            }
+
+            is Command.DeleteDialog -> {
+                val dialogManagerAccessor = handler.getAccessorForCurrentTask(state) as? DialogManagerAccessor
+                if (dialogManagerAccessor != null) {
+                    val dialogId = io.averkhogliad.ai.challenge.week1.domain.model.DialogId(command.id)
+                    dialogManagerAccessor.getDialogManager().deleteDialog(dialogId)
+                    println("Диалог ${command.id} удалён")
+                } else {
+                    renderer.renderError("Управление диалогами не доступно в текущей задаче")
+                }
+                state
+            }
+
+            is Command.SwitchDialog -> {
+                val newState = handler.handle(command, state)
+                renderer.renderCurrentDialogInfo(newState.currentDialogId)
+                newState
+            }
         }
     }
 
@@ -199,9 +238,15 @@ class CliApplication(
 
         // Базовый набор команд для всех задач
         val commands = mutableSetOf(
-            "help", "h", "quit", "q", "back", "b", "task", "t",
+            "help", "h", "quit", "q", "back", "b",
             "temp", "maxtokens", "reset", "params", "stop"
         )
+
+        // Команды диалогов для задач с поддержкой DialogManagerAccessor
+        val currentExecutor = state.currentTaskId?.let { executors[TaskId(it)] }
+        if (currentExecutor is io.averkhogliad.ai.challenge.week1.application.executor.DialogManagerAccessor) {
+            commands.addAll(listOf("new", "list", "delete", "switch"))
+        }
 
         return CommandContext(
             currentTaskId = taskId,

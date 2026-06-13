@@ -17,11 +17,11 @@ data class CommandContext(
         /** Контекст для этапа выбора задачи */
         val TASK_SELECTION = CommandContext(
             currentTaskId = null,
-            availableCommands = setOf("help", "h", "quit", "q", "task", "t")
+            availableCommands = setOf("help", "h", "quit", "q", "back", "b")
         )
 
         /** Глобальные команды, доступные всегда */
-        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "task", "t", "back", "b")
+        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "back", "b")
     }
 }
 
@@ -90,7 +90,6 @@ object CommandParser {
             // Глобальные команды
             "help", "h" -> Command.Help
             "quit", "q" -> Command.Quit
-            "task", "t" -> Command.Back
             "back", "b" -> Command.Back
 
             // LLM параметры
@@ -125,6 +124,23 @@ object CommandParser {
 
             "reset" -> Command.ResetParameters
             "params" -> Command.ShowParameters
+
+            // Команды управления диалогами (для Task 2)
+            "new" -> {
+                val title = args.ifEmpty { "New Dialog" }
+                Command.NewDialog(title)
+            }
+
+            "list" -> Command.ListDialogs
+            "delete" -> {
+                if (args.isEmpty()) Command.Unknown(raw)
+                else Command.DeleteDialog(args)
+            }
+
+            "switch" -> {
+                if (args.isEmpty()) Command.Unknown(raw)
+                else Command.SwitchDialog(args)
+            }
 
             else -> Command.Unknown(raw)
         }

@@ -3,6 +3,7 @@ package io.averkhogliad.ai.challenge.week1.domain.service
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
 import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
 
 /**
  * Domain service для обработки пользовательских запросов через LLM.
@@ -29,7 +30,8 @@ interface Agent {
      *
      * @param prompt пользовательский промпт
      * @param config конфигурация выполнения (temperature, maxTokens, modelId и др.)
+     * @param dialogId опциональный идентификатор диалога (используется ConversationalAgent)
      * @return результат выполнения: [TaskResult.Success], [TaskResult.Error] или [TaskResult.Partial]
      */
-    suspend fun process(prompt: Prompt, config: TaskExecutionConfig): TaskResult
+    suspend fun process(prompt: Prompt, config: TaskExecutionConfig, dialogId: DialogId? = null): TaskResult
 }

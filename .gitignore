@@ -46,8 +46,6 @@ bin/
 
 ### External config files ###
 # Local config files (NEVER commit real API keys)
-application.properties
-config/application.properties
 /config/
 /.idea/.gitignore
 /.idea/amplicode-jpa.xml
@@ -59,4 +57,4 @@ config/application.properties
 /.idea/vcs.xml
 /.idea/WebToolsSettings.xml
 /.kilocode/
-/arch/
+/docs/

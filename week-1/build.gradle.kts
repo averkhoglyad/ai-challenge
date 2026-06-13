@@ -19,6 +19,9 @@ dependencies {
     // Shared utilities and config component.
     implementation(project(":utils"))
 
+    // SQLite JDBC driver for dialog persistence.
+    implementation("org.xerial:sqlite-jdbc:3.45.1.0")
+
     // Testing
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)

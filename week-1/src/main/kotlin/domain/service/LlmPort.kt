@@ -3,6 +3,7 @@ package io.averkhogliad.ai.challenge.week1.domain.service
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
 import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
+import java.time.Instant
 
 /**
  * Port (интерфейс) для взаимодействия domain-слоя с LLM-инфраструктурой.
@@ -68,19 +69,21 @@ enum class ChatRole {
  *
  * @property role роль отправителя
  * @property content текстовое содержимое сообщения
+ * @property createdAt время создания сообщения
  */
 data class ChatMessage(
     val role: ChatRole,
-    val content: String
+    val content: String,
+    val createdAt: Instant = Instant.now()
 ) {
     companion object {
         /** Создаёт системное сообщение для установки контекста и инструкций модели. */
-        fun system(content: String) = ChatMessage(ChatRole.SYSTEM, content)
+        fun system(content: String) = ChatMessage(ChatRole.SYSTEM, content, Instant.now())
 
         /** Создаёт пользовательское сообщение (промпт). */
-        fun user(content: String) = ChatMessage(ChatRole.USER, content)
+        fun user(content: String) = ChatMessage(ChatRole.USER, content, Instant.now())
 
         /** Создаёт сообщение от ассистента (используется в few-shot примерах). */
-        fun assistant(content: String) = ChatMessage(ChatRole.ASSISTANT, content)
+        fun assistant(content: String) = ChatMessage(ChatRole.ASSISTANT, content, Instant.now())
     }
 }

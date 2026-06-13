@@ -1,6 +1,7 @@
 package io.averkhogliad.ai.challenge.week0.infrastructure.config
 
 import io.averkhogliad.ai.challenge.utils.config.Config
+import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
 import io.averkhogliad.ai.challenge.week0.domain.ModelId
 import io.averkhogliad.ai.challenge.week0.domain.config.*
 import io.averkhogliad.ai.challenge.week0.domain.service.ConfigPort
@@ -55,7 +56,10 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
         // Поддержка старых (api.*) и новых (llm.*) ключей конфигурации
         val baseUrl = config.getWithFallback("llm.base-url", "api.base-url")
         val apiKey = config.getWithFallback("llm.api-key", "api.key")
-        val defaultModelId = ModelId(config.getWithFallback("llm.default-model", "api.model"))
+        val defaultModelIdRaw = config.getWithFallback("llm.default-model", "api.model")
+        // api.model поддерживает тот же формат, что и models: "id[:name][(costIn,costOut)]"
+        // Извлекаем только modelId для API-запросов
+        val defaultModelId = ModelId(ModelInfo.parse(defaultModelIdRaw).modelId)
         val defaultTemperature = config.getOrDefault("llm.default-temperature", "0.7")
             .toDoubleOrNull() ?: throw IllegalArgumentException(
             "Invalid llm.default-temperature: '${config.getOrNull("llm.default-temperature")}'"
