@@ -104,6 +104,19 @@ class SqliteDialogRepository(
                 ON messages(dialog_id)
             """.trimIndent()
             )
+
+            // Таблица для хранения summary диалогов (сжатый контекст)
+            stmt.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dialog_summaries (
+                    dialog_id TEXT PRIMARY KEY,
+                    accumulated_summary TEXT,
+                    compressed_message_count INTEGER NOT NULL DEFAULT 0,
+                    last_updated TEXT NOT NULL,
+                    FOREIGN KEY (dialog_id) REFERENCES dialogs(id) ON DELETE CASCADE
+                )
+            """.trimIndent()
+            )
         }
     }
 
@@ -146,6 +159,11 @@ class SqliteDialogRepository(
                 }
                 stmt.executeBatch()
             }
+
+            // Сохраняем accumulatedSummary если он есть
+            if (dialog.accumulatedSummary != null) {
+                saveSummaryInternal(dialog.id, dialog.accumulatedSummary, dialog.messages.size)
+            }
         }
     }
 
@@ -172,7 +190,12 @@ class SqliteDialogRepository(
         dialog?.let { d ->
             // Загружаем сообщения
             val messages = loadMessages(d.id)
-            d.copy(messages = messages)
+            // Загружаем accumulatedSummary
+            val summary = loadSummary(d.id)
+            d.copy(
+                messages = messages,
+                accumulatedSummary = summary?.accumulatedSummary
+            )
         }
     }
 
@@ -218,6 +241,69 @@ class SqliteDialogRepository(
                 stmt.setString(1, id.value)
                 stmt.executeUpdate()
             }
+        }
+    }
+
+    /**
+     * Сохраняет summary для диалога (публичный suspend метод).
+     *
+     * @param dialogId идентификатор диалога
+     * @param summary текст суммаризации
+     * @param compressedCount количество сжатых сообщений
+     */
+    suspend fun saveSummary(dialogId: DialogId, summary: String, compressedCount: Int): Unit =
+        withContext(Dispatchers.IO) {
+            saveSummaryInternal(dialogId, summary, compressedCount)
+        }
+
+    /**
+     * Загружает summary для диалога.
+     *
+     * @param dialogId идентификатор диалога
+     * @return [DialogSummary] с summary данными или null, если summary не сохранено
+     */
+    suspend fun loadSummary(dialogId: DialogId): DialogSummary? = withContext(Dispatchers.IO) {
+        val sql = """
+            SELECT ds.dialog_id, ds.accumulated_summary, ds.compressed_message_count, d.updated_at
+            FROM dialog_summaries ds
+            JOIN dialogs d ON ds.dialog_id = d.id
+            WHERE ds.dialog_id = ?
+        """.trimIndent()
+
+        connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, dialogId.value)
+            stmt.executeQuery().use { rs ->
+                if (rs.next()) {
+                    DialogSummary(
+                        id = DialogId(rs.getString("dialog_id")),
+                        title = "Summary", // Placeholder — DialogSummary requires non-blank title
+                        messageCount = 0, // Не используется в этом контексте
+                        updatedAt = Instant.parse(rs.getString("updated_at")),
+                        accumulatedSummary = rs.getString("accumulated_summary"),
+                        compressedMessageCount = rs.getInt("compressed_message_count")
+                    )
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
+    /**
+     * Внутренний метод сохранения summary (вызывается в транзакции).
+     */
+    private fun saveSummaryInternal(dialogId: DialogId, summary: String, compressedCount: Int) {
+        val sql = """
+            INSERT OR REPLACE INTO dialog_summaries (dialog_id, accumulated_summary, compressed_message_count, last_updated)
+            VALUES (?, ?, ?, ?)
+        """.trimIndent()
+
+        connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, dialogId.value)
+            stmt.setString(2, summary)
+            stmt.setInt(3, compressedCount)
+            stmt.setString(4, Instant.now().toString())
+            stmt.executeUpdate()
         }
     }
 

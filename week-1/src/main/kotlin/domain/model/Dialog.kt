@@ -30,7 +30,8 @@ data class Dialog(
     val messages: List<ChatMessage>,
     val createdAt: Instant,
     val updatedAt: Instant,
-    val tokenUsageHistory: List<TokenUsage> = emptyList()
+    val tokenUsageHistory: List<TokenUsage> = emptyList(),
+    val accumulatedSummary: String? = null
 ) {
     init {
         require(title.isNotBlank()) { "Dialog title cannot be blank" }
@@ -80,6 +81,37 @@ data class Dialog(
      */
     fun addTokenUsage(usage: TokenUsage): Dialog {
         return copy(tokenUsageHistory = tokenUsageHistory + usage)
+    }
+
+    /**
+     * Обновляет накопительное summary диалога.
+     *
+     * Используется механизмом сжатия контекста для хранения суммаризации
+     * предыдущих сообщений. Возвращает новый экземпляр [Dialog] с обновлённым summary.
+     *
+     * @param newSummary новый текст суммаризации
+     * @return новый экземпляр [Dialog] с обновлённым [accumulatedSummary]
+     */
+    fun updateAccumulatedSummary(newSummary: String): Dialog {
+        return copy(accumulatedSummary = newSummary)
+    }
+
+    /**
+     * Добавляет сообщение в диалог, если его ещё нет в истории.
+     *
+     * Проверяет наличие сообщения по содержимому, роли и времени создания.
+     * Если сообщение уже есть — возвращает текущий экземпляр без изменений.
+     *
+     * @param message сообщение для добавления
+     * @return новый экземпляр [Dialog] с добавленным сообщением или текущий, если сообщение уже есть
+     */
+    fun withMessage(message: ChatMessage): Dialog {
+        val alreadyExists = messages.any {
+            it.role == message.role &&
+                    it.content == message.content &&
+                    it.createdAt == message.createdAt
+        }
+        return if (alreadyExists) this else copy(messages = messages + message)
     }
 
     /**

@@ -7,6 +7,7 @@ import io.averkhogliad.ai.challenge.week1.cli.commands.CommandContext
 import io.averkhogliad.ai.challenge.week1.cli.commands.CommandParser
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
+import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week1.domain.service.ResourceManager
 import kotlinx.coroutines.runBlocking
@@ -44,10 +45,11 @@ class CliApplication(
     private val executors: Map<TaskId, TaskExecutor>,
     private val renderer: CliRenderer = ConsoleCliRenderer(),
     private val llmPort: LlmPort? = null,
-    private val resourceManager: ResourceManager? = null
+    private val resourceManager: ResourceManager? = null,
+    private val compressionConfigProvider: ContextCompressionConfigProvider? = null
 ) : AutoCloseable {
 
-    private val handler = CommandHandler(executors)
+    private val handler = CommandHandler(executors, compressionConfigProvider)
 
     fun run(args: Array<String>) {
         runBlocking {
@@ -224,6 +226,29 @@ class CliApplication(
                 renderer.renderCurrentDialogInfo(newState.currentDialogId)
                 newState
             }
+
+            // ═══════════════════════════════════════════════════════
+            // Команды управления сжатием контекста (для Task 4)
+            // ═══════════════════════════════════════════════════════
+            is Command.SetCompressionEnabled,
+            is Command.SetCompressionWindow,
+            is Command.SetCompressionBlock -> {
+                handler.handle(command, state)
+            }
+
+            is Command.ShowCompressionStatus -> {
+                val config = compressionConfigProvider?.get()
+                if (config != null) {
+                    println("📊 Статус сжатия контекста:")
+                    println("   Включено:     ${config.enabled}")
+                    println("   Окно (N):     ${config.windowSize}")
+                    println("   Блок (K):     ${config.blockSize}")
+                    println("   Модель:       ${config.summaryModelId ?: "по умолчанию"}")
+                } else {
+                    renderer.renderError("Сжатие контекста не настроено")
+                }
+                state
+            }
         }
     }
 
@@ -246,6 +271,11 @@ class CliApplication(
         val currentExecutor = state.currentTaskId?.let { executors[TaskId(it)] }
         if (currentExecutor is io.averkhogliad.ai.challenge.week1.application.executor.DialogManagerAccessor) {
             commands.addAll(listOf("new", "list", "delete", "switch"))
+        }
+
+        // Команды сжатия контекста для Task 4
+        if (compressionConfigProvider != null) {
+            commands.addAll(listOf("compression", "comp"))
         }
 
         return CommandContext(

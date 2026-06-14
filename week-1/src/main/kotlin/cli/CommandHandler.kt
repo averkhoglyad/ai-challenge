@@ -6,6 +6,7 @@ import io.averkhogliad.ai.challenge.week1.cli.commands.Command
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
+import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
 import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
 
@@ -19,7 +20,8 @@ import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
  * - [Command.UserInput] → делегирование в [TaskExecutor.execute]
  */
 class CommandHandler(
-    private val executors: Map<TaskId, TaskExecutor>
+    private val executors: Map<TaskId, TaskExecutor>,
+    private val compressionConfigProvider: ContextCompressionConfigProvider? = null
 ) {
 
     suspend fun handle(command: Command, state: CliState): CliState {
@@ -54,6 +56,24 @@ class CommandHandler(
             is Command.ListDialogs -> state // Обработка в CliApplication
             is Command.DeleteDialog -> state // Обработка в CliApplication
             is Command.SwitchDialog -> handleSwitchDialog(command, state)
+
+            // Команды управления сжатием контекста (для Task 4)
+            is Command.SetCompressionEnabled -> {
+                compressionConfigProvider?.setEnabled(command.enabled)
+                state
+            }
+
+            is Command.SetCompressionWindow -> {
+                compressionConfigProvider?.setWindowSize(command.size)
+                state
+            }
+
+            is Command.SetCompressionBlock -> {
+                compressionConfigProvider?.setBlockSize(command.size)
+                state
+            }
+
+            is Command.ShowCompressionStatus -> state // Обработка в CliApplication
 
             // Пользовательский ввод
             is Command.UserInput -> state

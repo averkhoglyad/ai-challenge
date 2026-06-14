@@ -23,7 +23,9 @@ data class DialogSummary(
     val id: DialogId,
     val title: String,
     val messageCount: Int,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val accumulatedSummary: String? = null,
+    val compressedMessageCount: Int = 0
 ) {
     init {
         require(title.isNotBlank()) { "Dialog title cannot be blank" }

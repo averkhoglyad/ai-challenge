@@ -4,6 +4,7 @@ import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
 import io.averkhogliad.ai.challenge.week1.domain.ModelId
 import io.averkhogliad.ai.challenge.week1.domain.config.AppConfig
+import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfig
 import io.averkhogliad.ai.challenge.week1.domain.config.LlmConfig
 import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week1.domain.service.ConfigPort
@@ -128,6 +129,38 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
         return config.getOrDefault("app.repl-timeout-seconds", "300")
             .toLongOrNull() ?: throw IllegalArgumentException(
             "Invalid app.repl-timeout-seconds: '${config.getOrNull("app.repl-timeout-seconds")}'"
+        )
+    }
+
+    /**
+     * Загружает конфигурацию сжатия контекста (Task 4).
+     *
+     * Ключи конфигурации:
+     * - `context.compression.enabled` (boolean, default: false)
+     * - `context.compression.window-size` (int, default: 10)
+     * - `context.compression.block-size` (int, default: 5)
+     * - `context.compression.summary-model-id` (string, optional)
+     *
+     * @return валидный [ContextCompressionConfig]
+     */
+    fun loadCompressionConfig(): ContextCompressionConfig {
+        val enabled = config.getOrDefault("context.compression.enabled", "false")
+            .toBooleanStrictOrNull() ?: false
+        val windowSize = config.getOrDefault("context.compression.window-size", "10")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid context.compression.window-size: '${config.getOrNull("context.compression.window-size")}'"
+        )
+        val blockSize = config.getOrDefault("context.compression.block-size", "5")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid context.compression.block-size: '${config.getOrNull("context.compression.block-size")}'"
+        )
+        val summaryModelId = config.getOrNull("context.compression.summary-model-id")
+
+        return ContextCompressionConfig(
+            enabled = enabled,
+            windowSize = windowSize,
+            blockSize = blockSize,
+            summaryModelId = summaryModelId
         )
     }
 }

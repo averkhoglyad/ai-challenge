@@ -3,17 +3,13 @@ package io.averkhogliad.ai.challenge.week1.bootstrap
 import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.*
 import io.averkhogliad.ai.challenge.week1.application.DialogManager
-import io.averkhogliad.ai.challenge.week1.application.executor.Task1Executor
-import io.averkhogliad.ai.challenge.week1.application.executor.Task2Executor
-import io.averkhogliad.ai.challenge.week1.application.executor.Task3Executor
-import io.averkhogliad.ai.challenge.week1.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week1.application.executor.*
 import io.averkhogliad.ai.challenge.week1.cli.CliApplication
 import io.averkhogliad.ai.challenge.week1.cli.ConsoleCliRenderer
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
-import io.averkhogliad.ai.challenge.week1.domain.service.ConfigPort
-import io.averkhogliad.ai.challenge.week1.domain.service.ConversationalAgent
-import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
-import io.averkhogliad.ai.challenge.week1.domain.service.SimpleAgent
+import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
+import io.averkhogliad.ai.challenge.week1.domain.context.SlidingWindowCompressor
+import io.averkhogliad.ai.challenge.week1.domain.service.*
 import io.averkhogliad.ai.challenge.week1.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmClientResourceManager
@@ -111,6 +107,19 @@ object ApplicationBootstrap {
         val dialogManager = DialogManager(dialogRepository)
         val conversationalAgent = ConversationalAgent(llmPort, dialogRepository)
 
+        // 5a. Task 4: Context Compression components
+        val configAdapter = configPort as ConfigAdapter
+        val compressionConfig = configAdapter.loadCompressionConfig()
+        val compressionConfigProvider = ContextCompressionConfigProvider(compressionConfig)
+        val slidingWindowCompressor = SlidingWindowCompressor(llmPort)
+        val compressingConversationalAgent = CompressingConversationalAgent(
+            delegate = conversationalAgent,
+            compressor = slidingWindowCompressor,
+            configProvider = compressionConfigProvider,
+            dialogRepository = dialogRepository,
+            llmPort = llmPort
+        )
+
         // 5b. Load ModelInfo for default model (used by Task3Executor for cost calculation)
         val models = config.loadModels()
         val defaultModelId = domainLlmConfig.defaultModelId.value
@@ -154,7 +163,13 @@ object ApplicationBootstrap {
         val executors: Map<TaskId, TaskExecutor> = mapOf(
             TaskId(1) to Task1Executor(agent),
             TaskId(2) to Task2Executor(conversationalAgent, dialogManager),
-            TaskId(3) to Task3Executor(conversationalAgent, dialogManager, modelInfo, contextWindow)
+            TaskId(3) to Task3Executor(conversationalAgent, dialogManager, modelInfo, contextWindow),
+            TaskId(4) to Task4Executor(
+                llmPort = llmPort,
+                dialogRepository = dialogRepository,
+                compressor = slidingWindowCompressor,
+                configProvider = compressionConfigProvider
+            )
         )
 
         // 7. CLI: renderer + facade
@@ -167,7 +182,8 @@ object ApplicationBootstrap {
             executors = executors,
             renderer = renderer,
             llmPort = llmPort,
-            resourceManager = resourceManager
+            resourceManager = resourceManager,
+            compressionConfigProvider = compressionConfigProvider
         )
     }
 

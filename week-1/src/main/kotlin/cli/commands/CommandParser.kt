@@ -142,6 +142,37 @@ object CommandParser {
                 else Command.SwitchDialog(args)
             }
 
+            // Команды управления сжатием контекста (для Task 4)
+            "compression", "comp" -> parseCompressionCommand(args, raw)
+
+            else -> Command.Unknown(raw)
+        }
+    }
+
+    /**
+     * Парсит команды сжатия контекста: `:compression on/off/window <N>/block <K>/status`.
+     */
+    internal fun parseCompressionCommand(args: String, raw: String): Command {
+        val parts = args.split(" ", limit = 2)
+        val subCommand = parts[0].lowercase()
+        val subArgs = parts.getOrElse(1) { "" }.trim()
+
+        return when (subCommand) {
+            "on" -> Command.SetCompressionEnabled(true)
+            "off" -> Command.SetCompressionEnabled(false)
+            "window" -> {
+                val size = subArgs.toIntOrNull()
+                if (size != null && size > 0) Command.SetCompressionWindow(size)
+                else Command.Unknown(raw)
+            }
+
+            "block" -> {
+                val size = subArgs.toIntOrNull()
+                if (size != null && size > 0) Command.SetCompressionBlock(size)
+                else Command.Unknown(raw)
+            }
+
+            "status" -> Command.ShowCompressionStatus
             else -> Command.Unknown(raw)
         }
     }

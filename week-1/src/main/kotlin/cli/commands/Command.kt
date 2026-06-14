@@ -64,6 +64,22 @@ sealed interface Command {
     data class SwitchDialog(val id: String) : Command
 
     // ═══════════════════════════════════════════════════════════════
+    // Команды управления сжатием контекста (для Task 4)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Включить или выключить сжатие контекста */
+    data class SetCompressionEnabled(val enabled: Boolean) : Command
+
+    /** Установить размер скользящего окна */
+    data class SetCompressionWindow(val size: Int) : Command
+
+    /** Установить размер блока для суммаризации */
+    data class SetCompressionBlock(val size: Int) : Command
+
+    /** Показать текущий статус сжатия */
+    data object ShowCompressionStatus : Command
+
+    // ═══════════════════════════════════════════════════════════════
     // Пользовательский ввод
     // ═══════════════════════════════════════════════════════════════
 
