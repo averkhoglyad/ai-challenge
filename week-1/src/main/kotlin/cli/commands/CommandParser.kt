@@ -1,5 +1,7 @@
 package io.averkhogliad.ai.challenge.week1.cli.commands
 
+import io.averkhogliad.ai.challenge.week1.domain.strategy.StrategyType
+
 /**
  * Контекст парсинга команд — определяет, какая задача активна
  * и какие команды доступны в текущем контексте.
@@ -145,6 +147,92 @@ object CommandParser {
             // Команды управления сжатием контекста (для Task 4)
             "compression", "comp" -> parseCompressionCommand(args, raw)
 
+            // Команды управления стратегиями контекста (для Task 5)
+            "strategy" -> parseStrategyCommand(args, raw)
+            "branch" -> parseBranchCommand(args, raw)
+            "checkpoint" -> parseCheckpointCommand(args, raw)
+            "facts" -> parseFactsCommand(args, raw)
+
+            else -> Command.Unknown(raw)
+        }
+    }
+
+    /**
+     * Парсит команды стратегий: `:strategy [index]`.
+     */
+    internal fun parseStrategyCommand(args: String, raw: String): Command {
+        return when {
+            args.isEmpty() -> Command.ShowStrategyMenu
+            args == "info" -> Command.ShowCurrentStrategy
+            else -> {
+                val index = args.toIntOrNull()
+                if (index != null && index in 1..StrategyType.entries.size) Command.SwitchStrategy(index)
+                else Command.Unknown(raw)
+            }
+        }
+    }
+
+    /**
+     * Парсит команды веток: `:branch create <name>`, `:branch switch <name>`, `:branch list`.
+     */
+    internal fun parseBranchCommand(args: String, raw: String): Command {
+        val parts = args.split(" ", limit = 2)
+        val subCommand = parts[0].lowercase()
+        val subArgs = parts.getOrElse(1) { "" }.trim()
+
+        return when (subCommand) {
+            "create" -> {
+                if (subArgs.isEmpty()) Command.Unknown(raw)
+                else Command.CreateBranch(subArgs)
+            }
+
+            "switch" -> {
+                if (subArgs.isEmpty()) Command.Unknown(raw)
+                else Command.SwitchBranch(subArgs)
+            }
+
+            "list" -> Command.ListBranches
+            else -> Command.Unknown(raw)
+        }
+    }
+
+    /**
+     * Парсит команды чекпоинтов: `:checkpoint`, `:checkpoint list`.
+     */
+    internal fun parseCheckpointCommand(args: String, raw: String): Command {
+        return when (args.lowercase()) {
+            "", "create" -> Command.CreateCheckpoint
+            "list" -> Command.ListCheckpoints
+            else -> Command.Unknown(raw)
+        }
+    }
+
+    /**
+     * Парсит команды фактов: `:facts`, `:facts clear`, `:facts add <key>=<value>`, `:facts remove <key>`.
+     */
+    internal fun parseFactsCommand(args: String, raw: String): Command {
+        val parts = args.split(" ", limit = 2)
+        val subCommand = parts[0].lowercase()
+        val subArgs = parts.getOrElse(1) { "" }.trim()
+
+        return when (subCommand) {
+            "" -> Command.ListFacts
+            "clear" -> Command.ClearFacts
+            "add" -> {
+                val eqIndex = subArgs.indexOf('=')
+                if (eqIndex > 0 && eqIndex < subArgs.length - 1) {
+                    val key = subArgs.substring(0, eqIndex).trim()
+                    val value = subArgs.substring(eqIndex + 1).trim()
+                    Command.AddFact(key, value)
+                } else {
+                    Command.Unknown(raw)
+                }
+            }
+
+            "remove" -> {
+                if (subArgs.isEmpty()) Command.Unknown(raw)
+                else Command.RemoveFact(subArgs)
+            }
             else -> Command.Unknown(raw)
         }
     }

@@ -10,6 +10,7 @@ import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
 import io.averkhogliad.ai.challenge.week1.domain.context.SlidingWindowCompressor
 import io.averkhogliad.ai.challenge.week1.domain.service.*
+import io.averkhogliad.ai.challenge.week1.domain.strategy.ContextStrategyManager
 import io.averkhogliad.ai.challenge.week1.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmClientResourceManager
@@ -120,7 +121,13 @@ object ApplicationBootstrap {
             llmPort = llmPort
         )
 
-        // 5b. Load ModelInfo for default model (used by Task3Executor for cost calculation)
+        // 5b. Task 5: Context Management Strategies
+        val contextStrategyManager = ContextStrategyManager(
+            llmPort = llmPort,
+            slidingWindowCompressor = slidingWindowCompressor
+        )
+
+        // 5c. Load ModelInfo for default model (used by Task3Executor for cost calculation)
         val models = config.loadModels()
         val defaultModelId = domainLlmConfig.defaultModelId.value
 
@@ -169,6 +176,11 @@ object ApplicationBootstrap {
                 dialogRepository = dialogRepository,
                 compressor = slidingWindowCompressor,
                 configProvider = compressionConfigProvider
+            ),
+            TaskId(5) to Task5Executor(
+                llmPort = llmPort,
+                dialogRepository = dialogRepository,
+                slidingWindowCompressor = slidingWindowCompressor
             )
         )
 
@@ -183,7 +195,8 @@ object ApplicationBootstrap {
             renderer = renderer,
             llmPort = llmPort,
             resourceManager = resourceManager,
-            compressionConfigProvider = compressionConfigProvider
+            compressionConfigProvider = compressionConfigProvider,
+            contextStrategyManager = contextStrategyManager
         )
     }
 

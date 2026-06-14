@@ -80,6 +80,46 @@ sealed interface Command {
     data object ShowCompressionStatus : Command
 
     // ═══════════════════════════════════════════════════════════════
+    // Команды управления стратегиями контекста (для Task 5)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Показать меню выбора стратегии */
+    data object ShowStrategyMenu : Command
+
+    /** Переключить стратегию по индексу (1-based) */
+    data class SwitchStrategy(val index: Int) : Command
+
+    /** Показать текущую стратегию */
+    data object ShowCurrentStrategy : Command
+
+    /** Создать новую ветку (для Branching стратегии) */
+    data class CreateBranch(val name: String) : Command
+
+    /** Переключиться на ветку (для Branching стратегии) */
+    data class SwitchBranch(val name: String) : Command
+
+    /** Показать список веток (для Branching стратегии) */
+    data object ListBranches : Command
+
+    /** Создать чекпоинт (для Branching стратегии) */
+    data object CreateCheckpoint : Command
+
+    /** Показать список чекпоинтов (для Branching стратегии) */
+    data object ListCheckpoints : Command
+
+    /** Показать список фактов (для Sticky Facts стратегии) */
+    data object ListFacts : Command
+
+    /** Очистить все факты (для Sticky Facts стратегии) */
+    data object ClearFacts : Command
+
+    /** Добавить факт вручную (для Sticky Facts стратегии) */
+    data class AddFact(val key: String, val value: String) : Command
+
+    /** Удалить факт (для Sticky Facts стратегии) */
+    data class RemoveFact(val key: String) : Command
+
+    // ═══════════════════════════════════════════════════════════════
     // Пользовательский ввод
     // ═══════════════════════════════════════════════════════════════
 

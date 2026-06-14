@@ -10,6 +10,7 @@ import io.averkhogliad.ai.challenge.week1.domain.TaskResult
 import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week1.domain.service.ResourceManager
+import io.averkhogliad.ai.challenge.week1.domain.strategy.ContextStrategyManager
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -46,10 +47,11 @@ class CliApplication(
     private val renderer: CliRenderer = ConsoleCliRenderer(),
     private val llmPort: LlmPort? = null,
     private val resourceManager: ResourceManager? = null,
-    private val compressionConfigProvider: ContextCompressionConfigProvider? = null
+    private val compressionConfigProvider: ContextCompressionConfigProvider? = null,
+    private val contextStrategyManager: ContextStrategyManager? = null
 ) : AutoCloseable {
 
-    private val handler = CommandHandler(executors, compressionConfigProvider)
+    private val handler = CommandHandler(executors, compressionConfigProvider, contextStrategyManager)
 
     fun run(args: Array<String>) {
         runBlocking {
@@ -249,6 +251,25 @@ class CliApplication(
                 }
                 state
             }
+
+            // ═══════════════════════════════════════════════════════
+            // Команды управления стратегиями контекста (для Task 5)
+            // ═══════════════════════════════════════════════════════
+            is Command.ShowStrategyMenu,
+            is Command.SwitchStrategy,
+            is Command.ShowCurrentStrategy,
+            is Command.CreateBranch,
+            is Command.SwitchBranch,
+            is Command.ListBranches,
+            is Command.CreateCheckpoint,
+            is Command.ListCheckpoints,
+            is Command.ListFacts,
+            is Command.ClearFacts,
+            is Command.AddFact,
+            is Command.RemoveFact -> {
+                // Обработка команд стратегий — делегирование в handler
+                handler.handle(command, state)
+            }
         }
     }
 
@@ -276,6 +297,11 @@ class CliApplication(
         // Команды сжатия контекста для Task 4
         if (compressionConfigProvider != null) {
             commands.addAll(listOf("compression", "comp"))
+        }
+
+        // Команды стратегий управления контекстом для Task 5
+        if (contextStrategyManager != null) {
+            commands.addAll(listOf("strategy", "branch", "checkpoint", "facts"))
         }
 
         return CommandContext(
