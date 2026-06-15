@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.application.executor
 
+import io.averkhogliad.ai.challenge.week1.application.DialogManager
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.TaskMetadata
@@ -16,18 +17,25 @@ import java.util.*
 /**
  * Executor для Task 5: сравнение стратегий управления контекстом.
  *
- * Тестирует три стратегии (Sliding Window, Sticky Facts, Branching) на едином
- * сценарии из 15 сообщений и готовит сравнительный отчёт.
+ * Поддерживает два режима работы:
+ * - **Режим сравнения**: тестирует три стратегии (Sliding Window, Sticky Facts, Branching)
+ *   на едином сценарии из 15 сообщений и готовит сравнительный отчёт.
+ * - **Диалоговый режим**: когда выбран активный диалог, обрабатывает каждое сообщение
+ *   через активную стратегию [ContextStrategyManager], с сохранением истории в SQLite.
  *
  * @property llmPort порт для взаимодействия с LLM
  * @property dialogRepository репозиторий для хранения диалогов
  * @property slidingWindowCompressor компрессор для SlidingWindow стратегии
+ * @property dialogManager менеджер для управления диалогами
+ * @property contextStrategyManager менеджер стратегий управления контекстом
  */
 class Task5Executor(
     private val llmPort: LlmPort,
     private val dialogRepository: DialogRepository,
-    private val slidingWindowCompressor: SlidingWindowCompressor
-) : TaskExecutor {
+    private val slidingWindowCompressor: SlidingWindowCompressor,
+    private val dialogManager: DialogManager,
+    private val contextStrategyManager: ContextStrategyManager
+) : TaskExecutor, DialogManagerAccessor {
 
     override val taskId: TaskId = TaskId(5)
 
@@ -35,9 +43,35 @@ class Task5Executor(
         id = taskId,
         title = "Task 5: Стратегии управления контекстом",
         description = "Сравнение трёх стратегий управления контекстом: " +
-                "Sliding Window, Sticky Facts и Branching.",
-        availableCommands = listOf(":strategy", ":facts", ":branch")
+                "Sliding Window, Sticky Facts и Branching. " +
+                "Поддерживает интерактивные диалоги с командами :new, :list, :delete, :switch.",
+        availableCommands = listOf(":strategy", ":facts", ":branch", ":new", ":list", ":delete", ":switch")
     )
+
+    // ═══════════════════════════════════════════════════════════════
+    // Состояние диалога (DialogManagerAccessor)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** ID текущего активного диалога (null — диалог не выбран) */
+    private var currentDialogId: DialogId? = null
+
+    // ═══════════════════════════════════════════════════════════════
+    // DialogManagerAccessor implementation
+    // ═══════════════════════════════════════════════════════════════
+
+    override fun getDialogManager(): DialogManager = dialogManager
+
+    override fun getCurrentDialogId(): DialogId? = currentDialogId
+
+    override fun setCurrentDialog(id: DialogId) {
+        currentDialogId = id
+    }
+
+    override suspend fun createNewDialog(title: String): DialogId {
+        val dialog = dialogManager.createNewDialog(title)
+        currentDialogId = dialog.id
+        return dialog.id
+    }
 
     // Тестовый сценарий: сбор технического задания на разработку API
     private val scenarioMessages = listOf(
@@ -59,18 +93,154 @@ class Task5Executor(
     )
 
     override suspend fun execute(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+        // Диалоговый режим: обрабатываем сообщение через активную стратегию
+        if (currentDialogId != null) {
+            return executeDialogMode(prompt, config)
+        }
+
+        // Режим сравнения: прогоняем сценарий через все стратегии
+        return executeComparisonMode(config)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Диалоговый режим
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Обрабатывает пользовательский запрос в диалоговом режиме через активную стратегию.
+     */
+    private suspend fun executeDialogMode(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
         return try {
-            // Создаём менеджер стратегий
-            val strategyManager = ContextStrategyManager(llmPort, slidingWindowCompressor)
+            // 1. Загружаем диалог
+            var dialog = dialogRepository.findById(currentDialogId!!)
+                ?: Dialog.create(currentDialogId!!, "Dialog ${currentDialogId!!.value.take(8)}")
+
+            // 2. Добавляем user message
+            dialog = dialog.addUserMessage(prompt.value)
+
+            // 3. Обрабатываем сообщение через активную стратегию
+            val strategy = contextStrategyManager.getCurrentStrategy()
+            val actionResult = strategy.processUserMessage(dialog, prompt.value, ContextManagementConfig())
+
+            // 4. Подготавливаем контекст для LLM
+            val preparedContext = strategy.prepareContext(
+                dialog,
+                "You are a helpful assistant.",
+                ContextManagementConfig()
+            )
+
+            // 5. Вызываем LLM
+            val llmResult = llmPort.chatWithMessages(preparedContext.messages, config)
+
+            // 6. Сохраняем результат
+            when (llmResult) {
+                is TaskResult.Success -> {
+                    llmResult.tokenUsage?.let { dialog = dialog.addTokenUsage(it) }
+                    dialog = dialog.addAssistantMessage(llmResult.content)
+                    dialogRepository.save(dialog)
+                }
+
+                is TaskResult.Partial -> {
+                    dialog = dialog.addAssistantMessage(llmResult.content)
+                    dialogRepository.save(dialog)
+                }
+
+                is TaskResult.Error -> {
+                    dialogRepository.save(dialog)
+                }
+            }
+
+            enrichWithStrategyInfo(llmResult, preparedContext, strategy, actionResult)
+        } catch (e: Exception) {
+            TaskResult.Error(
+                message = "Task 5 dialog mode failed: ${e.message}",
+                cause = e
+            )
+        }
+    }
+
+    /**
+     * Обогащает результат информацией о текущей стратегии и размере контекста.
+     */
+    private fun enrichWithStrategyInfo(
+        result: TaskResult,
+        preparedContext: PreparedContext,
+        strategy: ContextManagementStrategy,
+        actionResult: StrategyActionResult
+    ): TaskResult {
+        val contextBlock = buildStrategyInfoBlock(strategy, preparedContext, actionResult)
+
+        return when (result) {
+            is TaskResult.Success -> result.copy(content = result.content + contextBlock)
+            is TaskResult.Partial -> result.copy(content = result.content + contextBlock)
+            is TaskResult.Error -> result
+        }
+    }
+
+    /**
+     * Формирует информационный блок о стратегии и размере контекста.
+     */
+    private fun buildStrategyInfoBlock(
+        strategy: ContextManagementStrategy,
+        preparedContext: PreparedContext,
+        actionResult: StrategyActionResult
+    ): String {
+        val thinSep = "-".repeat(60)
+        val strategyType = contextStrategyManager.getCurrentStrategyType()
+        val messagesCount = preparedContext.messages.size
+        val estimatedTokens = preparedContext.estimatedTokens
+        val factsCount = actionResult.metadata["totalFacts"] as? Int ?: 0
+        val checkpointCount = (actionResult.metadata["totalCheckpoints"] as? Int) ?: 0
+
+        return buildString {
+            appendLine()
+            appendLine(thinSep)
+            appendLine("🎯 Стратегия: ${strategy.name} [${strategyType.code}]")
+            appendLine("   ${strategy.description}")
+            appendLine("   Размер контекста: $messagesCount сообщ. (~$estimatedTokens токенов)")
+            when (strategyType) {
+                StrategyType.SLIDING_WINDOW -> {
+                    appendLine("   Стратегия сохраняет последние N сообщений в скользящем окне.")
+                }
+
+                StrategyType.STICKY_FACTS -> {
+                    appendLine("   Извлечено фактов: $factsCount")
+                    appendLine("   Управление: :facts list, :facts add <key>=<value>, :facts remove <key>")
+                }
+
+                StrategyType.BRANCHING -> {
+                    appendLine("   Чекпоинтов: $checkpointCount")
+                    appendLine("   Управление: :branch list, :branch create <name>, :checkpoint")
+                }
+            }
+            appendLine("   Смена стратегии: :strategy <1..3>")
+            appendLine(thinSep)
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Режим сравнения (автономный сценарий)
+    // ═══════════════════════════════════════════════════════════════
+
+    private suspend fun executeComparisonMode(config: TaskExecutionConfig): TaskResult {
+        return try {
+            // Сохраняем текущую стратегию для восстановления после теста
+            val savedType = contextStrategyManager.getCurrentStrategyType()
+
+            // Создаём временный менеджер для тестирования всех стратегий
+            val testManager = ContextStrategyManager(llmPort, slidingWindowCompressor)
 
             // Тестируем каждую стратегию
             val results = mutableMapOf<StrategyType, StrategyTestResult>()
 
             for (strategyType in StrategyType.entries) {
-                strategyManager.switchStrategy(strategyType)
-                val result = testStrategy(strategyManager.getCurrentStrategy(), strategyType, config)
+                testManager.switchStrategy(strategyType)
+                val result = testStrategy(testManager.getCurrentStrategy(), strategyType, config)
                 results[strategyType] = result
             }
+
+            // Восстанавливаем стратегию активного диалога
+            contextStrategyManager.switchStrategy(savedType)
 
             // Формируем сравнительный отчёт
             val report = buildComparisonReport(results)
@@ -269,6 +439,7 @@ class Task5Executor(
             appendLine("  - Позволяет вернуться к предыдущим точкам")
             appendLine("  - Требует активного управления ветками")
             appendLine()
+            appendLine("💬 Совет: используйте :new <название> чтобы создать диалог и начать интерактивную беседу.")
             appendLine(separator)
         }
     }

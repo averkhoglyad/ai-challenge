@@ -175,12 +175,15 @@ object ApplicationBootstrap {
                 llmPort = llmPort,
                 dialogRepository = dialogRepository,
                 compressor = slidingWindowCompressor,
-                configProvider = compressionConfigProvider
+                configProvider = compressionConfigProvider,
+                dialogManager = dialogManager
             ),
             TaskId(5) to Task5Executor(
                 llmPort = llmPort,
                 dialogRepository = dialogRepository,
-                slidingWindowCompressor = slidingWindowCompressor
+                slidingWindowCompressor = slidingWindowCompressor,
+                dialogManager = dialogManager,
+                contextStrategyManager = contextStrategyManager
             )
         )
 

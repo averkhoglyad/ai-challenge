@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.application.executor
 
+import io.averkhogliad.ai.challenge.week1.application.DialogManager
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.TaskMetadata
@@ -38,13 +39,15 @@ import java.util.*
  * @property dialogRepository репозиторий для персистентного хранения диалогов
  * @property compressor стратегия сжатия контекста
  * @property configProvider провайдер конфигурации сжатия
+ * @property dialogManager менеджер для управления диалогами
  */
 class Task4Executor(
     private val llmPort: LlmPort,
     private val dialogRepository: DialogRepository,
     private val compressor: DialogContextCompressor,
-    private val configProvider: ContextCompressionConfigProvider
-) : TaskExecutor {
+    private val configProvider: ContextCompressionConfigProvider,
+    private val dialogManager: DialogManager
+) : TaskExecutor, DialogManagerAccessor {
 
     override val taskId: TaskId = TaskId(4)
 
@@ -52,9 +55,35 @@ class Task4Executor(
         id = taskId,
         title = "Task 4: Сравнительный анализ сжатия контекста",
         description = "Сравнение эффективности сжатия контекста диалога: " +
-                "один и тот же диалог с компрессией и без.",
-        availableCommands = listOf(":compression", ":comp")
+                "один и тот же диалог с компрессией и без. " +
+                "Поддерживает интерактивные диалоги с командами :new, :list, :delete, :switch.",
+        availableCommands = listOf(":compression", ":comp", ":new", ":list", ":delete", ":switch")
     )
+
+    // ═══════════════════════════════════════════════════════════════
+    // Состояние диалога (DialogManagerAccessor)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** ID текущего активного диалога (null — диалог не выбран) */
+    private var currentDialogId: DialogId? = null
+
+    // ═══════════════════════════════════════════════════════════════
+    // DialogManagerAccessor implementation
+    // ═══════════════════════════════════════════════════════════════
+
+    override fun getDialogManager(): DialogManager = dialogManager
+
+    override fun getCurrentDialogId(): DialogId? = currentDialogId
+
+    override fun setCurrentDialog(id: DialogId) {
+        currentDialogId = id
+    }
+
+    override suspend fun createNewDialog(title: String): DialogId {
+        val dialog = dialogManager.createNewDialog(title)
+        currentDialogId = dialog.id
+        return dialog.id
+    }
 
     /**
      * Предопределённый сценарий из 15-20 сообщений на тему разработки ПО.
@@ -92,6 +121,160 @@ class Task4Executor(
      * @return [TaskResult.Success] с результатами сравнения в content
      */
     override suspend fun execute(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+        // Диалоговый режим: продолжаем беседу через агента со сжатием контекста
+        if (currentDialogId != null) {
+            return executeDialogMode(prompt, config)
+        }
+
+        // Режим сравнения: запускаем сценарий без сжатия и со сжатием
+        return executeComparisonMode(config)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Диалоговый режим
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Обрабатывает пользовательский запрос в диалоговом режиме
+     * с прямым доступом к [DialogContext] для отображения факта компрессии.
+     *
+     * Алгоритм:
+     * 1. Загружает диалог, добавляет user message
+     * 2. Вызывает [compressor.compress] — получает [DialogContext]
+     * 3. Отправляет сжатый контекст в LLM
+     * 4. Сохраняет диалог с ответом и обновлённым summary
+     * 5. Обогащает результат блоком с реальными метриками компрессии
+     */
+    private suspend fun executeDialogMode(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+        return try {
+            // 1. Загружаем диалог и добавляем user message
+            var dialog = dialogRepository.findById(currentDialogId!!)
+                ?: Dialog.create(currentDialogId!!, "Dialog ${currentDialogId!!.value.take(8)}")
+            dialog = dialog.addUserMessage(prompt.value)
+
+            // 2. Сжатие контекста (если включено)
+            val compressionConfig = configProvider.get()
+            val messages = dialog.messages
+            val previousSummary = dialog.accumulatedSummary
+
+            val dialogContext = if (compressionConfig.enabled) {
+                compressor.compress(messages, compressionConfig, previousSummary)
+            } else {
+                io.averkhogliad.ai.challenge.week1.domain.context.DialogContext(
+                    summary = null,
+                    recentMessages = messages,
+                    compressedMessageCount = 0
+                )
+            }
+
+            // 3. Формируем сообщения для LLM (без пустого system prompt)
+            val llmMessages = buildList {
+                // Если есть summary — добавляем его как system-сообщение
+                dialogContext.summary?.let { summary ->
+                    add(ChatMessage.system("You are a helpful assistant.\n\n[Context summary of earlier conversation]\n$summary"))
+                }
+                // Добавляем recentMessages
+                addAll(dialogContext.recentMessages)
+            }
+
+            // 4. Отправляем в LLM
+            val result = llmPort.chatWithMessages(llmMessages, config)
+
+            // 5. Сохраняем диалог
+            when (result) {
+                is TaskResult.Success -> {
+                    result.tokenUsage?.let { dialog = dialog.addTokenUsage(it) }
+                    dialogContext.summary?.let { dialog = dialog.updateAccumulatedSummary(it) }
+                    dialog = dialog.addAssistantMessage(result.content)
+                    dialogRepository.save(dialog)
+                }
+
+                is TaskResult.Partial -> {
+                    dialogContext.summary?.let { dialog = dialog.updateAccumulatedSummary(it) }
+                    dialog = dialog.addAssistantMessage(result.content)
+                    dialogRepository.save(dialog)
+                }
+
+                is TaskResult.Error -> {
+                    dialogContext.summary?.let { dialog = dialog.updateAccumulatedSummary(it) }
+                    dialogRepository.save(dialog)
+                }
+            }
+
+            // 6. Обогащаем результат реальными метриками компрессии
+            enrichWithCompressionInfo(result, dialogContext, messages.size)
+        } catch (e: Exception) {
+            TaskResult.Error(
+                message = "Task 4 dialog mode failed: ${e.message}",
+                cause = e
+            )
+        }
+    }
+
+    /**
+     * Обогащает результат информацией о фактически выполненной компрессии.
+     *
+     * @param result результат LLM
+     * @param dialogContext контекст после сжатия (с [DialogContext.compressedMessageCount])
+     * @param totalMessages общее количество сообщений в диалоге (до сжатия)
+     */
+    private fun enrichWithCompressionInfo(
+        result: TaskResult,
+        dialogContext: io.averkhogliad.ai.challenge.week1.domain.context.DialogContext,
+        totalMessages: Int
+    ): TaskResult {
+        val contextBlock = buildContextInfoBlock(dialogContext, totalMessages)
+
+        return when (result) {
+            is TaskResult.Success -> result.copy(content = result.content + contextBlock)
+            is TaskResult.Partial -> result.copy(content = result.content + contextBlock)
+            is TaskResult.Error -> result
+        }
+    }
+
+    /**
+     * Формирует информационный блок с реальными метриками компрессии контекста.
+     *
+     * Показывает:
+     * - Включено ли сжатие
+     * - Сколько сообщений сжато / всего
+     * - Размер контекста, отправленного в LLM (несжатые + summary)
+     * - Оценку токенов
+     */
+    private fun buildContextInfoBlock(
+        dialogContext: io.averkhogliad.ai.challenge.week1.domain.context.DialogContext,
+        totalMessages: Int
+    ): String {
+        val thinSep = "-".repeat(60)
+        val compressionConfig = configProvider.get()
+        val status = if (compressionConfig.enabled) "✅ ВКЛЮЧЕНО" else "⛔ ВЫКЛЮЧЕНО"
+        val compressedCount = dialogContext.compressedMessageCount
+        val recentCount = dialogContext.recentMessages.size
+        val estimatedTokens = dialogContext.estimateTokenCount()
+
+        return buildString {
+            appendLine()
+            appendLine(thinSep)
+            appendLine("🗜️ Сжатие контекста: $status")
+            appendLine("   Сообщений в диалоге: $totalMessages")
+            if (compressedCount > 0) {
+                appendLine("   🔄 Сжато в summary: $compressedCount сообщ.")
+            }
+            appendLine("   Отправлено в LLM: $recentCount сообщ. (~$estimatedTokens токенов)")
+            appendLine("   Настройки: окно=${compressionConfig.windowSize}, блок=${compressionConfig.blockSize}")
+            appendLine("   Управление: :compression on/off, :compression window <N>, :compression block <K>")
+            appendLine(thinSep)
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Режим сравнения (автономный сценарий)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Выполняет сравнительный анализ сжатия контекста.
+     */
+    private suspend fun executeComparisonMode(config: TaskExecutionConfig): TaskResult {
         // Save original state to restore after execution
         val originalEnabled = configProvider.get().enabled
 
@@ -295,6 +478,8 @@ class Task4Executor(
             appendLine()
             appendLine("💡 Вывод: Сжатие контекста позволяет значительно сократить использование токенов")
             appendLine("   при длинных диалогах, сохраняя при этом семантическую связность через summary.")
+            appendLine()
+            appendLine("💬 Совет: используйте :new <название> чтобы создать диалог и начать интерактивную беседу.")
             appendLine(separator)
         }
     }
