@@ -68,7 +68,11 @@ data class ContextManagementConfig(
                     checkpointInterval = properties["context.strategy.branching.checkpoint-interval"]?.toIntOrNull()
                         ?: 5,
                     autoDetectTopicChange = properties["context.strategy.branching.auto-detect-topic-change"]?.toBooleanStrictOrNull()
-                        ?: true
+                        ?: true,
+                    topicChangeSensitivity = properties["context.strategy.branching.topic-change-sensitivity"]?.toDoubleOrNull()
+                        ?: 0.3,
+                    topicContextSize = properties["context.strategy.branching.topic-context-size"]?.toIntOrNull()
+                        ?: 3
                 )
             )
         }
@@ -122,13 +126,22 @@ data class StickyFactsConfig(
  * Конфигурация стратегии Branching.
  *
  * @property checkpointInterval интервал сообщений для автоматических чекпоинтов
- * @property autoDetectTopicChange автоматически детектировать смену темы
+ * @property autoDetectTopicChange автоматически детектировать смену темы и создавать авто-ветку
+ * @property topicChangeSensitivity чувствительность детекции смены темы (0.0–1.0).
+ *           Чем ниже — тем легче срабатывает детекция.
+ *           По умолчанию 0.3: если пересечение ключевых слов < 30% от максимального множества,
+ *           считается сменой темы.
+ * @property topicContextSize сколько последних сообщений анализировать при сравнении тем (по умолчанию 3)
  */
 data class BranchingConfig(
     val checkpointInterval: Int = 5,
-    val autoDetectTopicChange: Boolean = true
+    val autoDetectTopicChange: Boolean = true,
+    val topicChangeSensitivity: Double = 0.3,
+    val topicContextSize: Int = 3
 ) {
     init {
         require(checkpointInterval > 0) { "checkpointInterval must be positive, got $checkpointInterval" }
+        require(topicChangeSensitivity in 0.0..1.0) { "topicChangeSensitivity must be in 0.0..1.0, got $topicChangeSensitivity" }
+        require(topicContextSize > 0) { "topicContextSize must be positive, got $topicContextSize" }
     }
 }

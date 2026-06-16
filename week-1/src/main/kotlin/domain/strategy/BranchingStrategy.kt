@@ -2,6 +2,7 @@ package io.averkhogliad.ai.challenge.week1.domain.strategy
 
 import io.averkhogliad.ai.challenge.week1.domain.model.*
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
+import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
 import java.time.Instant
 import java.util.*
 
@@ -58,18 +59,42 @@ class BranchingStrategy(
         val branchingConfig = config.branching
         val messageIndex = dialog.messages.size
 
-        // Проверяем, нужно ли создать автоматический чекпоинт
-        val shouldCreateCheckpoint = messageIndex > 0 &&
-                messageIndex % branchingConfig.checkpointInterval == 0
-
         val actions = mutableListOf<StrategyAction>()
 
-        if (shouldCreateCheckpoint) {
+        // 1. Авто-детект смены темы (если включен и есть достаточно истории)
+        if (branchingConfig.autoDetectTopicChange && currentBranch.messages.size >= 2) {
+            val topicChanged = detectTopicChange(
+                userMessage = userMessage,
+                recentMessages = currentBranch.messages,
+                sensitivity = branchingConfig.topicChangeSensitivity,
+                contextSize = branchingConfig.topicContextSize
+            )
+            if (topicChanged) {
+                // Создаём чекпоинт и авто-ветку
+                val checkpoint = createCheckpoint(dialog, messageIndex)
+                actions.add(StrategyAction.CheckpointCreated(checkpoint.id.value))
+
+                val autoBranchName = "auto-branch-${branches.size}"
+                val newBranch = createBranch(autoBranchName, checkpoint.id)
+                // Переключаемся на новую ветку
+                switchBranch(newBranch.id)
+                actions.add(StrategyAction.BranchCreated(autoBranchName))
+                actions.add(StrategyAction.BranchSwitched(autoBranchName))
+            }
+        }
+
+        // 2. Периодический чекпоинт (каждые N сообщений)
+        val shouldCreatePeriodicCheckpoint = messageIndex > 0 &&
+                messageIndex % branchingConfig.checkpointInterval == 0
+        // Не создаём периодический чекпоинт, если только что создали от смены темы
+        val alreadyCreatedCheckpoint = actions.any { it is StrategyAction.CheckpointCreated }
+
+        if (shouldCreatePeriodicCheckpoint && !alreadyCreatedCheckpoint) {
             val checkpoint = createCheckpoint(dialog, messageIndex)
             actions.add(StrategyAction.CheckpointCreated(checkpoint.id.value))
         }
 
-        // Добавляем сообщение в текущую ветку
+        // 3. Добавляем сообщение в текущую ветку
         val userMsg = ChatMessage.user(userMessage)
         currentBranch = currentBranch.addMessage(userMsg)
         branches[currentBranch.id] = currentBranch
@@ -191,5 +216,97 @@ class BranchingStrategy(
 
         branches.remove(branchId)
         return true
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Topic change detection (авто-детект смены темы)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Определяет, изменилась ли тема диалога.
+     *
+     * Алгоритм: извлекает значимые ключевые слова из N последних сообщений
+     * и из нового сообщения, затем сравнивает пересечение множеств.
+     * Если доля пересечения ниже [sensitivity] — тема считается изменившейся.
+     *
+     * @param userMessage новое сообщение пользователя
+     * @param recentMessages последние сообщения в текущей ветке
+     * @param sensitivity порог чувствительности (0.0–1.0). Чем ниже — тем легче срабатывает.
+     * @param contextSize сколько последних сообщений анализировать
+     * @return true если тема изменилась
+     */
+    private fun detectTopicChange(
+        userMessage: String,
+        recentMessages: List<ChatMessage>,
+        sensitivity: Double,
+        contextSize: Int
+    ): Boolean {
+        // Берём последние contextSize сообщений пользователя (не system/assistant)
+        val recentUserMessages = recentMessages
+            .filter { it.role == ChatRole.USER }
+            .takeLast(contextSize)
+            .map { it.content }
+
+        if (recentUserMessages.isEmpty()) return false
+
+        // Извлекаем ключевые слова из истории
+        val recentKeywords = recentUserMessages
+            .flatMap { extractKeywords(it) }
+            .toSet()
+
+        // Извлекаем ключевые слова из нового сообщения
+        val newKeywords = extractKeywords(userMessage).toSet()
+
+        if (recentKeywords.isEmpty() || newKeywords.isEmpty()) return false
+
+        // Вычисляем коэффициент Жаккара (Jaccard similarity)
+        val intersection = recentKeywords.intersect(newKeywords).size
+        val union = recentKeywords.union(newKeywords).size
+        val jaccard = intersection.toDouble() / union.toDouble()
+
+        // Смена темы = низкое пересечение
+        return jaccard < sensitivity
+    }
+
+    /**
+     * Извлекает значимые ключевые слова из сообщения.
+     *
+     * - Приводит к нижнему регистру
+     * - Удаляет стоп-слова (предлоги, союзы, артикли)
+     * - Отбрасывает короткие слова (< 3 символов)
+     */
+    private fun extractKeywords(text: String): List<String> {
+        val stopWords = setOf(
+            // Русские стоп-слова
+            "и", "в", "на", "с", "по", "к", "из", "от", "для", "не", "то", "что",
+            "как", "это", "так", "а", "но", "о", "же", "за", "бы", "у", "до",
+            "да", "нет", "или", "если", "мы", "вы", "ты", "он", "она", "они",
+            "мне", "меня", "его", "её", "им", "их", "вам", "вас", "тебе", "тебя",
+            "всё", "все", "ещё", "уже", "там", "тут", "где", "кто", "когда",
+            "можно", "надо", "нужно", "очень", "более", "также", "только",
+            "который", "которая", "которое", "которые", "быть", "будет",
+            "есть", "был", "была", "было", "были", "чем", "того", "этом", "этого",
+            "под", "над", "при", "без", "через", "перед", "между", "около",
+            // Английские стоп-слова
+            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+            "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "can", "shall", "to", "of", "in", "for",
+            "on", "with", "at", "by", "from", "as", "into", "through", "during",
+            "before", "after", "above", "below", "between", "out", "off", "over",
+            "under", "again", "further", "then", "once", "here", "there", "when",
+            "where", "why", "how", "all", "both", "each", "few", "more", "most",
+            "other", "some", "such", "no", "nor", "not", "only", "own", "same",
+            "so", "than", "too", "very", "just", "because", "but", "and", "or",
+            "if", "while", "it", "its", "my", "your", "his", "her", "our", "their",
+            "me", "him", "us", "them", "this", "that", "these", "those", "what",
+            "which", "who", "whom", "about", "up", "down", "any", "let", "need",
+            "now", "also", "much", "well", "still", "new"
+        )
+
+        return text.lowercase()
+            .replace(Regex("[^a-zа-яё0-9\\s]"), " ")
+            .split(Regex("\\s+"))
+            .map { it.trim() }
+            .filter { it.length >= 2 && it !in stopWords }
     }
 }

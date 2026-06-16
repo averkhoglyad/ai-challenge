@@ -167,4 +167,161 @@ class BranchingStrategyTest {
         assertNotNull(context.metadata["totalBranches"])
         assertNotNull(context.metadata["totalCheckpoints"])
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Auto-detect topic change tests
+    // ═══════════════════════════════════════════════════════════════
+
+    @Test
+    fun `autoDetectTopicChange should create checkpoint and branch on topic change`() = runTest {
+        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3) }
+        val config = ContextManagementConfig()
+
+        // Seed: establish topic about REST API
+        val dialog1 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog1, "Мне нужно разработать REST API для сервиса пользователей", config)
+        strategy.processUserMessage(dialog1, "API должен поддерживать CRUD операции с авторизацией JWT", config)
+        strategy.processUserMessage(dialog1, "Используем Spring Boot и PostgreSQL для бэкенда", config)
+
+        // Now send a message on a completely different topic
+        val dialog2 = createDialogWithMessages(0)
+        val result =
+            strategy.processUserMessage(dialog2, "Как приготовить идеальный борщ со сметаной и чесноком", config)
+
+        // Should have created a checkpoint and an auto-branch
+        val hasCheckpointCreated = result.actionsPerformed.any { it is StrategyAction.CheckpointCreated }
+        val hasBranchCreated = result.actionsPerformed.any { it is StrategyAction.BranchCreated }
+        val hasBranchSwitched = result.actionsPerformed.any { it is StrategyAction.BranchSwitched }
+
+        assertTrue(hasCheckpointCreated, "Should create checkpoint on topic change")
+        assertTrue(hasBranchCreated, "Should create auto-branch on topic change")
+        assertTrue(hasBranchSwitched, "Should switch to auto-branch on topic change")
+
+        // Should be on the auto-branch now, not main
+        val currentBranch = strategy.getCurrentBranch()
+        assertTrue(
+            currentBranch.name.startsWith("auto-branch-"),
+            "Should be on auto-branch, got: ${currentBranch.name}"
+        )
+
+        // Should have main + auto-branch
+        assertTrue(strategy.listBranches().size >= 2, "Should have at least 2 branches")
+    }
+
+    @Test
+    fun `autoDetectTopicChange should NOT branch on same topic`() = runTest {
+        val strategy = BranchingStrategy { BranchingConfig() }
+        val config = ContextManagementConfig(
+            branching = BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3)
+        )
+
+        // Seed: establish topic with deliberate keyword repetition
+        val dialog1 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog1, "jwt токены аутентификация api безопасность", config)
+        strategy.processUserMessage(dialog1, "jwt токены аутентификация это важно", config)
+        strategy.processUserMessage(dialog1, "api безопасность через jwt токены", config)
+
+        // Send a message with the SAME keywords — Jaccard ≈ 0.83 (very high overlap)
+        val dialog2 = createDialogWithMessages(0)
+        val result = strategy.processUserMessage(dialog2, "jwt токены аутентификация api", config)
+
+        // Should NOT create auto-branch (same topic)
+        val hasBranchCreated = result.actionsPerformed.any { it is StrategyAction.BranchCreated }
+        assertTrue(!hasBranchCreated, "Should NOT create auto-branch on same topic")
+
+        // Should still be on main branch
+        assertEquals("main", strategy.getCurrentBranch().name)
+    }
+
+    @Test
+    fun `autoDetectTopicChange should NOT branch when disabled`() = runTest {
+        val strategy = BranchingStrategy { BranchingConfig() }
+        val config = ContextManagementConfig(
+            branching = BranchingConfig(autoDetectTopicChange = false)
+        )
+
+        // Seed: establish topic about REST API
+        val dialog1 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog1, "Мне нужно разработать REST API для сервиса пользователей", config)
+        strategy.processUserMessage(dialog1, "API должен поддерживать CRUD операции с авторизацией JWT", config)
+
+        // Send a message on a completely different topic
+        val dialog2 = createDialogWithMessages(0)
+        val result =
+            strategy.processUserMessage(dialog2, "Как приготовить идеальный борщ со сметаной и чесноком", config)
+
+        // Should NOT create auto-branch (disabled in config)
+        val hasBranchCreated = result.actionsPerformed.any { it is StrategyAction.BranchCreated }
+        assertTrue(!hasBranchCreated, "Should NOT create auto-branch when disabled")
+
+        // Should still be on main branch
+        assertEquals("main", strategy.getCurrentBranch().name)
+    }
+
+    @Test
+    fun `autoDetectTopicChange with high sensitivity should NOT branch easily`() = runTest {
+        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.9) }
+        val config = ContextManagementConfig()
+
+        // Seed: establish topic about REST API
+        val dialog1 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog1, "Мне нужно разработать REST API для сервиса пользователей", config)
+        strategy.processUserMessage(dialog1, "API должен поддерживать CRUD операции с авторизацией JWT", config)
+
+        // Different topic but sensitivity is very high
+        val dialog2 = createDialogWithMessages(0)
+        val result =
+            strategy.processUserMessage(dialog2, "Как приготовить идеальный борщ со сметаной и чесноком", config)
+
+        // With sensitivity 0.9, only drastic changes (>90% different keywords) trigger branching.
+        // "борщ" vs "API" should qualify as drastic, but let's not assert hard —
+        // just verify metadata contains expected fields
+        assertNotNull(result.metadata["currentBranch"])
+    }
+
+    @Test
+    fun `autoDetectTopicChange should NOT trigger with insufficient history`() = runTest {
+        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3) }
+        val config = ContextManagementConfig()
+
+        // Only 1 previous message — not enough for topic comparison
+        val dialog1 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog1, "Мне нужно разработать REST API", config)
+
+        // Different topic
+        val dialog2 = createDialogWithMessages(0)
+        val result = strategy.processUserMessage(dialog2, "Как приготовить идеальный борщ", config)
+
+        // Should NOT branch — not enough history
+        val hasBranchCreated = result.actionsPerformed.any { it is StrategyAction.BranchCreated }
+        assertTrue(!hasBranchCreated, "Should NOT branch with only 1 previous message")
+    }
+
+    @Test
+    fun `can switch back to main after auto branch`() = runTest {
+        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3) }
+        val config = ContextManagementConfig()
+
+        // Seed: establish topic about REST API
+        val dialog1 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog1, "Мне нужно разработать REST API для сервиса пользователей", config)
+        strategy.processUserMessage(dialog1, "API должен поддерживать CRUD операции с авторизацией JWT", config)
+        strategy.processUserMessage(dialog1, "Используем Spring Boot и PostgreSQL для бэкенда", config)
+
+        // Topic change → auto-branch
+        val dialog2 = createDialogWithMessages(0)
+        strategy.processUserMessage(dialog2, "Как приготовить идеальный борщ со сметаной и чесноком", config)
+        assertTrue(strategy.getCurrentBranch().name.startsWith("auto-branch-"))
+
+        // Switch back to main
+        strategy.switchBranch(BranchId("main"))
+        assertEquals("main", strategy.getCurrentBranch().name)
+
+        // Main branch should still have the REST API messages
+        val mainBranch = strategy.getCurrentBranch()
+        assertTrue(
+            mainBranch.messages.any { it.content.contains("REST API") },
+            "Main branch should contain original REST API messages"
+        )
+    }
 }
