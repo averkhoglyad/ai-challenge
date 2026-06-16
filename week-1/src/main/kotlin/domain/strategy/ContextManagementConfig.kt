@@ -18,6 +18,19 @@ enum class StrategyType(val code: String) {
 /**
  * Конфигурация управления контекстом для всех стратегий.
  *
+ * ## Приоритет ключей конфигурации
+ *
+ * Для параметров SlidingWindow используется каскадный приоритет:
+ * 1. `context.compression.window-size` / `context.compression.block-size` —
+ *    общие ключи сжатия контекста (Task 4 + Task 5). **Имеют высший приоритет.**
+ * 2. `context.strategy.sliding-window.window-size` — специфичный ключ стратегии
+ *    (legacy, оставлен для обратной совместимости). Используется как fallback.
+ *
+ * Это означает, что если заданы оба ключа (`context.compression.window-size`
+ * и `context.strategy.sliding-window.window-size`), победит общий ключ
+ * `context.compression.window-size`. Такое решение принято для унификации
+ * конфигурации между Task 4 и Task 5.
+ *
  * @property currentStrategy текущая активная стратегия
  * @property slidingWindow конфигурация Sliding Window
  * @property stickyFacts конфигурация Sticky Facts
@@ -40,7 +53,11 @@ data class ContextManagementConfig(
             return ContextManagementConfig(
                 currentStrategy = strategy,
                 slidingWindow = SlidingWindowConfig(
-                    windowSize = properties["context.strategy.sliding-window.window-size"]?.toIntOrNull() ?: 10
+                    windowSize = properties["context.compression.window-size"]?.toIntOrNull()
+                        ?: properties["context.strategy.sliding-window.window-size"]?.toIntOrNull()
+                        ?: 10,
+                    blockSize = properties["context.compression.block-size"]?.toIntOrNull() ?: 5,
+                    summaryModelId = properties["context.compression.summary-model-id"]
                 ),
                 stickyFacts = StickyFactsConfig(
                     windowSize = properties["context.strategy.sticky-facts.window-size"]?.toIntOrNull() ?: 5,
@@ -61,13 +78,25 @@ data class ContextManagementConfig(
 /**
  * Конфигурация стратегии Sliding Window.
  *
+ * Синхронизирована с [io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfig]
+ * для единообразного поведения сжатия контекста в Task 4 и Task 5.
+ *
+ * Feature-флаг `enabled` намеренно отсутствует: стратегия скользящего окна ВСЕГДА включает компрессию.
+ * Для Task 4 `enabled` управляется через [ContextCompressionConfigProvider] на уровне executor'а.
+ *
  * @property windowSize количество последних сообщений, сохраняемых в контексте
+ * @property blockSize количество сообщений для суммаризации за один вызов LLM
+ * @property summaryModelId опциональный ID модели для суммаризации; если null — используется модель по умолчанию
  */
 data class SlidingWindowConfig(
-    val windowSize: Int = 10
+    val windowSize: Int = 10,
+    val blockSize: Int = 5,
+    val summaryModelId: String? = null
 ) {
     init {
         require(windowSize > 0) { "windowSize must be positive, got $windowSize" }
+        require(blockSize > 0) { "blockSize must be positive, got $blockSize" }
+        require(blockSize <= windowSize) { "blockSize ($blockSize) must be <= windowSize ($windowSize)" }
     }
 }
 

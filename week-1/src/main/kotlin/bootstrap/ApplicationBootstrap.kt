@@ -127,10 +127,11 @@ object ApplicationBootstrap {
             llmPort = llmPort
         )
 
-        // 5b. Task 5: Context Management Strategies
+        // 5b. Task 5: Context Management Strategies (использует общий compressionConfigProvider)
         val contextStrategyManager = ContextStrategyManager(
             llmPort = llmPort,
-            slidingWindowCompressor = slidingWindowCompressor
+            slidingWindowCompressor = slidingWindowCompressor,
+            compressionConfigProvider = compressionConfigProvider
         )
 
         // 5c. Load ModelInfo for default model (used by Task3Executor for cost calculation)

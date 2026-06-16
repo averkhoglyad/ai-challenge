@@ -149,8 +149,18 @@ class Task5Executor(
                 ContextManagementConfig()
             )
 
+            // Помечаем сжатые сообщения тегом Compressed (для SlidingWindow стратегии)
+            val compressedMsgCount = (preparedContext.metadata["compressedMessageCount"] as? Int) ?: 0
+            if (compressedMsgCount > 0) {
+                val compressedIndices = (0 until compressedMsgCount).toList().toIntArray()
+                dialog = dialog.tagMessages(MessageTag.Compressed, *compressedIndices)
+            }
+
             // 5. Вызываем LLM
             val llmResult = llmPort.chatWithMessages(preparedContext.messages, config)
+
+            // Сохраняем новый accumulatedSummary из preparedContext (инкрементальная компрессия)
+            dialog = applyAccumulatedSummaryIfPresent(dialog, preparedContext)
 
             // 6. Сохраняем результат
             when (llmResult) {
@@ -312,6 +322,13 @@ class Task5Executor(
             val preparedContext =
                 strategy.prepareContext(dialog, "You are a helpful assistant.", ContextManagementConfig())
 
+            // Помечаем сжатые сообщения тегом Compressed (для SlidingWindow стратегии)
+            val compressedMsgCount = (preparedContext.metadata["compressedMessageCount"] as? Int) ?: 0
+            if (compressedMsgCount > 0) {
+                val compressedIndices = (0 until compressedMsgCount).toList().toIntArray()
+                dialog = dialog.tagMessages(MessageTag.Compressed, *compressedIndices)
+            }
+
             // Вызываем LLM
             val startTime = System.currentTimeMillis()
             val llmResult = llmPort.chatWithMessages(preparedContext.messages, config)
@@ -329,6 +346,9 @@ class Task5Executor(
 
             totalInputTokens += inputTokens
             totalOutputTokens += outputTokens
+
+            // Сохраняем новый accumulatedSummary из preparedContext (инкрементальная компрессия)
+            dialog = applyAccumulatedSummaryIfPresent(dialog, preparedContext)
 
             // Добавляем ответ ассистента в диалог
             val assistantResponse = when (llmResult) {
@@ -473,6 +493,20 @@ class Task5Executor(
             completionTokens = totalOutput,
             totalTokens = totalInput + totalOutput
         )
+    }
+
+    /**
+     * Применяет накопленный [Dialog.accumulatedSummary] из [PreparedContext.metadata],
+     * если ключ `"newAccumulatedSummary"` содержит непустую строку.
+     *
+     * Контракт: значение должно быть [String]; при несоответствии типа выбрасывается
+     * [IllegalStateException] с читаемым сообщением.
+     */
+    private fun applyAccumulatedSummaryIfPresent(dialog: Dialog, preparedContext: PreparedContext): Dialog {
+        val raw = preparedContext.metadata["newAccumulatedSummary"] ?: return dialog
+        val newSummary = raw as? String
+            ?: error("Expected String for metadata key 'newAccumulatedSummary', got ${raw::class.simpleName}")
+        return if (newSummary.isNotBlank()) dialog.updateAccumulatedSummary(newSummary) else dialog
     }
 
     private data class StrategyTestResult(

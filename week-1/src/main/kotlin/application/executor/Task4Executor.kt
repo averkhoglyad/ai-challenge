@@ -10,6 +10,7 @@ import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week1.domain.context.DialogContextCompressor
 import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
 import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
+import io.averkhogliad.ai.challenge.week1.domain.model.MessageTag
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
 import io.averkhogliad.ai.challenge.week1.domain.service.DialogRepository
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
@@ -179,6 +180,13 @@ class Task4Executor(
 
             // 4. Отправляем в LLM
             val result = llmPort.chatWithMessages(llmMessages, config)
+
+            // Помечаем сжатые сообщения тегом Compressed
+            val compressedCount = dialogContext.compressedMessageCount
+            if (compressedCount > 0) {
+                val compressedIndices = (0 until compressedCount).toList().toIntArray()
+                dialog = dialog.tagMessages(MessageTag.Compressed, *compressedIndices)
+            }
 
             // 5. Сохраняем диалог
             when (result) {
@@ -363,6 +371,13 @@ class Task4Executor(
                 is TaskResult.Success -> result.tokenUsage
                 is TaskResult.Partial -> result.tokenUsage
                 is TaskResult.Error -> null
+            }
+
+            // Помечаем сжатые сообщения тегом Compressed
+            val compressedCount = dialogContext.compressedMessageCount
+            if (compressedCount > 0) {
+                val compressedIndices = (0 until compressedCount).toList().toIntArray()
+                currentDialog = currentDialog.tagMessages(MessageTag.Compressed, *compressedIndices)
             }
 
             // Обновляем диалог

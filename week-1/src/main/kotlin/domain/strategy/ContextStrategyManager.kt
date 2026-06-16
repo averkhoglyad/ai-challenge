@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.domain.strategy
 
+import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
 import io.averkhogliad.ai.challenge.week1.domain.context.SlidingWindowCompressor
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 
@@ -11,10 +12,12 @@ import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
  *
  * @property llmPort порт для взаимодействия с LLM
  * @property slidingWindowCompressor компрессор для SlidingWindow стратегии
+ * @property compressionConfigProvider провайдер конфигурации сжатия (общий для Task 4 и Task 5)
  */
 class ContextStrategyManager(
     private val llmPort: LlmPort,
-    private val slidingWindowCompressor: SlidingWindowCompressor
+    private val slidingWindowCompressor: SlidingWindowCompressor,
+    private val compressionConfigProvider: ContextCompressionConfigProvider? = null
 ) {
     // Доступные стратегии
     private val strategies: Map<StrategyType, ContextManagementStrategy>
@@ -26,10 +29,12 @@ class ContextStrategyManager(
         val factsExtractor = FactsExtractor(llmPort)
 
         strategies = mapOf(
-            StrategyType.SLIDING_WINDOW to SlidingWindowStrategy(slidingWindowCompressor),
+            StrategyType.SLIDING_WINDOW to SlidingWindowStrategy(
+                compressor = slidingWindowCompressor,
+                configProvider = compressionConfigProvider
+            ),
             StrategyType.STICKY_FACTS to StickyFactsStrategy(factsExtractor),
             StrategyType.BRANCHING to BranchingStrategy {
-                // Возвращаем конфигурацию по умолчанию
                 BranchingConfig()
             }
         )
