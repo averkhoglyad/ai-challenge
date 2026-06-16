@@ -61,6 +61,7 @@ class CommandHandler(
             is Command.ListDialogs -> state // Обработка в CliApplication
             is Command.DeleteDialog -> state // Обработка в CliApplication
             is Command.SwitchDialog -> handleSwitchDialog(command, state)
+            is Command.ShowHistory -> state // Обработка в CliApplication
 
             // Команды управления сжатием контекста (для Task 4)
             is Command.SetCompressionEnabled -> {

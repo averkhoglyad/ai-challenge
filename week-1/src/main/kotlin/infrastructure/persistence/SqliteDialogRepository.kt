@@ -1,8 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.infrastructure.persistence
 
-import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
-import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
-import io.averkhogliad.ai.challenge.week1.domain.model.DialogSummary
+import io.averkhogliad.ai.challenge.week1.domain.model.*
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
 import io.averkhogliad.ai.challenge.week1.domain.service.DialogRepository
@@ -117,6 +115,13 @@ class SqliteDialogRepository(
                 )
             """.trimIndent()
             )
+
+            // Добавляем колонку message_tags, если ещё не добавлена (миграция)
+            try {
+                stmt.execute("ALTER TABLE dialogs ADD COLUMN message_tags TEXT DEFAULT '{}'")
+            } catch (_: Exception) {
+                // Колонка уже существует — игнорируем
+            }
         }
     }
 
@@ -124,8 +129,8 @@ class SqliteDialogRepository(
         connection.transaction {
             // Сохраняем или обновляем диалог
             val dialogSql = """
-                INSERT OR REPLACE INTO dialogs (id, title, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO dialogs (id, title, created_at, updated_at, message_tags)
+                VALUES (?, ?, ?, ?, ?)
             """.trimIndent()
 
             prepareStatement(dialogSql).use { stmt ->
@@ -133,6 +138,7 @@ class SqliteDialogRepository(
                 stmt.setString(2, dialog.title)
                 stmt.setString(3, dialog.createdAt.toString())
                 stmt.setString(4, dialog.updatedAt.toString())
+                stmt.setString(5, serializeMessageTags(dialog.messageTags))
                 stmt.executeUpdate()
             }
 
@@ -162,14 +168,14 @@ class SqliteDialogRepository(
 
             // Сохраняем accumulatedSummary если он есть
             if (dialog.accumulatedSummary != null) {
-                saveSummaryInternal(dialog.id, dialog.accumulatedSummary, dialog.messages.size)
+                saveSummaryInternal(dialog.id, dialog.accumulatedSummary, dialog.compressedMessageCount)
             }
         }
     }
 
     override suspend fun findById(id: DialogId): Dialog? = withContext(Dispatchers.IO) {
         // Загружаем диалог
-        val dialogSql = "SELECT id, title, created_at, updated_at FROM dialogs WHERE id = ?"
+        val dialogSql = "SELECT id, title, created_at, updated_at, message_tags FROM dialogs WHERE id = ?"
         val dialog = connection.prepareStatement(dialogSql).use { stmt ->
             stmt.setString(1, id.value)
             stmt.executeQuery().use { rs ->
@@ -179,7 +185,8 @@ class SqliteDialogRepository(
                         title = rs.getString("title"),
                         messages = emptyList(), // Загрузим отдельно
                         createdAt = Instant.parse(rs.getString("created_at")),
-                        updatedAt = Instant.parse(rs.getString("updated_at"))
+                        updatedAt = Instant.parse(rs.getString("updated_at")),
+                        messageTags = deserializeMessageTags(rs.getString("message_tags"))
                     )
                 } else {
                     null
@@ -201,9 +208,12 @@ class SqliteDialogRepository(
 
     override suspend fun findAll(): List<DialogSummary> = withContext(Dispatchers.IO) {
         val sql = """
-            SELECT d.id, d.title, d.updated_at, COUNT(m.id) as message_count
+            SELECT d.id, d.title, d.updated_at, d.message_tags,
+                   COUNT(m.id) as message_count,
+                   s.accumulated_summary, s.compressed_message_count
             FROM dialogs d
             LEFT JOIN messages m ON d.id = m.dialog_id
+            LEFT JOIN dialog_summaries s ON d.id = s.dialog_id
             GROUP BY d.id
             ORDER BY d.updated_at DESC
         """.trimIndent()
@@ -212,12 +222,15 @@ class SqliteDialogRepository(
             stmt.executeQuery(sql).use { rs ->
                 val result = mutableListOf<DialogSummary>()
                 while (rs.next()) {
+                    val tags = deserializeMessageTags(rs.getString("message_tags"))
                     result.add(
                         DialogSummary(
                             id = DialogId(rs.getString("id")),
                             title = rs.getString("title"),
                             messageCount = rs.getInt("message_count"),
-                            updatedAt = Instant.parse(rs.getString("updated_at"))
+                            updatedAt = Instant.parse(rs.getString("updated_at")),
+                            accumulatedSummary = rs.getString("accumulated_summary"),
+                            tagStats = TagStats.fromMessageTags(tags)
                         )
                     )
                 }
@@ -279,8 +292,7 @@ class SqliteDialogRepository(
                         title = "Summary", // Placeholder — DialogSummary requires non-blank title
                         messageCount = 0, // Не используется в этом контексте
                         updatedAt = Instant.parse(rs.getString("updated_at")),
-                        accumulatedSummary = rs.getString("accumulated_summary"),
-                        compressedMessageCount = rs.getInt("compressed_message_count")
+                        accumulatedSummary = rs.getString("accumulated_summary")
                     )
                 } else {
                     null
@@ -357,5 +369,78 @@ class SqliteDialogRepository(
         if (!connection.isClosed) {
             connection.close()
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Сериализация messageTags в/из JSON для хранения в SQLite
+    // ═══════════════════════════════════════════════════════════════
+
+    private fun serializeMessageTags(tags: Map<Int, Set<MessageTag>>): String {
+        if (tags.isEmpty()) return "{}"
+        val sb = StringBuilder("{")
+        tags.entries.forEachIndexed { i, (index, tagSet) ->
+            if (i > 0) sb.append(",")
+            sb.append("\"$index\":[")
+            tagSet.joinTo(sb, separator = ",") { "\"${it.key}\"" }
+            sb.append("]")
+        }
+        sb.append("}")
+        return sb.toString()
+    }
+
+    private fun deserializeMessageTags(json: String?): Map<Int, Set<MessageTag>> {
+        if (json.isNullOrBlank() || json == "{}") return emptyMap()
+        val result = mutableMapOf<Int, Set<MessageTag>>()
+        // Простой парсер без зависимостей: {"0":["compressed"],"1":["fact"]}
+        val trimmed = json.trim().removeSurrounding("{", "}")
+        if (trimmed.isBlank()) return emptyMap()
+        val entries = splitJsonEntries(trimmed)
+        for (entry in entries) {
+            val colonIndex = entry.indexOf(':')
+            if (colonIndex == -1) continue
+            val key = entry.substring(0, colonIndex).trim().removeSurrounding("\"")
+            val value = entry.substring(colonIndex + 1).trim()
+            val index = key.toIntOrNull() ?: continue
+            val tags = parseTagArray(value)
+            if (tags.isNotEmpty()) result[index] = tags
+        }
+        return result
+    }
+
+    private fun splitJsonEntries(content: String): List<String> {
+        val result = mutableListOf<String>()
+        var depth = 0
+        var start = 0
+        var inString = false
+        for (i in content.indices) {
+            val c = content[i]
+            if (c == '"' && (i == 0 || content[i - 1] != '\\')) inString = !inString
+            if (inString) continue
+            when (c) {
+                '{', '[' -> depth++
+                '}', ']' -> depth--
+                ',' -> if (depth == 0) {
+                    result.add(content.substring(start, i))
+                    start = i + 1
+                }
+            }
+        }
+        if (start < content.length) result.add(content.substring(start))
+        return result
+    }
+
+    private fun parseTagArray(json: String): Set<MessageTag> {
+        val trimmed = json.trim().removeSurrounding("[", "]")
+        if (trimmed.isBlank()) return emptySet()
+        val items = trimmed.split(",").map { it.trim().removeSurrounding("\"") }
+        return items.mapNotNull { key ->
+            when (key) {
+                MessageTag.Compressed.key -> MessageTag.Compressed
+                MessageTag.FactExtraction.key -> MessageTag.FactExtraction
+                MessageTag.BranchPoint.key -> MessageTag.BranchPoint
+                MessageTag.Checkpoint.key -> MessageTag.Checkpoint
+                else -> null
+            }
+        }.toSet()
     }
 }

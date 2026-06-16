@@ -9,11 +9,15 @@ import io.averkhogliad.ai.challenge.week1.cli.ConsoleCliRenderer
 import io.averkhogliad.ai.challenge.week1.domain.TaskId
 import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfigProvider
 import io.averkhogliad.ai.challenge.week1.domain.context.SlidingWindowCompressor
-import io.averkhogliad.ai.challenge.week1.domain.service.*
+import io.averkhogliad.ai.challenge.week1.domain.service.CompressingConversationalAgent
+import io.averkhogliad.ai.challenge.week1.domain.service.ConfigPort
+import io.averkhogliad.ai.challenge.week1.domain.service.ConversationalAgent
+import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week1.domain.strategy.ContextStrategyManager
 import io.averkhogliad.ai.challenge.week1.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week1.infrastructure.llm.LlmClientResourceManager
+import io.averkhogliad.ai.challenge.week1.infrastructure.persistence.InMemoryDialogRepository
 import io.averkhogliad.ai.challenge.week1.infrastructure.persistence.SqliteDialogRepository
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -81,7 +85,7 @@ object ApplicationBootstrap {
      * 1. Infrastructure: ConfigAdapter → AppConfig → LlmConfig
      * 2. Infrastructure: LlmClientConfig → DefaultLlmClient
      * 3. Infrastructure: LlmAdapter (связывает LlmClient с LlmPort)
-     * 4. Domain: SimpleAgent (инкапсулирует бизнес-логику агента)
+     * 4. Domain: ConversationalAgent + InMemoryDialogRepository (Task 1)
      * 5. Application: executor'ы (зависят от Agent)
      * 6. CLI: renderer + application
      */
@@ -100,10 +104,12 @@ object ApplicationBootstrap {
             defaultModelId = domainLlmConfig.defaultModelId
         )
 
-        // 4. Domain: агент для Task 1
-        val agent = SimpleAgent(llmPort)
+        // 4. Domain: агент и менеджер для Task 1 (с in-memory хранением истории диалогов)
+        val task1DialogRepository = InMemoryDialogRepository()
+        val task1DialogManager = DialogManager(task1DialogRepository)
+        val agent = ConversationalAgent(llmPort, task1DialogRepository)
 
-        // 5. Infrastructure: persistence для диалогов (Task 2)
+        // 5. Infrastructure: persistence для диалогов (Task 2+)
         val dialogRepository = SqliteDialogRepository()
         val dialogManager = DialogManager(dialogRepository)
         val conversationalAgent = ConversationalAgent(llmPort, dialogRepository)
@@ -168,7 +174,7 @@ object ApplicationBootstrap {
 
         // 6. Application: executor'ы
         val executors: Map<TaskId, TaskExecutor> = mapOf(
-            TaskId(1) to Task1Executor(agent),
+            TaskId(1) to Task1Executor(agent, task1DialogManager),
             TaskId(2) to Task2Executor(conversationalAgent, dialogManager),
             TaskId(3) to Task3Executor(conversationalAgent, dialogManager, modelInfo, contextWindow),
             TaskId(4) to Task4Executor(

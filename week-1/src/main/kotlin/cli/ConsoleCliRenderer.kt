@@ -3,9 +3,7 @@ package io.averkhogliad.ai.challenge.week1.cli
 import io.averkhogliad.ai.challenge.week1.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week1.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
-import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
-import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
-import io.averkhogliad.ai.challenge.week1.domain.model.DialogSummary
+import io.averkhogliad.ai.challenge.week1.domain.model.*
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
 
 /**
@@ -15,6 +13,47 @@ import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
  * При необходимости может быть заменена на Mordant-based реализацию.
  */
 class ConsoleCliRenderer : CliRenderer {
+
+    // ──── Прелоадер (анимированный спиннер) ────
+
+    @Volatile
+    private var spinnerRunning = false
+    private var spinnerThread: Thread? = null
+    private var spinnerMessage: String = ""
+
+    override fun renderLoadingStart(message: String) {
+        if (spinnerRunning) return
+        spinnerMessage = message
+        spinnerRunning = true
+        spinnerThread = Thread {
+            val frames = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+            var frameIndex = 0
+            try {
+                while (spinnerRunning) {
+                    val frame = frames[frameIndex % frames.size]
+                    print("\r  $frame $spinnerMessage")
+                    System.out.flush()
+                    frameIndex++
+                    Thread.sleep(80)
+                }
+            } catch (_: InterruptedException) {
+                // spinner stopped
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    override fun renderLoadingStop() {
+        if (!spinnerRunning) return
+        spinnerRunning = false
+        spinnerThread?.interrupt()
+        spinnerThread = null
+        // Очищаем строку спиннера
+        print("\r" + " ".repeat(spinnerMessage.length + 4) + "\r")
+        System.out.flush()
+    }
 
     override fun renderMenu(executors: List<TaskExecutor>) {
         println()
@@ -94,14 +133,13 @@ class ConsoleCliRenderer : CliRenderer {
             println("  :stop [s1,s2] — установить стоп-последовательности; без аргументов — сбросить")
             println("  :reset        — сбросить все параметры к значениям по умолчанию")
             println("  :params       — показать текущие параметры")
-            if (state.currentTaskId == 2 || state.currentTaskId == 3) {
-                println()
-                println("Команды диалогов:")
-                println("  :new [title]  — создать новый диалог (заголовок опционально)")
-                println("  :list         — список всех диалогов")
-                println("  :delete <id>  — удалить диалог по ID")
-                println("  :switch <id>  — переключиться на диалог по ID")
-            }
+            println()
+            println("Команды диалогов:")
+            println("  :new [title]  — создать новый диалог (заголовок опционально)")
+            println("  :list         — список всех диалогов")
+            println("  :history [id] — показать историю сообщений диалога (по умолчанию — текущий)")
+            println("  :switch <id>  — переключиться на диалог по ID")
+            println("  :delete <id>  — удалить диалог по ID")
         }
         println()
     }
@@ -154,7 +192,11 @@ class ConsoleCliRenderer : CliRenderer {
         } else {
             for (dialog in dialogs) {
                 println("  [${dialog.id.value}] ${dialog.title}")
-                println("    Сообщений: ${dialog.messageCount}, обновлён: ${dialog.updatedAt}")
+                val parts = mutableListOf<String>()
+                parts.add("сообщений: ${dialog.messageCount}")
+                val tagLine = buildTagStatsLine(dialog.tagStats)
+                if (tagLine.isNotEmpty()) parts.add(tagLine)
+                println("    ${parts.joinToString(", ")}, обновлён: ${dialog.updatedAt}")
             }
         }
         println("═".repeat(60))
@@ -167,14 +209,28 @@ class ConsoleCliRenderer : CliRenderer {
         println("  Диалог: ${dialog.title}")
         println("  ID: ${dialog.id.value}")
         println("  Сообщений: ${dialog.messageCount}")
+        if (dialog.accumulatedSummary != null) {
+            println("  Summary: ${dialog.accumulatedSummary.take(120)}...")
+        }
+        val stats = TagStats.fromMessageTags(dialog.messageTags)
+        if (!stats.isEmpty) {
+            println("  Маркеры: ${buildTagStatsLine(stats)}")
+        }
         println("─".repeat(60))
-        for (message in dialog.messages) {
+
+        // Рендеринг сообщений с маркерами
+        for ((index, message) in dialog.messages.withIndex()) {
+            val tags = dialog.messageTags[index] ?: emptySet()
+            val tagPrefix = if (tags.isNotEmpty()) {
+                tags.joinToString(" ") { it.displayLabelCompact } + " "
+            } else ""
+
             val roleLabel = when (message.role) {
                 ChatRole.SYSTEM -> "[SYSTEM]"
                 ChatRole.USER -> "[USER]"
                 ChatRole.ASSISTANT -> "[ASSISTANT]"
             }
-            println("$roleLabel ${message.content}")
+            println("$tagPrefix$roleLabel ${message.content}")
             println()
         }
         println("─".repeat(60))
@@ -186,5 +242,14 @@ class ConsoleCliRenderer : CliRenderer {
         } else {
             println("  Диалог не выбран")
         }
+    }
+
+    private fun buildTagStatsLine(stats: TagStats): String {
+        val parts = mutableListOf<String>()
+        if (stats.compressed > 0) parts.add("${MessageTag.Compressed.emoji} сжато:${stats.compressed}")
+        if (stats.factExtractions > 0) parts.add("${MessageTag.FactExtraction.emoji} фактов:${stats.factExtractions}")
+        if (stats.branchPoints > 0) parts.add("${MessageTag.BranchPoint.emoji} бранчей:${stats.branchPoints}")
+        if (stats.checkpoints > 0) parts.add("${MessageTag.Checkpoint.emoji} чекпоинтов:${stats.checkpoints}")
+        return parts.joinToString(", ")
     }
 }

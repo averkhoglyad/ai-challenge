@@ -31,7 +31,8 @@ data class Dialog(
     val createdAt: Instant,
     val updatedAt: Instant,
     val tokenUsageHistory: List<TokenUsage> = emptyList(),
-    val accumulatedSummary: String? = null
+    val accumulatedSummary: String? = null,
+    val messageTags: Map<Int, Set<MessageTag>> = emptyMap()
 ) {
     init {
         require(title.isNotBlank()) { "Dialog title cannot be blank" }
@@ -94,6 +95,38 @@ data class Dialog(
      */
     fun updateAccumulatedSummary(newSummary: String): Dialog {
         return copy(accumulatedSummary = newSummary)
+    }
+
+    /**
+     * Количество сжатых сообщений в диалоге.
+     *
+     * Вычисляется из [messageTags] — подсчитывает количество сообщений,
+     * помеченных тегом [MessageTag.Compressed]. Это универсальный подход,
+     * не зависящий от конкретного алгоритма сжатия.
+     */
+    val compressedMessageCount: Int
+        get() = messageTags.values.count { MessageTag.Compressed in it }
+
+    /**
+     * Помечает сообщения с указанными индексами тегом.
+     *
+     * Индексы сообщений соответствуют позиции в списке [messages] (0-based).
+     * Теги добавляются к уже существующим (не заменяются).
+     * Используется стратегиями управления контекстом и механизмами сжатия
+     * для визуализации истории диалога.
+     *
+     * @param tag тег для добавления
+     * @param messageIndices индексы сообщений в списке [messages]
+     * @return новый экземпляр [Dialog] с обновлёнными тегами
+     */
+    fun tagMessages(tag: MessageTag, vararg messageIndices: Int): Dialog {
+        if (messageIndices.isEmpty()) return this
+        val newTags = messageTags.toMutableMap()
+        for (index in messageIndices) {
+            val existing = newTags.getOrDefault(index, emptySet())
+            newTags[index] = existing + tag
+        }
+        return copy(messageTags = newTags)
     }
 
     /**

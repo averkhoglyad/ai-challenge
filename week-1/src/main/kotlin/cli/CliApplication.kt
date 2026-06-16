@@ -160,7 +160,9 @@ class CliApplication(
             is Command.UserInput -> {
                 // Показываем отправляемый промпт и параметры через renderer
                 renderer.renderRequestInfo(command.text, state.executionConfig)
+                renderer.renderLoadingStart("Отправка запроса...")
                 val (newState, result) = handler.executeUserInput(command, state)
+                renderer.renderLoadingStop()
                 when (result) {
                     is TaskResult.Success -> {
                         renderer.renderResult(result)
@@ -229,6 +231,27 @@ class CliApplication(
                 newState
             }
 
+            is Command.ShowHistory -> {
+                val dialogManagerAccessor = handler.getAccessorForCurrentTask(state) as? DialogManagerAccessor
+                if (dialogManagerAccessor != null) {
+                    val resolvedId = command.id ?: state.currentDialogId?.value
+                    if (resolvedId != null) {
+                        val dialogId = io.averkhogliad.ai.challenge.week1.domain.model.DialogId(resolvedId)
+                        val dialog = dialogManagerAccessor.getDialogManager().loadDialog(dialogId)
+                        if (dialog != null) {
+                            renderer.renderDialogHistory(dialog)
+                        } else {
+                            renderer.renderError("Диалог $resolvedId не найден")
+                        }
+                    } else {
+                        renderer.renderError("Диалог не указан и не выбран текущий. Используйте :history <id> или :switch <id>")
+                    }
+                } else {
+                    renderer.renderError("Управление диалогами не доступно в текущей задаче")
+                }
+                state
+            }
+
             // ═══════════════════════════════════════════════════════
             // Команды управления сжатием контекста (для Task 4)
             // ═══════════════════════════════════════════════════════
@@ -291,7 +314,7 @@ class CliApplication(
         // Команды диалогов для задач с поддержкой DialogManagerAccessor
         val currentExecutor = state.currentTaskId?.let { executors[TaskId(it)] }
         if (currentExecutor is io.averkhogliad.ai.challenge.week1.application.executor.DialogManagerAccessor) {
-            commands.addAll(listOf("new", "list", "delete", "switch"))
+            commands.addAll(listOf("new", "list", "delete", "switch", "history"))
         }
 
         // Команды сжатия контекста для Task 4

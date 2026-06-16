@@ -9,6 +9,7 @@ import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week1.domain.context.SlidingWindowCompressor
 import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
 import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
+import io.averkhogliad.ai.challenge.week1.domain.model.MessageTag
 import io.averkhogliad.ai.challenge.week1.domain.service.DialogRepository
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week1.domain.strategy.*
@@ -45,7 +46,7 @@ class Task5Executor(
         description = "Сравнение трёх стратегий управления контекстом: " +
                 "Sliding Window, Sticky Facts и Branching. " +
                 "Поддерживает интерактивные диалоги с командами :new, :list, :delete, :switch.",
-        availableCommands = listOf(":strategy", ":facts", ":branch", ":new", ":list", ":delete", ":switch")
+        availableCommands = listOf(":strategy", ":facts", ":branch", ":new", ":list", ":history", ":delete", ":switch")
     )
 
     // ═══════════════════════════════════════════════════════════════
@@ -120,7 +121,26 @@ class Task5Executor(
 
             // 3. Обрабатываем сообщение через активную стратегию
             val strategy = contextStrategyManager.getCurrentStrategy()
+            val userMessageIndex = dialog.messages.size - 1  // индекс только что добавленного user message
             val actionResult = strategy.processUserMessage(dialog, prompt.value, ContextManagementConfig())
+
+            // Помечаем сообщения тегами на основе actionResult
+            actionResult.actionsPerformed.forEach { action ->
+                when (action) {
+                    is StrategyAction.FactsExtracted -> dialog =
+                        dialog.tagMessages(MessageTag.FactExtraction, userMessageIndex)
+
+                    is StrategyAction.CheckpointCreated -> dialog =
+                        dialog.tagMessages(MessageTag.Checkpoint, userMessageIndex)
+
+                    is StrategyAction.BranchCreated -> dialog =
+                        dialog.tagMessages(MessageTag.BranchPoint, userMessageIndex)
+
+                    is StrategyAction.BranchSwitched -> {}  // переключение ветки не тегирует сообщения
+                    is StrategyAction.FactsUpdated -> dialog =
+                        dialog.tagMessages(MessageTag.FactExtraction, userMessageIndex)
+                }
+            }
 
             // 4. Подготавливаем контекст для LLM
             val preparedContext = strategy.prepareContext(

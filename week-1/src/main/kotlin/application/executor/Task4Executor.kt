@@ -57,7 +57,7 @@ class Task4Executor(
         description = "Сравнение эффективности сжатия контекста диалога: " +
                 "один и тот же диалог с компрессией и без. " +
                 "Поддерживает интерактивные диалоги с командами :new, :list, :delete, :switch.",
-        availableCommands = listOf(":compression", ":comp", ":new", ":list", ":delete", ":switch")
+        availableCommands = listOf(":compression", ":comp", ":new", ":list", ":history", ":delete", ":switch")
     )
 
     // ═══════════════════════════════════════════════════════════════

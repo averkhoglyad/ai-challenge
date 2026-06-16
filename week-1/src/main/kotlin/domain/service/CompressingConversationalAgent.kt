@@ -7,6 +7,7 @@ import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week1.domain.context.DialogContextCompressor
 import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
 import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
+import io.averkhogliad.ai.challenge.week1.domain.model.MessageTag
 
 /**
  * Агент с поддержкой сжатия контекста диалога.
@@ -98,27 +99,35 @@ class CompressingConversationalAgent(
             // 6. Вызвать LLM через llmPort
             val result = llmPort.chatWithMessages(compressedMessages, config)
 
-            // 7. Обновить accumulatedSummary в диалоге и сохранить
+            // 7. Обновить сomppression state в диалоге и сохранить
+            // Помечаем сжатые сообщения тегом Compressed
+            val compressedCount = dialogContext.compressedMessageCount
+            if (compressedCount > 0) {
+                val compressedIndices = (0 until compressedCount).toList().toIntArray()
+                dialog = dialog.tagMessages(MessageTag.Compressed, *compressedIndices)
+            }
+
             when (result) {
                 is TaskResult.Success -> {
                     // Сохраняем token usage в историю диалога
                     result.tokenUsage?.let { dialog = dialog.addTokenUsage(it) }
                     // Обновляем accumulatedSummary из контекста сжатия
-                    dialogContext.summary?.let { dialog = dialog.updateAccumulatedSummary(it) }
+                    // compressedMessageCount теперь вычисляется автоматически из messageTags
+                    dialogContext.summary?.let { dialog = dialog.copy(accumulatedSummary = it) }
                     // Добавляем assistant response в диалог
                     dialog = dialog.addAssistantMessage(result.content)
                     dialogRepository.save(dialog)
                 }
 
                 is TaskResult.Partial -> {
-                    dialogContext.summary?.let { dialog = dialog.updateAccumulatedSummary(it) }
+                    dialogContext.summary?.let { dialog = dialog.copy(accumulatedSummary = it) }
                     dialog = dialog.addAssistantMessage(result.content)
                     dialogRepository.save(dialog)
                 }
 
                 is TaskResult.Error -> {
                     // При ошибке всё равно сохраняем диалог с user message и обновлённым summary
-                    dialogContext.summary?.let { dialog = dialog.updateAccumulatedSummary(it) }
+                    dialogContext.summary?.let { dialog = dialog.copy(accumulatedSummary = it) }
                     dialogRepository.save(dialog)
                 }
             }

@@ -185,7 +185,9 @@ class CliApplication(
                 }
                 println("═══════════════════════")
                 println()
+                renderer.renderLoadingStart("Отправка запроса...")
                 val (newState, result) = handler.executeUserInput(command, state)
+                renderer.renderLoadingStop()
                 when (result) {
                     is io.averkhogliad.ai.challenge.week0.domain.TaskResult.Success -> {
                         renderer.renderResult(result)

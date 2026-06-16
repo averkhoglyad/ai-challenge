@@ -144,6 +144,10 @@ object CommandParser {
                 else Command.SwitchDialog(args)
             }
 
+            "history" -> {
+                Command.ShowHistory(args.ifEmpty { null })
+            }
+
             // Команды управления сжатием контекста (для Task 4)
             "compression", "comp" -> parseCompressionCommand(args, raw)
 

@@ -53,7 +53,7 @@ class Task3Executor(
         title = "Task 3: Телеметрия токенов",
         description = "Общение с агентом с отображением телеметрии токенов " +
                 "после каждого ответа.",
-        availableCommands = listOf(":new", ":list", ":delete", ":switch")
+        availableCommands = listOf(":new", ":list", ":history", ":delete", ":switch")
     )
 
     // ──── Состояние диалога ────

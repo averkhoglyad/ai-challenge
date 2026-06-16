@@ -13,6 +13,46 @@ import io.averkhogliad.ai.challenge.week0.domain.TaskResult
  */
 class ConsoleCliRenderer : CliRenderer {
 
+    // ──── Прелоадер (анимированный спиннер) ────
+
+    @Volatile
+    private var spinnerRunning = false
+    private var spinnerThread: Thread? = null
+    private var spinnerMessage: String = ""
+
+    override fun renderLoadingStart(message: String) {
+        if (spinnerRunning) return
+        spinnerMessage = message
+        spinnerRunning = true
+        spinnerThread = Thread {
+            val frames = listOf("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+            var frameIndex = 0
+            try {
+                while (spinnerRunning) {
+                    val frame = frames[frameIndex % frames.size]
+                    print("\r  $frame $spinnerMessage")
+                    System.out.flush()
+                    frameIndex++
+                    Thread.sleep(80)
+                }
+            } catch (_: InterruptedException) {
+                // spinner stopped
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    override fun renderLoadingStop() {
+        if (!spinnerRunning) return
+        spinnerRunning = false
+        spinnerThread?.interrupt()
+        spinnerThread = null
+        print("\r" + " ".repeat(spinnerMessage.length + 4) + "\r")
+        System.out.flush()
+    }
+
     override fun renderMenu(executors: List<TaskExecutor>) {
         println()
         println("=".repeat(60))

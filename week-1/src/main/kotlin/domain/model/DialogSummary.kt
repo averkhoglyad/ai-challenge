@@ -25,12 +25,17 @@ data class DialogSummary(
     val messageCount: Int,
     val updatedAt: Instant,
     val accumulatedSummary: String? = null,
-    val compressedMessageCount: Int = 0
+    val tagStats: TagStats = TagStats.empty()
 ) {
     init {
         require(title.isNotBlank()) { "Dialog title cannot be blank" }
         require(messageCount >= 0) { "Message count cannot be negative" }
     }
+
+    /**
+     * Количество сжатых сообщений — вычисляется из [tagStats].
+     */
+    val compressedMessageCount: Int get() = tagStats.compressed
 
     companion object {
         /**
@@ -44,7 +49,9 @@ data class DialogSummary(
                 id = dialog.id,
                 title = dialog.title,
                 messageCount = dialog.messageCount,
-                updatedAt = dialog.updatedAt
+                updatedAt = dialog.updatedAt,
+                accumulatedSummary = dialog.accumulatedSummary,
+                tagStats = TagStats.fromMessageTags(dialog.messageTags)
             )
         }
     }

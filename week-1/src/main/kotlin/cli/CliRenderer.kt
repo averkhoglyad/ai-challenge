@@ -110,4 +110,21 @@ interface CliRenderer {
      * @param dialogId ID текущего диалога (null если не выбран)
      */
     fun renderCurrentDialogInfo(dialogId: io.averkhogliad.ai.challenge.week1.domain.model.DialogId?)
+
+    /**
+     * Показывает индикатор загрузки (прелоадер).
+     *
+     * Вызывается перед началом длительной операции (например, запрос к LLM).
+     * После завершения операции должен быть вызван [renderLoadingStop].
+     *
+     * @param message текст статуса (например, "Отправка запроса...")
+     */
+    fun renderLoadingStart(message: String)
+
+    /**
+     * Останавливает и скрывает индикатор загрузки.
+     *
+     * Вызывается после завершения длительной операции.
+     */
+    fun renderLoadingStop()
 }

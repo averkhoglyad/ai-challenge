@@ -77,7 +77,7 @@ class Task2Executor(
         title = "Task 2: персистентные диалоги с историей",
         description = "Агент с памятью диалога, сохраняющий историю в SQLite. " +
                 "Поддерживает множественные изолированные диалоги.",
-        availableCommands = listOf(":new", ":list", ":delete", ":switch")
+        availableCommands = listOf(":new", ":list", ":history", ":delete", ":switch")
     )
 
     /** ID текущего активного диалога (null — диалог не выбран) */
