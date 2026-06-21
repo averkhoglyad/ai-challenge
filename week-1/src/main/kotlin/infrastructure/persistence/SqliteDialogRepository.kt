@@ -24,11 +24,11 @@ import java.time.Instant
  *
  * ## Особенности
  * - Автоматическое создание схемы при инициализации
- * - Файл БД создаётся в директории ~/ai-challenge/dialogs.db
+ * - Файл БД создаётся в директории ~/ai-challenge/week1.db
  * - Поддержка транзакций для атомарности операций
  * - Автоматическое создание директории, если она не существует
  *
- * @param dbPath путь к файлу базы данных (по умолчанию ~/ai-challenge/dialogs.db)
+ * @param dbPath путь к файлу базы данных (по умолчанию ~/ai-challenge/week1.db)
  */
 class SqliteDialogRepository(
     private val dbPath: String = defaultDbPath()
@@ -36,11 +36,11 @@ class SqliteDialogRepository(
 
     companion object {
         /**
-         * Возвращает путь к БД по умолчанию: ~/ai-challenge/dialogs.db
+         * Возвращает путь к БД по умолчанию: ~/ai-challenge/week1.db
          */
         fun defaultDbPath(): String {
             val home = System.getProperty("user.home")
-            return "$home/.ai-challenge/dialogs.db"
+            return "$home/.ai-challenge/week1.db"
         }
     }
 

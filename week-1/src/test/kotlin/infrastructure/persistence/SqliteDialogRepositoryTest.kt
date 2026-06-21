@@ -26,7 +26,7 @@ class SqliteDialogRepositoryTest {
 
     @BeforeTest
     fun setUp() {
-        val tempFile = Files.createTempFile("test-dialogs-", ".db")
+        val tempFile = Files.createTempFile("test-week1-", ".db")
         tempDbPath = tempFile.toString()
         repository = SqliteDialogRepository(tempDbPath)
     }
