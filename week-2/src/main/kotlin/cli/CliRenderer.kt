@@ -1,0 +1,57 @@
+package io.averkhogliad.ai.challenge.week2.cli
+
+import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
+import io.averkhogliad.ai.challenge.week2.domain.TaskResult
+import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week2.domain.model.Fact
+import io.averkhogliad.ai.challenge.week2.domain.model.Task
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
+import io.averkhogliad.ai.challenge.week2.domain.service.MemoryStatus
+
+interface CliRenderer {
+    fun renderMenu(executors: List<TaskExecutor>)
+    fun renderTaskHeader(metadata: TaskMetadata)
+    fun renderResult(result: TaskResult)
+    fun renderError(message: String)
+    fun renderPrompt(state: CliState)
+    fun renderHelp(state: CliState)
+    fun renderParameters(state: CliState)
+    fun renderWelcome()
+    fun renderGoodbye()
+    fun renderRequestInfo(prompt: String, config: TaskExecutionConfig)
+    fun renderLoadingStart(message: String)
+    fun renderLoadingStop()
+
+    // Dialog rendering methods (no-op — dialog functionality removed)
+    fun renderSuccess(message: String)
+    fun renderInfo(message: String)
+
+    // Todo-manager rendering methods
+    fun renderTaskList(tasks: List<Task>)
+    fun renderTaskDetail(task: Task)
+    fun renderTaskCreated(taskId: TaskId)
+    fun renderTaskUpdated(taskId: TaskId)
+    fun renderTaskDeleted(taskId: TaskId)
+    fun renderTaskClosed(taskId: TaskId)
+    fun renderTaskCancelled(taskId: TaskId)
+
+    // Step management rendering methods
+    fun renderStepCreated(step: TaskStep)
+    fun renderStepList(steps: List<TaskStep>)
+    fun renderStepCompleted(step: TaskStep)
+    fun renderStepError(message: String)
+
+    // Memory management rendering methods
+    fun renderMemoryStatus(status: MemoryStatus)
+    fun renderMemoryCleared()
+
+    // LTM (Long-Term Memory) rendering methods
+    fun renderFactSaved(fact: Fact)
+    fun renderFactList(facts: List<Fact>)
+    fun renderFactForgotten(factId: String)
+    fun renderFactNotFound(factId: String)
+    fun renderFactSearchResults(facts: List<Fact>, query: String)
+    fun renderFactSearchEmpty(query: String)
+}

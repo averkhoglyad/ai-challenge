@@ -22,5 +22,6 @@ plugins {
 include(":utils")
 include(":week-0")
 include(":week-1")
+include(":week-2")
 
 rootProject.name = "ai-challenge"
