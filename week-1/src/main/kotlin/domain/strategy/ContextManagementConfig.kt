@@ -40,7 +40,8 @@ data class ContextManagementConfig(
     val currentStrategy: StrategyType = StrategyType.SLIDING_WINDOW,
     val slidingWindow: SlidingWindowConfig = SlidingWindowConfig(),
     val stickyFacts: StickyFactsConfig = StickyFactsConfig(),
-    val branching: BranchingConfig = BranchingConfig()
+    val branching: BranchingConfig = BranchingConfig(),
+    val timeouts: TimeoutsConfig = TimeoutsConfig()
 ) {
     companion object {
         fun fromProperties(properties: Map<String, String>): ContextManagementConfig {
@@ -73,9 +74,31 @@ data class ContextManagementConfig(
                         ?: 0.3,
                     topicContextSize = properties["context.strategy.branching.topic-context-size"]?.toIntOrNull()
                         ?: 3
+                ),
+                timeouts = TimeoutsConfig(
+                    factExtractionTimeoutMs = properties["context.strategy.timeouts.fact-extraction-ms"]?.toLongOrNull()
+                        ?: 30_000L,
+                    compressionTimeoutMs = properties["context.strategy.timeouts.compression-ms"]?.toLongOrNull()
+                        ?: 30_000L
                 )
             )
         }
+    }
+}
+
+/**
+ * Конфигурация таймаутов для LLM-вызовов внутри стратегий.
+ *
+ * @property factExtractionTimeoutMs таймаут для извлечения фактов (StickyFactsStrategy)
+ * @property compressionTimeoutMs таймаут для компрессии контекста (SlidingWindowStrategy)
+ */
+data class TimeoutsConfig(
+    val factExtractionTimeoutMs: Long = 30_000L,
+    val compressionTimeoutMs: Long = 30_000L
+) {
+    init {
+        require(factExtractionTimeoutMs > 0) { "factExtractionTimeoutMs must be positive, got $factExtractionTimeoutMs" }
+        require(compressionTimeoutMs > 0) { "compressionTimeoutMs must be positive, got $compressionTimeoutMs" }
     }
 }
 

@@ -140,6 +140,40 @@ class ConsoleCliRenderer : CliRenderer {
             println("  :history [id] — показать историю сообщений диалога (по умолчанию — текущий)")
             println("  :switch <id>  — переключиться на диалог по ID")
             println("  :delete <id>  — удалить диалог по ID")
+
+            // ──── Task 4: команды сжатия контекста ────
+            if ((state.currentTaskId ?: 0) >= 4) {
+                println()
+                println("Команды сжатия контекста:")
+                println("  :compression on          — включить сжатие")
+                println("  :compression off         — выключить сжатие")
+                println("  :compression window <N>  — размер скользящего окна")
+                println("  :compression block <K>   — размер блока для суммаризации")
+                println("  :compression status      — показать текущий статус сжатия")
+            }
+
+            // ──── Task 5: команды стратегий контекста ────
+            if (state.currentTaskId == 5) {
+                println()
+                println("Команды стратегий:")
+                println("  :strategy [index]        — меню/выбор стратегии")
+                println("  :strategy info           — показать текущую стратегию")
+                println()
+                println("Команды веток (Branching):")
+                println("  :branch create <name>    — создать новую ветку")
+                println("  :branch switch <name>    — переключиться на ветку")
+                println("  :branch list             — список веток")
+                println()
+                println("Команды чекпоинтов (Branching):")
+                println("  :checkpoint              — создать чекпоинт")
+                println("  :checkpoint list         — список чекпоинтов")
+                println()
+                println("Команды фактов (Sticky Facts):")
+                println("  :facts                   — список фактов")
+                println("  :facts add <key>=<value> — добавить факт")
+                println("  :facts remove <key>      — удалить факт")
+                println("  :facts clear             — очистить все факты")
+            }
         }
         println()
     }

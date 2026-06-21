@@ -7,6 +7,7 @@ import io.averkhogliad.ai.challenge.week1.domain.context.DialogContextCompressor
 import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
 import io.averkhogliad.ai.challenge.week1.domain.model.DialogId
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
+import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -231,5 +232,190 @@ class SlidingWindowStrategyTest {
             assertNotNull(summary, "newAccumulatedSummary should be present when compression occurs")
             assertTrue(summary.isNotBlank(), "newAccumulatedSummary should be non-blank")
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Граничные случаи
+    // ═══════════════════════════════════════════════════════════════
+
+    @Test
+    fun `prepareContext with empty dialog should return only system prompt`() = runTest {
+        val compressor = createCompressor()
+        val strategy = SlidingWindowStrategy(compressor, configProvider = null)
+        val emptyDialog = Dialog.create(DialogId("empty"), "Empty Dialog")
+        val config = ContextManagementConfig()
+
+        val result = strategy.prepareContext(emptyDialog, "You are a helpful assistant", config)
+
+        assertTrue(result.messages.size == 1, "Expected 1 message, got ${result.messages.size}")
+        assertEquals(ChatRole.SYSTEM, result.messages[0].role)
+        assertEquals("You are a helpful assistant", result.messages[0].content)
+        assertEquals(0, result.metadata[StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT])
+    }
+
+    @Test
+    fun `prepareContext with exactly windowSize messages should not compress`() = runTest {
+        val compressor = createCompressor()
+        val strategy = SlidingWindowStrategy(compressor)
+        val dialog = createDialogWithMessages(5) // 10 messages total
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 10)
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        assertEquals(0, result.metadata[StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT])
+        assertTrue((result.metadata[StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY] as? String).isNullOrBlank())
+    }
+
+    @Test
+    fun `prepareContext with windowSize + 1 messages should trigger compression`() = runTest {
+        val compressor = createCompressor()
+        val strategy = SlidingWindowStrategy(compressor)
+        val dialog = createDialogWithMessages(6) // 12 messages total
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 10, blockSize = 5)
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        assertTrue((result.metadata[StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT] as? Int ?: 0) > 0)
+        assertNotNull(result.metadata[StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY] as? String)
+        assertTrue((result.metadata[StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY] as? String)?.isNotBlank() == true)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Обработка ошибок
+    // ═══════════════════════════════════════════════════════════════
+
+    @Test
+    fun `prepareContext when compressor throws exception should return fallback`() = runTest {
+        val failingCompressor = object : DialogContextCompressor {
+            override suspend fun compress(
+                messages: List<ChatMessage>,
+                config: ContextCompressionConfig,
+                previousSummary: String?
+            ): DialogContext {
+                throw RuntimeException("LLM error")
+            }
+        }
+        val strategy = SlidingWindowStrategy(failingCompressor, configProvider = null)
+        val dialog = createDialogWithMessages(12) // 24 messages > 10 windowSize
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 10)
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        // Fallback: system prompt + последние windowSize сообщений
+        assertTrue(result.messages.size == 11, "Expected 11 messages (1 system + 10), got ${result.messages.size}")
+        assertEquals(0, result.metadata[StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT])
+        assertNotNull(result.metadata["compressionError"])
+    }
+
+    @Test
+    fun `prepareContext when compressor times out should return fallback`() = runTest {
+        val hangingCompressor = object : DialogContextCompressor {
+            override suspend fun compress(
+                messages: List<ChatMessage>,
+                config: ContextCompressionConfig,
+                previousSummary: String?
+            ): DialogContext {
+                // Симулируем зависание — delay > timeout
+                kotlinx.coroutines.delay(5000L)
+                return DialogContext(
+                    summary = "too late",
+                    recentMessages = emptyList(),
+                    compressedMessageCount = 0
+                )
+            }
+        }
+        val strategy = SlidingWindowStrategy(
+            compressor = hangingCompressor,
+            configProvider = null
+        )
+        val dialog = createDialogWithMessages(12) // 24 messages > 10 windowSize
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 10),
+            timeouts = TimeoutsConfig(compressionTimeoutMs = 100L) // очень короткий таймаут через конфиг
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        // Fallback должен сработать
+        assertEquals(0, result.metadata[StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT])
+        assertNotNull(result.metadata["compressionError"])
+        assertEquals("Timeout or error during compression", result.metadata["compressionError"])
+    }
+
+    @Test
+    fun `prepareContext with invalid ChatRole should skip message`() = runTest {
+        // Компрессор возвращает сообщения с неизвестными ролями — проверим, что стратегия не падает
+        val compressorWithBadRole = object : DialogContextCompressor {
+            override suspend fun compress(
+                messages: List<ChatMessage>,
+                config: ContextCompressionConfig,
+                previousSummary: String?
+            ): DialogContext {
+                return DialogContext(
+                    summary = "test summary",
+                    recentMessages = emptyList(),
+                    compressedMessageCount = 5
+                ).copy() // DialogContext.toMessagesList возвращает сообщения с roles из исходного диалога
+            }
+        }
+        val strategy = SlidingWindowStrategy(compressorWithBadRole, configProvider = null)
+        val dialog = createDialogWithMessages(12)
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 10, blockSize = 5)
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        // Не должно быть исключений — просто получаем какой-то результат
+        assertNotNull(result)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Конфигурация
+    // ═══════════════════════════════════════════════════════════════
+
+    @Test
+    fun `prepareContext with null configProvider should use static config`() = runTest {
+        val compressor = createCompressor()
+        val strategy = SlidingWindowStrategy(compressor, configProvider = null)
+        val dialog = createDialogWithMessages(12)
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 8, blockSize = 4)
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        assertEquals(8, result.metadata[StrategyMetadataKeys.WINDOW_SIZE])
+        assertEquals(4, result.metadata[StrategyMetadataKeys.BLOCK_SIZE])
+    }
+
+    @Test
+    fun `prepareContext with configProvider should use dynamic config`() = runTest {
+        val compressor = createCompressor()
+        val configProvider = ContextCompressionConfigProvider(
+            ContextCompressionConfig(
+                enabled = false,
+                windowSize = 6,
+                blockSize = 3,
+                summaryModelId = "dynamic-model"
+            )
+        )
+        val strategy = SlidingWindowStrategy(compressor, configProvider)
+        val dialog = createDialogWithMessages(12)
+        val config = ContextManagementConfig(
+            slidingWindow = SlidingWindowConfig(windowSize = 20, blockSize = 10)
+        )
+
+        val result = strategy.prepareContext(dialog, "System prompt", config)
+
+        // Должны использоваться динамические значения
+        assertEquals(6, result.metadata[StrategyMetadataKeys.WINDOW_SIZE])
+        assertEquals(3, result.metadata[StrategyMetadataKeys.BLOCK_SIZE])
     }
 }

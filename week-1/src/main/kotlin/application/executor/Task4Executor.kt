@@ -14,6 +14,7 @@ import io.averkhogliad.ai.challenge.week1.domain.model.MessageTag
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
 import io.averkhogliad.ai.challenge.week1.domain.service.DialogRepository
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
+import io.averkhogliad.ai.challenge.week1.domain.strategy.StrategyState
 import io.averkhogliad.ai.challenge.week1.domain.telemetry.TokenUsage
 import java.util.*
 
@@ -67,6 +68,9 @@ class Task4Executor(
 
     /** ID текущего активного диалога (null — диалог не выбран) */
     private var currentDialogId: DialogId? = null
+
+    /** Состояние стратегии (зарезервировано для будущего использования с ContextManagementStrategy) */
+    private var strategyState: StrategyState? = null
 
     // ═══════════════════════════════════════════════════════════════
     // DialogManagerAccessor implementation

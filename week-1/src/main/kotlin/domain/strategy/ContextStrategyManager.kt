@@ -8,7 +8,8 @@ import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
  * Менеджер стратегий управления контекстом.
  *
  * Управляет доступными стратегиями, текущей активной стратегией
- * и переключением между ними.
+ * и переключением между ними. Использует [StrategyFactory] для
+ * создания стратегий с корректными зависимостями.
  *
  * @property llmPort порт для взаимодействия с LLM
  * @property slidingWindowCompressor компрессор для SlidingWindow стратегии
@@ -26,18 +27,12 @@ class ContextStrategyManager(
     private var currentStrategyType: StrategyType = StrategyType.SLIDING_WINDOW
 
     init {
-        val factsExtractor = FactsExtractor(llmPort)
-
-        strategies = mapOf(
-            StrategyType.SLIDING_WINDOW to SlidingWindowStrategy(
-                compressor = slidingWindowCompressor,
-                configProvider = compressionConfigProvider
-            ),
-            StrategyType.STICKY_FACTS to StickyFactsStrategy(factsExtractor),
-            StrategyType.BRANCHING to BranchingStrategy {
-                BranchingConfig()
-            }
+        val factory = DefaultStrategyFactory(
+            llmPort = llmPort,
+            compressor = slidingWindowCompressor,
+            configProvider = compressionConfigProvider
         )
+        strategies = factory.createStrategies()
     }
 
     /**

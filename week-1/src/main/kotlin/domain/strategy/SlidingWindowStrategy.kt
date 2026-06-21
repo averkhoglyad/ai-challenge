@@ -6,6 +6,8 @@ import io.averkhogliad.ai.challenge.week1.domain.context.DialogContext
 import io.averkhogliad.ai.challenge.week1.domain.context.DialogContextCompressor
 import io.averkhogliad.ai.challenge.week1.domain.model.Dialog
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
+import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Стратегия скользящего окна (Sliding Window).
@@ -22,7 +24,7 @@ import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
  *    - Если сообщений > windowSize: вызывает [SlidingWindowCompressor.compress]
  *      с [Dialog.accumulatedSummary] в качестве previousSummary для инкрементальной
  *      суммаризации. Результат (новое summary) возвращается в metadata
- *      с ключом `"newAccumulatedSummary"`.
+ *      с ключом [StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY].
  *
  * ## Конфигурация
  * Приоритет параметров (по убыванию):
@@ -38,6 +40,10 @@ import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage
  *
  * Feature-флаг `enabled` из [ContextCompressionConfig] намеренно игнорируется:
  * стратегия скользящего окна ВСЕГДА включает компрессию при превышении windowSize.
+ *
+ * ## Обработка ошибок
+ * При ошибке компрессора используется graceful degradation: возвращаются последние N
+ * сообщений без сжатия, а ошибка записывается в metadata под ключом `"compressionError"`.
  *
  * ## Преимущества
  * - Простота реализации
@@ -65,8 +71,10 @@ class SlidingWindowStrategy(
     override suspend fun processUserMessage(
         dialog: Dialog,
         userMessage: String,
-        config: ContextManagementConfig
+        config: ContextManagementConfig,
+        state: StrategyState?
     ): StrategyActionResult {
+        require(userMessage.isNotBlank()) { "userMessage cannot be blank" }
         // Sliding Window не выполняет дополнительных действий при обработке сообщения
         return StrategyActionResult.empty()
     }
@@ -74,14 +82,12 @@ class SlidingWindowStrategy(
     override suspend fun prepareContext(
         dialog: Dialog,
         systemPrompt: String,
-        config: ContextManagementConfig
+        config: ContextManagementConfig,
+        state: StrategyState?
     ): PreparedContext {
         val slidingConfig = config.slidingWindow
 
         // Приоритет: динамический configProvider > статический ContextManagementConfig.
-        // enabled НЕ берётся из configProvider — стратегия скользящего окна ВСЕГДА включает компрессию.
-        // configProvider управляет только windowSize/blockSize/summaryModelId (общие для Task 4 и Task 5).
-        // Захватываем один снимок конфигурации, чтобы избежать гонки данных при трёх вызовах get().
         val dynamicConfig = configProvider?.get()
         val effectiveWindowSize = dynamicConfig?.windowSize ?: slidingConfig.windowSize
         val effectiveBlockSize = dynamicConfig?.blockSize ?: slidingConfig.blockSize
@@ -92,16 +98,15 @@ class SlidingWindowStrategy(
             return PreparedContext.fromMessages(
                 messages = listOf(ChatMessage.system(systemPrompt)) + dialog.messages,
                 metadata = mapOf(
-                    "strategy" to "sliding-window",
-                    "windowSize" to effectiveWindowSize,
-                    "compressedMessageCount" to 0,
-                    "newAccumulatedSummary" to ""
+                    StrategyMetadataKeys.STRATEGY to "sliding-window",
+                    StrategyMetadataKeys.WINDOW_SIZE to effectiveWindowSize,
+                    StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT to 0,
+                    StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY to ""
                 )
             )
         }
 
         // Компрессия всегда включена для стратегии скользящего окна
-        // (enabled = true — это суть стратегии; feature-флаг управляет только Task 4)
         val compressionConfig = ContextCompressionConfig(
             enabled = true,
             windowSize = effectiveWindowSize,
@@ -109,32 +114,56 @@ class SlidingWindowStrategy(
             summaryModelId = effectiveSummaryModelId
         )
 
-        // Вызываем компрессор с накопленным summary из диалога (инкрементальная суммаризация)
-        val dialogContext: DialogContext = compressor.compress(
-            messages = dialog.messages,
-            config = compressionConfig,
-            previousSummary = dialog.accumulatedSummary
-        )
+        val timeoutMs = config.timeouts.compressionTimeoutMs
 
-        // Преобразуем DialogContext в PreparedContext
-        val messages = dialogContext.toMessagesList(systemPrompt)
-        val chatMessages = messages.map { utilsMsg ->
-            ChatMessage(
-                role = io.averkhogliad.ai.challenge.week1.domain.service.ChatRole.valueOf(
-                    utilsMsg.role.uppercase()
-                ),
-                content = utilsMsg.content
+        // Вызываем компрессор с таймаутом и обработкой ошибок (graceful degradation)
+        val dialogContext: DialogContext? = withTimeoutOrNull(timeoutMs) {
+            try {
+                compressor.compress(
+                    messages = dialog.messages,
+                    config = compressionConfig,
+                    previousSummary = dialog.accumulatedSummary
+                )
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        if (dialogContext == null) {
+            // Fallback: возвращаем последние N сообщений без сжатия
+            val fallbackMessages = listOf(ChatMessage.system(systemPrompt)) +
+                    dialog.messages.takeLast(effectiveWindowSize)
+            return PreparedContext.fromMessages(
+                messages = fallbackMessages,
+                metadata = mapOf(
+                    StrategyMetadataKeys.STRATEGY to "sliding-window",
+                    StrategyMetadataKeys.WINDOW_SIZE to effectiveWindowSize,
+                    StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT to 0,
+                    StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY to "",
+                    "compressionError" to "Timeout or error during compression"
+                )
             )
+        }
+
+        // Преобразуем DialogContext в PreparedContext с безопасным преобразованием ролей
+        val messages = dialogContext.toMessagesList(systemPrompt)
+        val chatMessages = messages.mapNotNull { utilsMsg ->
+            val role = try {
+                ChatRole.valueOf(utilsMsg.role.uppercase())
+            } catch (e: IllegalArgumentException) {
+                null // Пропускаем сообщения с неизвестными ролями
+            }
+            role?.let { ChatMessage(role = it, content = utilsMsg.content) }
         }
 
         return PreparedContext.fromMessages(
             messages = chatMessages,
             metadata = mapOf(
-                "strategy" to "sliding-window",
-                "windowSize" to effectiveWindowSize,
-                "blockSize" to effectiveBlockSize,
-                "compressedMessageCount" to dialogContext.compressedMessageCount,
-                "newAccumulatedSummary" to (dialogContext.summary ?: "")
+                StrategyMetadataKeys.STRATEGY to "sliding-window",
+                StrategyMetadataKeys.WINDOW_SIZE to effectiveWindowSize,
+                StrategyMetadataKeys.BLOCK_SIZE to effectiveBlockSize,
+                StrategyMetadataKeys.COMPRESSED_MESSAGE_COUNT to dialogContext.compressedMessageCount,
+                StrategyMetadataKeys.NEW_ACCUMULATED_SUMMARY to (dialogContext.summary ?: "")
             )
         )
     }

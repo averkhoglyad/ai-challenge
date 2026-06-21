@@ -8,11 +8,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
 import kotlin.test.assertTrue
 
 class BranchingStrategyTest {
 
-    private val strategy = BranchingStrategy { BranchingConfig() }
+    private val strategy = BranchingStrategy(configProvider = { BranchingConfig() })
 
     private fun createDialogWithMessages(count: Int): Dialog {
         var dialog = Dialog.create(DialogId("test-dialog"), "Test Dialog")
@@ -174,7 +175,11 @@ class BranchingStrategyTest {
 
     @Test
     fun `autoDetectTopicChange should create checkpoint and branch on topic change`() = runTest {
-        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3) }
+        val strategy = BranchingStrategy(
+            configProvider = {
+                BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3)
+            }
+        )
         val config = ContextManagementConfig()
 
         // Seed: establish topic about REST API
@@ -210,7 +215,7 @@ class BranchingStrategyTest {
 
     @Test
     fun `autoDetectTopicChange should NOT branch on same topic`() = runTest {
-        val strategy = BranchingStrategy { BranchingConfig() }
+        val strategy = BranchingStrategy(configProvider = { BranchingConfig() })
         val config = ContextManagementConfig(
             branching = BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3)
         )
@@ -235,7 +240,7 @@ class BranchingStrategyTest {
 
     @Test
     fun `autoDetectTopicChange should NOT branch when disabled`() = runTest {
-        val strategy = BranchingStrategy { BranchingConfig() }
+        val strategy = BranchingStrategy(configProvider = { BranchingConfig() })
         val config = ContextManagementConfig(
             branching = BranchingConfig(autoDetectTopicChange = false)
         )
@@ -260,7 +265,11 @@ class BranchingStrategyTest {
 
     @Test
     fun `autoDetectTopicChange with high sensitivity should NOT branch easily`() = runTest {
-        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.9) }
+        val strategy = BranchingStrategy(
+            configProvider = {
+                BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.9)
+            }
+        )
         val config = ContextManagementConfig()
 
         // Seed: establish topic about REST API
@@ -281,7 +290,11 @@ class BranchingStrategyTest {
 
     @Test
     fun `autoDetectTopicChange should NOT trigger with insufficient history`() = runTest {
-        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3) }
+        val strategy = BranchingStrategy(
+            configProvider = {
+                BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3)
+            }
+        )
         val config = ContextManagementConfig()
 
         // Only 1 previous message — not enough for topic comparison
@@ -299,7 +312,11 @@ class BranchingStrategyTest {
 
     @Test
     fun `can switch back to main after auto branch`() = runTest {
-        val strategy = BranchingStrategy { BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3) }
+        val strategy = BranchingStrategy(
+            configProvider = {
+                BranchingConfig(autoDetectTopicChange = true, topicChangeSensitivity = 0.3)
+            }
+        )
         val config = ContextManagementConfig()
 
         // Seed: establish topic about REST API
@@ -323,5 +340,77 @@ class BranchingStrategyTest {
             mainBranch.messages.any { it.content.contains("REST API") },
             "Main branch should contain original REST API messages"
         )
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Неизменяемость состояния
+    // ═══════════════════════════════════════════════════════════════
+
+    @Test
+    fun `processUserMessage should return new state in metadata without mutating input state`() = runTest {
+        val strategy = BranchingStrategy(
+            configProvider = { BranchingConfig() },
+            topicChangeDetector = TopicChangeDetector()
+        )
+        val dialog = createDialogWithMessages(5)
+        val initialState = StrategyState.BranchingState.createInitial(dialog.id)
+        val initialBranchesCount = initialState.branches.size
+
+        val result = strategy.processUserMessage(
+            dialog = dialog,
+            userMessage = "Сообщение",
+            config = ContextManagementConfig(),
+            state = initialState
+        )
+
+        // Исходное состояние не изменилось
+        assertEquals(initialBranchesCount, initialState.branches.size)
+
+        // Новое состояние в metadata
+        val newState = result.metadata[StrategyMetadataKeys.STRATEGY_STATE] as? StrategyState.BranchingState
+        assertNotNull(newState)
+        assertNotSame(initialState, newState)
+    }
+
+    @Test
+    fun `prepareContext should not modify input state`() = runTest {
+        val strategy = BranchingStrategy(
+            configProvider = { BranchingConfig() },
+            topicChangeDetector = TopicChangeDetector()
+        )
+        val dialog = createDialogWithMessages(5)
+        val initialState = StrategyState.BranchingState.createInitial(dialog.id)
+        val initialBranchesCount = initialState.branches.size
+
+        strategy.prepareContext(
+            dialog = dialog,
+            systemPrompt = "System prompt",
+            config = ContextManagementConfig(),
+            state = initialState
+        )
+
+        // Состояние не должно измениться
+        assertEquals(initialBranchesCount, initialState.branches.size)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Обработка ошибок
+    // ═══════════════════════════════════════════════════════════════
+
+    @Test
+    fun `processUserMessage with blank userMessage should throw IllegalArgumentException`() = runTest {
+        val strategy = BranchingStrategy(
+            configProvider = { BranchingConfig() },
+            topicChangeDetector = TopicChangeDetector()
+        )
+        val dialog = createDialogWithMessages(1)
+
+        assertThrows<IllegalArgumentException> {
+            strategy.processUserMessage(
+                dialog = dialog,
+                userMessage = "   ",
+                config = ContextManagementConfig()
+            )
+        }
     }
 }

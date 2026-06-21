@@ -16,7 +16,7 @@ import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
  *
  * @property llmPort порт для взаимодействия с LLM
  */
-class FactsExtractor(
+open class FactsExtractor(
     private val llmPort: LlmPort
 ) {
     /**
@@ -27,7 +27,7 @@ class FactsExtractor(
      * @param extractionModelId опциональный ID модели для извлечения
      * @return список извлечённых фактов
      */
-    suspend fun extractFacts(
+    open suspend fun extractFacts(
         userMessage: String,
         messageIndex: Int,
         extractionModelId: String? = null

@@ -43,12 +43,17 @@ interface ContextManagementStrategy {
      * @param dialog текущий диалог
      * @param userMessage текст сообщения пользователя
      * @param config конфигурация стратегии
-     * @return результат действия стратегии
+     * @param state опциональное состояние стратегии (для стратегий с внутренним состоянием).
+     *        Используется [StrategyState.BranchingState] и [StrategyState.StickyFactsState].
+     *        Для stateless стратегий передаётся [StrategyState.SlidingWindowState] или `null`.
+     *        По умолчанию `null` для обратной совместимости.
+     * @return результат действия стратегии; может содержать обновлённый [state] в метаданных
      */
     suspend fun processUserMessage(
         dialog: Dialog,
         userMessage: String,
-        config: ContextManagementConfig
+        config: ContextManagementConfig,
+        state: StrategyState? = null
     ): StrategyActionResult
 
     /**
@@ -60,11 +65,16 @@ interface ContextManagementStrategy {
      * @param dialog текущий диалог
      * @param systemPrompt базовый system prompt
      * @param config конфигурация стратегии
-     * @return подготовленный контекст для LLM
+     * @param state опциональное состояние стратегии (для стратегий с внутренним состоянием).
+     *        Используется [StrategyState.BranchingState] и [StrategyState.StickyFactsState].
+     *        Для stateless стратегий передаётся [StrategyState.SlidingWindowState] или `null`.
+     *        По умолчанию `null` для обратной совместимости.
+     * @return подготовленный контекст для LLM; может содержать обновлённый [state] в метаданных
      */
     suspend fun prepareContext(
         dialog: Dialog,
         systemPrompt: String,
-        config: ContextManagementConfig
+        config: ContextManagementConfig,
+        state: StrategyState? = null
     ): PreparedContext
 }

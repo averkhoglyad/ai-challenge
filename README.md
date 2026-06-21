@@ -135,3 +135,201 @@ Rate limiting потокобезопасен и работает коррект�
 - [Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html)
 - [Gradle Tasks](https://docs.gradle.org/current/userguide/command_line_interface.html#common_tasks)
 - [Version Catalog](gradle/libs.versions.toml) — управление зависимостями
+
+---
+
+## Stateless Strategy API (после рефакторинга)
+
+### Обзор
+
+Все стратегии управления контекстом теперь **stateless** (не имеют внутреннего состояния). Состояние передаётся явно
+через параметр `state` и возвращается в `metadata` результата.
+
+### Преимущества
+
+- **Потокобезопасность** — стратегии можно безопасно использовать в многопоточной среде
+- **Тестируемость** — легко тестировать, передавая нужное состояние
+- **Предсказуемость** — нет скрытых побочных эффектов
+- **Гибкость** — можно сериализовать и сохранять состояние между сессиями
+
+### Пример использования
+
+#### Базовый паттерн
+
+```kotlin
+// 1. Создаём начальное состояние (или используем null для legacy behavior)
+var strategyState: StrategyState? = null
+
+// 2. Обрабатываем сообщение пользователя
+val actionResult = strategy.processUserMessage(
+    dialog = dialog,
+    userMessage = "Привет, меня зовут Alice",
+    config = config,
+    state = strategyState
+)
+
+// 3. Извлекаем обновлённое состояние из metadata
+strategyState = actionResult.metadata[StrategyMetadataKeys.STRATEGY_STATE] as? StrategyState
+
+// 4. Подготавливаем контекст для LLM
+val preparedContext = strategy.prepareContext(
+    dialog = dialog,
+    systemPrompt = "You are a helpful assistant",
+    config = config,
+    state = strategyState
+)
+
+// 5. Извлекаем обновлённое состояние (если prepareContext его обновил)
+strategyState = preparedContext.metadata[StrategyMetadataKeys.STRATEGY_STATE] as? StrategyState
+
+// 6. Отправляем контекст в LLM
+val response = llmClient.chat(preparedContext.messages)
+```
+
+#### Пример с BranchingStrategy
+
+```kotlin
+val branchingStrategy = BranchingStrategy(
+    configProvider = { BranchingConfig(autoDetectTopicChange = true) },
+    topicChangeDetector = TopicChangeDetector()
+)
+
+// Создаём начальное состояние для диалога
+var state: StrategyState? = StrategyState.BranchingState.createInitial(dialog.id)
+
+// Обрабатываем серию сообщений
+for (userMessage in userMessages) {
+    val result = branchingStrategy.processUserMessage(
+        dialog = dialog,
+        userMessage = userMessage,
+        config = config,
+        state = state
+    )
+
+    // Проверяем, какие действия были выполнены
+    result.actionsPerformed.forEach { action ->
+        when (action) {
+            is StrategyAction.CheckpointCreated -> println("Создан чекпоинт: ${action.checkpointId}")
+            is StrategyAction.BranchCreated -> println("Создана ветка: ${action.branchName}")
+            is StrategyAction.BranchSwitched -> println("Переключение на ветку: ${action.branchName}")
+            else -> {}
+        }
+    }
+
+    // Обновляем состояние
+    state = result.metadata[StrategyMetadataKeys.STRATEGY_STATE] as? StrategyState
+}
+
+// Получаем список всех веток
+val branchingState = state as StrategyState.BranchingState
+println("Всего веток: ${branchingState.branches.size}")
+println("Текущая ветка: ${branchingState.currentBranch.name}")
+```
+
+#### Пример с StickyFactsStrategy
+
+```kotlin
+val stickyFactsStrategy = StickyFactsStrategy(
+    factsExtractor = FactsExtractor(llmPort)
+)
+
+var state: StrategyState? = StrategyState.StickyFactsState.createInitial()
+
+// Обрабатываем сообщение — факты извлекаются автоматически
+val result = stickyFactsStrategy.processUserMessage(
+    dialog = dialog,
+    userMessage = "Меня зовут Alice, я живу в Москве",
+    config = config,
+    state = state
+)
+
+state = result.metadata[StrategyMetadataKeys.STRATEGY_STATE] as? StrategyState
+
+// Подготавливаем контекст — факты включаются в system prompt
+val context = stickyFactsStrategy.prepareContext(
+    dialog = dialog,
+    systemPrompt = "You are a helpful assistant",
+    config = config,
+    state = state
+)
+
+// Проверяем извлечённые факты
+val stickyState = state as StrategyState.StickyFactsState
+println("Извлечено фактов: ${stickyState.factsStore.facts.size}")
+stickyState.factsStore.facts.forEach { (key, fact) ->
+    println("  $key: ${fact.value}")
+}
+```
+
+#### Обратная совместимость (legacy behavior)
+
+Если передать `state = null`, стратегия будет использовать внутреннее состояние (как до рефакторинга):
+
+```kotlin
+// Legacy mode — состояние хранится внутри стратегии
+val result = strategy.processUserMessage(
+    dialog = dialog,
+    userMessage = "Сообщение",
+    config = config,
+    state = null  // Стратегия использует внутреннее состояние
+)
+```
+
+**Важно:** Legacy mode не рекомендуется для нового кода, так как нарушает потокобезопасность.
+
+### Типы состояний
+
+| Стратегия               | Тип состояния                      | Описание                                   |
+|-------------------------|------------------------------------|--------------------------------------------|
+| `SlidingWindowStrategy` | `StrategyState.SlidingWindowState` | Пустой объект (стратегия stateless)        |
+| `StickyFactsStrategy`   | `StrategyState.StickyFactsState`   | Хранит `FactsStore` с извлечёнными фактами |
+| `BranchingStrategy`     | `StrategyState.BranchingState`     | Хранит ветки, чекпоинты, текущую ветку     |
+
+### Metadata keys
+
+Все ключи metadata определены в [
+`StrategyMetadataKeys`](week-1/src/main/kotlin/domain/strategy/StrategyMetadataKeys.kt):
+
+```kotlin
+object StrategyMetadataKeys {
+    const val STRATEGY = "strategy"
+    const val WINDOW_SIZE = "windowSize"
+    const val BLOCK_SIZE = "blockSize"
+    const val COMPRESSED_MESSAGE_COUNT = "compressedMessageCount"
+    const val NEW_ACCUMULATED_SUMMARY = "newAccumulatedSummary"
+    const val CURRENT_BRANCH = "currentBranch"
+    const val TOTAL_BRANCHES = "totalBranches"
+    const val TOTAL_CHECKPOINTS = "totalCheckpoints"
+    const val BRANCH_MESSAGE_COUNT = "branchMessageCount"
+    const val FACTS_COUNT = "factsCount"
+    const val FACTS = "facts"
+    const val EXTRACTED_FACTS = "extractedFacts"
+    const val STRATEGY_STATE = "strategyState"  // Ключ для извлечения обновлённого состояния
+}
+```
+
+### Конфигурация таймаутов
+
+Таймауты LLM-вызовов внутри стратегий теперь конфигурируются через [
+`TimeoutsConfig`](week-1/src/main/kotlin/domain/strategy/ContextManagementConfig.kt) в составе
+`ContextManagementConfig`:
+
+```kotlin
+val config = ContextManagementConfig(
+    timeouts = TimeoutsConfig(
+        factExtractionTimeoutMs = 30_000L,  // Таймаут извлечения фактов
+        compressionTimeoutMs = 30_000L       // Таймаут компрессии контекста
+    )
+)
+
+// Передача config в стратегию
+val result = strategy.processUserMessage(dialog, userMessage, config, state)
+val context = strategy.prepareContext(dialog, systemPrompt, config, state)
+```
+
+Через `application.properties`:
+
+```properties
+context.strategy.timeouts.fact-extraction-ms=30000
+context.strategy.timeouts.compression-ms=30000
+```
