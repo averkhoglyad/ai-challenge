@@ -1,5 +1,7 @@
 package io.averkhogliad.ai.challenge.week2.cli.commands
 
+import io.averkhogliad.ai.challenge.week2.cli.commands.Command.DebugAction
+import io.averkhogliad.ai.challenge.week2.cli.commands.CommandParser.parsePlanCommand
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 
 /**
@@ -182,7 +184,14 @@ object CommandParser {
             "ctx-search" -> parseSearchFactsCommand(args, raw)
 
             // Команды интеграции с LLM
-            "plan" -> parsePlanStepsCommand(args, raw)
+            "plan" -> parsePlanCommand(args, raw)
+
+            // Команды управления debug-режимом
+            "debug" -> parseDebugCommand(args, raw)
+
+            // Команды управления состоянием FSM
+            "state" -> Command.ShowState
+            "abort" -> Command.Abort
 
             // Команды управления профилями пользователя (PM)
             "profile-new" -> parseProfileNewCommand(args, raw)
@@ -403,6 +412,18 @@ object CommandParser {
         }
     }
 
+    /**
+     * Парсит команду обновления описания задачи: `:describe <taskId>`.
+     * ID задачи обязателен.
+     */
+    internal fun parseDescribeCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.Unknown(raw)
+        } else {
+            Command.Describe(TaskId(args))
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // Парсинг команд управления шагами задач
     // ═══════════════════════════════════════════════════════════════
@@ -474,9 +495,29 @@ object CommandParser {
     }
 
     /**
+     * Парсит команду планирования: `:plan` или `:plan <title> [description]`.
+     *
+     * - `:plan` (без аргументов) → FSM-команда `Command.Plan` для текущей открытой задачи
+     * - `:plan <title> [description]` → legacy-команда `Command.PlanSteps`
+     */
+    internal fun parsePlanCommand(args: String, raw: String): Command {
+        if (args.isEmpty()) {
+            // FSM-команда для текущей открытой задачи
+            return Command.Plan
+        }
+        // Legacy-команда с явным указанием title
+        val parts = args.split(" ", limit = 2)
+        val title = parts[0].trim()
+        val description = parts.getOrElse(1) { "" }.trim().ifEmpty { null }
+        return Command.PlanSteps(title, description)
+    }
+    
+    /**
      * Парсит команду планирования шагов: `:plan <title> [description]`.
      * Весь текст после `:plan ` считается заголовком и опциональным описанием,
      * разделёнными пробелом.
+     *
+     * @deprecated Используйте [parsePlanCommand] вместо этого метода
      */
     internal fun parsePlanStepsCommand(args: String, raw: String): Command {
         if (args.isEmpty()) return Command.Unknown(raw)
@@ -550,6 +591,27 @@ object CommandParser {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Парсинг команд управления debug-режимом
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Парсит команду управления debug-режимом: `:debug [on|off]`.
+     *
+     * - `:debug` (без аргументов) → переключить режим (TOGGLE)
+     * - `:debug on` → включить debug-режим (ON)
+     * - `:debug off` → выключить debug-режим (OFF)
+     * - Любой другой аргумент → Unknown
+     */
+    internal fun parseDebugCommand(args: String, raw: String): Command {
+        return when (args.lowercase()) {
+            "" -> Command.Debug(DebugAction.TOGGLE)
+            "on" -> Command.Debug(DebugAction.ON)
+            "off" -> Command.Debug(DebugAction.OFF)
+            else -> Command.Unknown(raw)
+        }
+    }
+
     /**
      * Проверяет, похож ли токен на ID задачи.
      * ID может быть числом или строкой, похожей на UUID.
@@ -568,3 +630,5 @@ object CommandParser {
     /** Дефолтный промпт, если пользователь ничего не ввёл */
     const val DEFAULT_PROMPT = "Расскажи короткий анекдот про программиста."
 }
+
+

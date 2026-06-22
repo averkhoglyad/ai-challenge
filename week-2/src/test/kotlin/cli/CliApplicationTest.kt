@@ -257,6 +257,18 @@ class CliApplicationTest {
         override fun renderProfileContentTooLong(length: Int) {
             renderedMessages.add("profileContentTooLong:$length")
         }
+
+        override fun renderFsmState(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {
+            renderedMessages.add("fsmState:${state.commandName}")
+        }
+
+        override fun renderStatusDebug(enabled: Boolean) {
+            renderedMessages.add("statusDebug:$enabled")
+        }
+
+        override fun waitForEnter() {
+            // no-op for tests
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

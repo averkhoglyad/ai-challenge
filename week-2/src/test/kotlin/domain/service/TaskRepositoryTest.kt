@@ -141,5 +141,16 @@ class TaskRepositoryTest {
         override suspend fun exists(id: TaskId): Boolean {
             return tasks.containsKey(id.value)
         }
+
+        override suspend fun saveSteps(
+            taskId: TaskId,
+            steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>
+        ) {
+            // No-op for tests
+        }
+
+        override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> {
+            return emptyList()
+        }
     }
 }

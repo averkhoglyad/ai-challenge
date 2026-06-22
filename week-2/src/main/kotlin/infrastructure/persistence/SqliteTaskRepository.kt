@@ -1,8 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.infrastructure.persistence
 
-import io.averkhogliad.ai.challenge.week2.domain.model.Task
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskStatus
+import io.averkhogliad.ai.challenge.week2.domain.model.*
 import io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -79,6 +77,20 @@ class SqliteTaskRepository(
                 )
             """.trimIndent()
             )
+
+            stmt.execute(
+                """
+                CREATE TABLE IF NOT EXISTS task_steps (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    is_completed INTEGER NOT NULL DEFAULT 0,
+                    step_order INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                )
+            """.trimIndent()
+            )
         }
     }
 
@@ -147,6 +159,54 @@ class SqliteTaskRepository(
         }
     }
 
+    override suspend fun saveSteps(taskId: TaskId, steps: List<TaskStep>): Unit = withContext(Dispatchers.IO) {
+        // Сначала удаляем старые шаги
+        val deleteSql = "DELETE FROM task_steps WHERE task_id = ?"
+        connection.prepareStatement(deleteSql).use { stmt ->
+            stmt.setString(1, taskId.value)
+            stmt.executeUpdate()
+        }
+
+        // Затем вставляем новые шаги
+        val insertSql = """
+            INSERT INTO task_steps (id, task_id, text, is_completed, step_order, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """.trimIndent()
+
+        connection.prepareStatement(insertSql).use { stmt ->
+            for (step in steps) {
+                stmt.setString(1, step.id.value)
+                stmt.setString(2, step.taskId.value)
+                stmt.setString(3, step.text)
+                stmt.setInt(4, if (step.isCompleted) 1 else 0)
+                stmt.setInt(5, step.order)
+                stmt.setString(6, step.createdAt.toString())
+                stmt.addBatch()
+            }
+            stmt.executeBatch()
+        }
+    }
+
+    override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> = withContext(Dispatchers.IO) {
+        val sql = """
+            SELECT id, task_id, text, is_completed, step_order, created_at 
+            FROM task_steps 
+            WHERE task_id = ? 
+            ORDER BY step_order ASC
+        """.trimIndent()
+
+        connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, taskId.value)
+            stmt.executeQuery().use { rs ->
+                val steps = mutableListOf<TaskStep>()
+                while (rs.next()) {
+                    steps.add(mapRowToTaskStep(rs))
+                }
+                steps
+            }
+        }
+    }
+
     /**
      * Маппит строку ResultSet в доменную модель Task.
      */
@@ -157,6 +217,20 @@ class SqliteTaskRepository(
             status = TaskStatus.valueOf(rs.getString("status")),
             createdAt = Instant.parse(rs.getString("created_at")),
             updatedAt = Instant.parse(rs.getString("updated_at"))
+        )
+    }
+
+    /**
+     * Маппит строку ResultSet в доменную модель TaskStep.
+     */
+    private fun mapRowToTaskStep(rs: java.sql.ResultSet): TaskStep {
+        return TaskStep(
+            id = TaskStepId(rs.getString("id")),
+            taskId = TaskId(rs.getString("task_id")),
+            text = rs.getString("text"),
+            isCompleted = rs.getInt("is_completed") == 1,
+            order = rs.getInt("step_order"),
+            createdAt = Instant.parse(rs.getString("created_at"))
         )
     }
 

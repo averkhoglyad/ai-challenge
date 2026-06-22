@@ -265,6 +265,13 @@ class ConsoleCliRenderer : CliRenderer {
         println("  Created: ${task.createdAt}")
         println("  Updated: ${task.updatedAt}")
         println()
+        println("  Description:")
+        if (task.hasDescription()) {
+            println("    ${task.description}")
+        } else {
+            println("    (Описание отсутствует. Используйте :describe ${task.id.value} для добавления)")
+        }
+        println()
     }
 
     override fun renderTaskCreated(taskId: TaskId) {
@@ -618,6 +625,157 @@ class ConsoleCliRenderer : CliRenderer {
         } else {
             println("PM: Профиль не задан")
         }
+        println()
+    }
+
+    // ──── Debug mode status rendering ────
+
+    /**
+     * Отрендерить информацию о статусе debug-режима в выводе команды :status.
+     *
+     * @param enabled true если debug-режим включен, false если выключен
+     */
+    override fun renderStatusDebug(enabled: Boolean) {
+        println()
+        if (enabled) {
+            println("Debug mode: enabled")
+        } else {
+            println("Debug mode: disabled")
+        }
+        println()
+    }
+
+    // ──── Active FSM command status rendering ────
+
+    /**
+     * Отрендерить информацию о активной FSM-команде в выводе команды :status.
+     *
+     * @param commandName имя активной команды или null, если нет активной команды
+     */
+    override fun renderStatusActiveCommand(commandName: String?) {
+        println()
+        if (commandName != null) {
+            println("Active command: $commandName")
+        } else {
+            println("Active command: none")
+        }
+        println()
+    }
+
+    // ──── FSM (Finite State Machine) visualization ────
+
+    /**
+     * Отрендерить текущее состояние FSM для debug-режима.
+     *
+     * Выводит информацию о выполняемой команде:
+     * - имя команды
+     * - текущий этап (PLANNING, EXECUTION, VALIDATION, DONE)
+     * - текущий шаг внутри этапа
+     * - ожидаемое действие
+     * - контекст выполнения (если есть)
+     *
+     * @param state текущее состояние FSM
+     */
+    override fun renderFsmState(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {
+        println()
+        println("[DEBUG] Command: ${state.commandName}")
+        println("[DEBUG] Stage: ${state.currentStage}")
+        println("[DEBUG] Step: ${state.currentStep}")
+        if (state.expectedAction.isNotEmpty()) {
+            println("[DEBUG] Action: ${state.expectedAction}")
+        }
+        if (state.context.isNotEmpty()) {
+            println("[DEBUG] Context:")
+            state.context.forEach { (key, value) ->
+                println("  $key: $value")
+            }
+        }
+        println()
+    }
+
+    // ──── Debug mode pause after step execution ────
+
+    /**
+     * Выводит подсказку "Press Enter to continue..." и блокирует поток
+     * до нажатия клавиши Enter. Используется в debug-режиме для пошаговой отладки.
+     */
+    override fun waitForEnter() {
+        print("Press Enter to continue...")
+        System.out.flush()
+        try {
+            readlnOrNull()
+        } catch (_: Exception) {
+            // ignore exceptions (e.g., EOF in non-interactive environments)
+        }
+    }
+
+    // ──── FSM state command rendering (:state) ────
+
+    /**
+     * Отрендерить информацию о текущем состоянии FSM для команды :state.
+     *
+     * Выводит информацию о выполняемой команде:
+     * - имя команды
+     * - текущий этап (PLANNING, EXECUTION, VALIDATION, DONE)
+     * - текущий шаг внутри этапа
+     * - ожидаемое действие
+     * - контекст выполнения (если есть)
+     *
+     * @param state текущее состояние FSM
+     */
+    override fun renderFsmStateInfo(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {
+        println()
+        println("=== Состояние FSM ===")
+        println("Команда: ${state.commandName}")
+        println("Этап: ${state.currentStage}")
+        println("Шаг: ${state.currentStep}")
+        if (state.expectedAction.isNotEmpty()) {
+            println("Ожидаемое действие: ${state.expectedAction}")
+        }
+        if (state.context.isNotEmpty()) {
+            println("Контекст:")
+            state.context.forEach { (key, value) ->
+                println("  $key: $value")
+            }
+        }
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об отсутствии активной команды.
+     */
+    override fun renderNoActiveCommand() {
+        println()
+        println("Нет активной команды")
+        println()
+    }
+
+    // ──── Abort command rendering (:abort) ────
+
+    /**
+     * Отрендерить запрос подтверждения прерывания команды.
+     */
+    override fun renderAbortConfirmation() {
+        println()
+        print("Прервать выполнение команды? (y/n): ")
+        System.out.flush()
+    }
+
+    /**
+     * Отрендерить сообщение об успешном прерывании команды.
+     */
+    override fun renderAbortSuccess() {
+        println()
+        println("✓ Команда прервана")
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об отмене прерывания команды.
+     */
+    override fun renderAbortCancelled() {
+        println()
+        println("Прерывание отменено")
         println()
     }
 }

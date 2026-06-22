@@ -290,4 +290,76 @@ class WorkingMemoryTest {
             assertTrue(context.contains("[USER] Hello"), "Should contain message text")
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // US-DESC-4: Отображение description в WM
+    // ═══════════════════════════════════════════════════════════════
+
+    @Nested
+    @DisplayName("Отображение description задачи (US-DESC-4)")
+    inner class TaskDescription {
+
+        @Test
+        @DisplayName("should create WorkingMemory with taskDescription")
+        fun `should create WorkingMemory with taskDescription`() {
+            val sessionId = SessionId.generate()
+            val description = "This is a detailed task description"
+            val memory = WorkingMemory.forTaskLevel(sessionId, emptyList(), description)
+
+            assertEquals(description, memory.taskDescription)
+        }
+
+        @Test
+        @DisplayName("should create WorkingMemory with null taskDescription by default")
+        fun `should create WorkingMemory with null taskDescription by default`() {
+            val sessionId = SessionId.generate()
+            val memory = WorkingMemory.forTaskLevel(sessionId)
+
+            assertNull(memory.taskDescription)
+        }
+
+        @Test
+        @DisplayName("should include taskDescription in prompt context")
+        fun `should include taskDescription in prompt context`() {
+            val sessionId = SessionId.generate()
+            val description = "Implement user authentication with OAuth2"
+            val memory = WorkingMemory.forTaskLevel(sessionId, emptyList(), description)
+
+            val context = memory.toPromptContext()
+
+            assertTrue(context.contains("Task Description:"), "Should contain Task Description header")
+            assertTrue(context.contains(description), "Should contain description text")
+        }
+
+        @Test
+        @DisplayName("should omit Task Description section when description is null")
+        fun `should omit Task Description section when description is null`() {
+            val sessionId = SessionId.generate()
+            val memory = WorkingMemory.forTaskLevel(sessionId, emptyList(), null)
+
+            val context = memory.toPromptContext()
+
+            assertTrue(!context.contains("Task Description:"), "Should not contain Task Description header")
+        }
+
+        @Test
+        @DisplayName("should combine taskDescription with steps and summary in prompt context")
+        fun `should combine taskDescription with steps and summary`() {
+            val sessionId = SessionId.generate()
+            val taskId = TaskId("task-1")
+            val now = java.time.Instant.now()
+            val description = "Build a REST API"
+            val step = TaskStep(TaskStepId("step-1"), taskId, "Create endpoints", false, 0, now)
+
+            val memory = WorkingMemory.forTaskLevel(sessionId, listOf(step), description)
+                .updateSummary("Previous work on API")
+
+            val context = memory.toPromptContext()
+
+            assertTrue(context.contains("Task Description:"), "Should contain description")
+            assertTrue(context.contains(description), "Should contain description text")
+            assertTrue(context.contains("Context Summary:"), "Should contain summary")
+            assertTrue(context.contains("Steps:"), "Should contain steps")
+        }
+    }
 }

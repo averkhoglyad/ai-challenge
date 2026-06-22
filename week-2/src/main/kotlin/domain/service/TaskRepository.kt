@@ -2,6 +2,7 @@ package io.averkhogliad.ai.challenge.week2.domain.service
 
 import io.averkhogliad.ai.challenge.week2.domain.model.Task
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
 
 /**
  * Port (интерфейс) для персистентного хранения задач.
@@ -61,4 +62,23 @@ interface TaskRepository {
      * @return true, если задача существует, иначе false
      */
     suspend fun exists(id: TaskId): Boolean
+
+    /**
+     * Сохраняет список шагов задачи в хранилище.
+     *
+     * Если у задачи уже были шаги — они заменяются новыми.
+     * Иначе — создаются новые записи.
+     *
+     * @param taskId идентификатор задачи
+     * @param steps список шагов для сохранения
+     */
+    suspend fun saveSteps(taskId: TaskId, steps: List<TaskStep>)
+
+    /**
+     * Возвращает список шагов задачи.
+     *
+     * @param taskId идентификатор задачи
+     * @return список шагов задачи, отсортированный по порядку выполнения
+     */
+    suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep>
 }

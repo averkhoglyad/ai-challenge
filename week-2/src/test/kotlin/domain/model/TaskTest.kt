@@ -5,6 +5,7 @@ import org.junit.jupiter.api.assertThrows
 import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -119,15 +120,67 @@ class TaskTest {
         }
     }
 
+    @Test
+    fun `should create task with description`() {
+        val task = createTask(description = "Test description")
+
+        assertEquals("Test description", task.description)
+        assertTrue(task.hasDescription())
+    }
+
+    @Test
+    fun `should create task without description`() {
+        val task = createTask()
+
+        assertNull(task.description)
+        assertFalse(task.hasDescription())
+    }
+
+    @Test
+    fun `should throw exception when description is blank`() {
+        assertThrows<IllegalArgumentException> {
+            createTask(description = "   ")
+        }
+    }
+
+    @Test
+    fun `should update description`() {
+        val task = createTask(description = "Old description")
+        val updated = task.updateDescription("New description")
+
+        assertEquals("New description", updated.description)
+        assertTrue(updated.updatedAt >= task.updatedAt)
+    }
+
+    @Test
+    fun `should throw exception when updating description to blank`() {
+        val task = createTask(description = "Test")
+
+        assertThrows<IllegalArgumentException> {
+            task.updateDescription("")
+        }
+    }
+
+    @Test
+    fun `should check hasDescription correctly`() {
+        val withDesc = createTask(description = "Test")
+        assertTrue(withDesc.hasDescription())
+
+        val withoutDesc = createTask()
+        assertFalse(withoutDesc.hasDescription())
+    }
+
     private fun createTask(
         id: String = "test-id",
         title: String = "Test Task",
+        description: String? = null,
         status: TaskStatus = TaskStatus.OPEN,
         createdAt: Instant = Instant.now(),
         updatedAt: Instant = Instant.now()
     ): Task = Task(
         id = TaskId(id),
         title = title,
+        description = description,
         status = status,
         createdAt = createdAt,
         updatedAt = updatedAt

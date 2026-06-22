@@ -1,8 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.infrastructure.persistence
 
-import io.averkhogliad.ai.challenge.week2.domain.model.Task
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskStatus
+import io.averkhogliad.ai.challenge.week2.domain.model.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -149,6 +147,115 @@ class SqliteTaskRepositoryTest {
     fun `should handle delete of non-existent task`() = runBlocking {
         // Не должно выбрасывать исключение
         repository.delete(TaskId("non-existent"))
+    }
+
+    @Test
+    fun `should save and find steps by task id`() = runBlocking {
+        val task = createTask("task-1", "Test Task")
+        repository.save(task)
+
+        val steps = listOf(
+            TaskStep(
+                id = TaskStepId("step-1"),
+                taskId = TaskId("task-1"),
+                text = "First step",
+                isCompleted = false,
+                order = 1,
+                createdAt = Instant.now()
+            ),
+            TaskStep(
+                id = TaskStepId("step-2"),
+                taskId = TaskId("task-1"),
+                text = "Second step",
+                isCompleted = false,
+                order = 2,
+                createdAt = Instant.now()
+            )
+        )
+
+        repository.saveSteps(TaskId("task-1"), steps)
+
+        val foundSteps = repository.findStepsByTaskId(TaskId("task-1"))
+        assertEquals(2, foundSteps.size)
+        assertEquals("First step", foundSteps[0].text)
+        assertEquals("Second step", foundSteps[1].text)
+        assertEquals(1, foundSteps[0].order)
+        assertEquals(2, foundSteps[1].order)
+    }
+
+    @Test
+    fun `should return empty list when no steps for task`() = runBlocking {
+        val task = createTask("task-1", "Test Task")
+        repository.save(task)
+
+        val steps = repository.findStepsByTaskId(TaskId("task-1"))
+        assertTrue(steps.isEmpty())
+    }
+
+    @Test
+    fun `should replace steps when saving again`() = runBlocking {
+        val task = createTask("task-1", "Test Task")
+        repository.save(task)
+
+        val initialSteps = listOf(
+            TaskStep(
+                id = TaskStepId("step-1"),
+                taskId = TaskId("task-1"),
+                text = "Initial step",
+                isCompleted = false,
+                order = 1,
+                createdAt = Instant.now()
+            )
+        )
+        repository.saveSteps(TaskId("task-1"), initialSteps)
+
+        val newSteps = listOf(
+            TaskStep(
+                id = TaskStepId("step-2"),
+                taskId = TaskId("task-1"),
+                text = "New step 1",
+                isCompleted = false,
+                order = 1,
+                createdAt = Instant.now()
+            ),
+            TaskStep(
+                id = TaskStepId("step-3"),
+                taskId = TaskId("task-1"),
+                text = "New step 2",
+                isCompleted = false,
+                order = 2,
+                createdAt = Instant.now()
+            )
+        )
+        repository.saveSteps(TaskId("task-1"), newSteps)
+
+        val foundSteps = repository.findStepsByTaskId(TaskId("task-1"))
+        assertEquals(2, foundSteps.size)
+        assertEquals("New step 1", foundSteps[0].text)
+        assertEquals("New step 2", foundSteps[1].text)
+    }
+
+    @Test
+    fun `should save steps with completed status`() = runBlocking {
+        val task = createTask("task-1", "Test Task")
+        repository.save(task)
+
+        val steps = listOf(
+            TaskStep(
+                id = TaskStepId("step-1"),
+                taskId = TaskId("task-1"),
+                text = "Completed step",
+                isCompleted = true,
+                order = 1,
+                createdAt = Instant.now()
+            )
+        )
+
+        repository.saveSteps(TaskId("task-1"), steps)
+
+        val foundSteps = repository.findStepsByTaskId(TaskId("task-1"))
+        assertEquals(1, foundSteps.size)
+        assertTrue(foundSteps[0].isCompleted)
     }
 
     private fun createTask(

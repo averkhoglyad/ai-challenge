@@ -8,10 +8,7 @@ import io.averkhogliad.ai.challenge.week2.cli.commands.CommandParser
 import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.model.FactId
-import io.averkhogliad.ai.challenge.week2.domain.service.FactRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.ResourceManager
-import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
+import io.averkhogliad.ai.challenge.week2.domain.service.*
 import kotlinx.coroutines.runBlocking
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId as ModelTaskId
 
@@ -52,7 +49,10 @@ class CliApplication(
     private val taskStepRepository: TaskStepRepository? = null,
     private val factRepository: FactRepository? = null,
     private val dialogService: io.averkhogliad.ai.challenge.week2.application.DialogService? = null,
-    private val profileRepository: ProfileRepository? = null
+    private val profileRepository: ProfileRepository? = null,
+    private val planCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.PlanCommandExecutor? = null,
+    private val commandEngine: CommandEngine? = null,
+    private val debugCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.DebugCommandExecutor? = null
 ) : AutoCloseable {
 
     private val handler = CommandHandler(
@@ -61,8 +61,25 @@ class CliApplication(
         memoryService = memoryService,
         taskStepRepository = taskStepRepository,
         factRepository = factRepository,
-        dialogService = dialogService
+        dialogService = dialogService,
+        debugCommandExecutor = debugCommandExecutor
     )
+
+    /**
+     * Визуализирует состояние FSM, если debug-режим включен.
+     * Вызывается после обработки FSM-команд для отладки.
+     * В debug-режиме также вызывает паузу для пошагового просмотра.
+     */
+    private fun renderFsmStateIfDebug() {
+        if (debugCommandExecutor?.isEnabled() == true && commandEngine?.hasActiveCommand() == true) {
+            val activeState = commandEngine?.getActiveState()
+            if (activeState != null) {
+                renderer.renderFsmState(activeState)
+                // US-DBG-4: Pause after step in debug mode
+                renderer.waitForEnter()
+            }
+        }
+    }
 
     fun run(args: Array<String>) {
         runBlocking {
@@ -159,7 +176,22 @@ class CliApplication(
                 handler.handle(command, state)
             }
 
+            is Command.Debug -> {
+                val newState = handler.handle(command, state)
+                state
+            }
+
             is Command.UserInput -> {
+                // Проверка активной FSM-команды (например, :plan)
+                if (planCommandExecutor != null && commandEngine?.hasActiveCommand() == true) {
+                    val activeState = commandEngine?.getActiveState()
+                    if (activeState?.commandName == "plan") {
+                        val result = planCommandExecutor.handleUserInput(command.text)
+                        renderer.renderInfo(result)
+                        return state
+                    }
+                }
+                
                 if (dialogService == null && state.currentTaskId != null) {
                     // Fallback: use old task executors if dialogService not available but task selected
                     renderer.renderRequestInfo(command.text, state.executionConfig)
@@ -198,7 +230,10 @@ class CliApplication(
             is Command.SetTemperature,
             is Command.SetMaxTokens,
             is Command.SetStopSequences,
-            is Command.ResetParameters -> {
+            is Command.ResetParameters,
+            is Command.Describe,
+            is Command.ShowState,
+            is Command.Abort -> {
                 handler.handle(command, state)
             }
 
@@ -229,6 +264,18 @@ class CliApplication(
             }
 
             // LLM integration commands
+            is Command.Plan -> {
+                if (planCommandExecutor == null) {
+                    renderer.renderError("PlanCommandExecutor not available")
+                    state
+                } else {
+                    val taskId = state.currentTodoTaskId?.toIntOrNull()
+                    val result = planCommandExecutor.execute(taskId)
+                    renderer.renderInfo(result)
+                    state
+                }
+            }
+
             is Command.PlanSteps -> {
                 if (dialogService == null) {
                     renderer.renderError("DialogService not available — LLM integration not configured")
@@ -441,6 +488,12 @@ class CliApplication(
                     // Отображение информации о профиле
                     val activeProfile = profileRepository?.findActive()
                     renderer.renderStatusProfile(activeProfile?.name)
+                    // US-DBG-5: Отображение статуса debug-режима
+                    val isDebugEnabled = debugCommandExecutor?.isEnabled() ?: false
+                    renderer.renderStatusDebug(isDebugEnabled)
+                    // US-STATUS-1: Отображение активной FSM-команды
+                    val activeCommandName = commandEngine?.getActiveState()?.commandName
+                    renderer.renderStatusActiveCommand(activeCommandName)
                     state
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")

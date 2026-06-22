@@ -13,6 +13,7 @@ import java.time.Instant
  * ## Свойства
  * - [id] — уникальный идентификатор задачи
  * - [title] — название задачи (не может быть пустым)
+ * - [description] — развёрнутое описание задачи (опционально, используется для планирования)
  * - [status] — текущий статус задачи
  * - [createdAt] — время создания задачи
  * - [updatedAt] — время последнего обновления задачи
@@ -21,16 +22,19 @@ import java.time.Instant
  * - [close()] — завершает задачу
  * - [cancel()] — отменяет задачу
  * - [updateTitle()] — обновляет название задачи
+ * - [updateDescription()] — обновляет описание задачи
  */
 data class Task(
     val id: TaskId,
     val title: String,
+    val description: String? = null,
     val status: TaskStatus,
     val createdAt: Instant,
     val updatedAt: Instant
 ) {
     init {
         require(title.isNotBlank()) { "Task title cannot be blank" }
+        require(description == null || description.isNotBlank()) { "Task description cannot be blank" }
     }
 
     /**
@@ -73,4 +77,21 @@ data class Task(
         require(newTitle.isNotBlank()) { "Task title cannot be blank" }
         return copy(title = newTitle, updatedAt = Instant.now())
     }
+
+    /**
+     * Обновляет описание задачи.
+     *
+     * @param newDescription новое описание задачи (не может быть пустым или состоять только из пробелов)
+     * @return новая копия задачи с обновлённым описанием и updatedAt
+     * @throws IllegalArgumentException если newDescription пустой или состоит только из пробелов
+     */
+    fun updateDescription(newDescription: String): Task {
+        require(newDescription.isNotBlank()) { "Task description cannot be blank" }
+        return copy(description = newDescription, updatedAt = Instant.now())
+    }
+
+    /**
+     * Проверяет, есть ли у задачи описание.
+     */
+    fun hasDescription(): Boolean = description != null && description.isNotBlank()
 }

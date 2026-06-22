@@ -79,4 +79,25 @@ interface CliRenderer {
 
     // Profile status rendering in :status command
     fun renderStatusProfile(profileName: String?)
+
+    // Debug mode status rendering in :status command
+    fun renderStatusDebug(enabled: Boolean)
+
+    // Active FSM command status rendering in :status command
+    fun renderStatusActiveCommand(commandName: String?)
+
+    // FSM (Finite State Machine) visualization for debug mode
+    fun renderFsmState(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState)
+
+    // Debug mode pause after step execution
+    fun waitForEnter()
+
+    // FSM state command rendering (:state)
+    fun renderFsmStateInfo(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState)
+    fun renderNoActiveCommand()
+
+    // Abort command rendering (:abort)
+    fun renderAbortConfirmation()
+    fun renderAbortSuccess()
+    fun renderAbortCancelled()
 }

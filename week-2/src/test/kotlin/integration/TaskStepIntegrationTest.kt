@@ -57,6 +57,12 @@ class TaskStepIntegrationTest {
             }
 
             override suspend fun exists(id: TaskId): Boolean = tasks.containsKey(id)
+
+            override suspend fun saveSteps(taskId: TaskId, steps: List<TaskStep>) {
+                // no-op for step integration tests
+            }
+
+            override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> = emptyList()
         }
         taskManagerExecutor = TaskManagerExecutor(taskRepository)
     }

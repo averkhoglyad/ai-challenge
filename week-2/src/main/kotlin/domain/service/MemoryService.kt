@@ -232,11 +232,13 @@ class MemoryService(
 
             SessionLevel.TASK_DETAIL -> {
                 val steps = taskId?.let { taskStepRepository?.findByTaskId(it) } ?: emptyList()
+                val taskDescription = taskId?.let { taskRepository?.findById(it)?.description }
                 WorkingMemory(
                     sessionId = sessionId,
                     currentMessages = emptyList(),
                     summary = null,
-                    steps = steps
+                    steps = steps,
+                    taskDescription = taskDescription
                 )
             }
         }

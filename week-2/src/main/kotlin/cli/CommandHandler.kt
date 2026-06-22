@@ -1,8 +1,7 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
-import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
+import io.averkhogliad.ai.challenge.week2.application.DialogService
+import io.averkhogliad.ai.challenge.week2.application.executor.*
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
 import io.averkhogliad.ai.challenge.week2.domain.TaskId
@@ -22,7 +21,9 @@ class CommandHandler(
     private val memoryService: MemoryService? = null,
     private val taskStepRepository: TaskStepRepository? = null,
     private val factRepository: FactRepository? = null,
-    private val dialogService: io.averkhogliad.ai.challenge.week2.application.DialogService? = null
+    private val dialogService: DialogService? = null,
+    private val planCommandExecutor: PlanCommandExecutor? = null,
+    private val debugCommandExecutor: DebugCommandExecutor? = null
 ) {
 
     suspend fun handle(command: Command, state: CliState): CliState {
@@ -131,6 +132,12 @@ class CommandHandler(
                 state.copy(currentTodoTaskId = null)
             }
 
+            is Command.Describe -> {
+                // Обработка команды :describe будет в CliApplication
+                // (требует многострочного ввода для нового описания)
+                state
+            }
+
             // Step management commands
             is Command.AddStep -> {
                 requireTaskOpen(state)
@@ -213,6 +220,12 @@ class CommandHandler(
             }
 
             // LLM integration commands
+            is Command.Plan -> {
+                // Обработка FSM-команды :plan будет в CliApplication
+                // (требует многострочного ввода для описания задачи)
+                state
+            }
+
             is Command.PlanSteps -> state
 
             // Profile management commands (PM)
@@ -249,6 +262,24 @@ class CommandHandler(
 
             is Command.ProfileShow -> {
                 // Рендеринг будет в CliApplication
+                state
+            }
+
+            is Command.Debug -> {
+                // Обработка команды :debug будет в CliApplication
+                // (требует рендеринга результата)
+                state
+            }
+
+            is Command.ShowState -> {
+                // Обработка команды :state будет в CliApplication
+                // (требует доступа к CommandEngine для получения состояния FSM)
+                state
+            }
+
+            is Command.Abort -> {
+                // Обработка команды :abort будет в CliApplication
+                // (требует подтверждения и вызова CommandEngine.abortCommand())
                 state
             }
 

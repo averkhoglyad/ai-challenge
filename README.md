@@ -162,7 +162,105 @@ Week-2 добавляет 6 команд для управления профи�
 | `:profile-content`  | `:profile-content [name]` | Показать содержимое профиля. Если имя не указано, показывает содержимое активного профиля.                                                                        |
 
 Команда [`:status`](week-2/src/main/kotlin/cli/CommandHandler.kt) также была обновлена — теперь она отображает имя
-активного профиля (если он установлен).
+активного профиля (если он установлен) и активную FSM-команду (если есть).
+
+## Команды управления задачами (FSM)
+
+Week-2 task-3 добавляет систему формализованного состояния команд с использованием паттерна FSM (Finite State Machine).
+Это позволяет реализовать многошаговые команды с явным управлением состоянием.
+
+### Команда `:plan`
+
+Команда `:plan` запускает многошаговый процесс планирования задачи:
+
+```
+> :plan Создать REST API для управления пользователями
+Шаг 1/3: Введите описание задачи
+> Задача описана
+Шаг 2/3: Введите критерии приёмки
+> Критерии указаны
+Шаг 3/3: Подтвердите план (да/нет)
+> да
+План создан и сохранён
+```
+
+**Состояния FSM:**
+
+- `PLANNING` — сбор информации о задаче (описание, критерии)
+- `EXECUTION` — выполнение плана
+- `VALIDATION` — проверка результатов
+- `DONE` — завершение
+
+### Команда `:state`
+
+Показывает текущее состояние активной FSM-команды:
+
+```
+> :state
+Active command: plan
+Stage: PLANNING
+Step: 2/3
+Expected action: Введите критерии приёмки
+Context:
+  description: Создать REST API для управления пользователями
+```
+
+Если нет активной команды:
+
+```
+> :state
+No active command
+```
+
+### Команда `:abort`
+
+Прерывает активную FSM-команду и сбрасывает её состояние:
+
+```
+> :abort
+Command 'plan' aborted
+```
+
+Если нет активной команды:
+
+```
+> :abort
+No active command to abort
+```
+
+### Команда `:status` (обновлена)
+
+Теперь отображает дополнительную информацию об активной FSM-команде:
+
+```
+> :status
+Active dialog: dialog-1
+Messages in dialog: 12
+Active profile: Эксперт (prof-1)
+Active command: plan
+Debug mode: disabled
+```
+
+### Архитектура FSM
+
+**Ключевые компоненты:**
+
+| Компонент              | Файл                                                                                           | Ответственность                                                                             |
+|------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `CommandEngine`        | [`CommandEngine.kt`](week-2/src/main/kotlin/domain/service/CommandEngine.kt)                   | Интерфейс для управления состоянием FSM                                                     |
+| `DefaultCommandEngine` | [`DefaultCommandEngine.kt`](week-2/src/main/kotlin/application/DefaultCommandEngine.kt)        | Реализация FSM с поддержкой `hasActiveCommand()`, `getActiveState()`, `abortCommand()`      |
+| `CommandState`         | [`CommandState.kt`](week-2/src/main/kotlin/domain/model/CommandState.kt)                       | Модель состояния: `commandName`, `currentStage`, `currentStep`, `expectedAction`, `context` |
+| `CommandStage`         | [`CommandStage.kt`](week-2/src/main/kotlin/domain/model/CommandStage.kt)                       | Enum: `PLANNING`, `EXECUTION`, `VALIDATION`, `DONE`                                         |
+| `PlanCommandExecutor`  | [`PlanCommandExecutor.kt`](week-2/src/main/kotlin/application/executor/PlanCommandExecutor.kt) | Пример многошаговой команды с FSM                                                           |
+
+**Принципы работы:**
+
+1. Команда создаёт `CommandState` при начале выполнения
+2. Состояние хранится в `CommandEngine` (in-memory)
+3. Каждый шаг обновляет `currentStage`, `currentStep`, `expectedAction`
+4. Команда `:state` читает состояние через `getActiveState()`
+5. Команда `:abort` вызывает `abortCommand()` для сброса
+6. После завершения (`DONE`) состояние автоматически очищается
 
 ### Примеры использования
 

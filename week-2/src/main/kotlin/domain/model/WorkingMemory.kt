@@ -21,7 +21,8 @@ data class WorkingMemory(
     val sessionId: SessionId,
     val currentMessages: List<Message>,
     val summary: String?,
-    val steps: List<TaskStep> = emptyList()
+    val steps: List<TaskStep> = emptyList(),
+    val taskDescription: String? = null
 ) {
     init {
         require(currentMessages.all { it.sessionId == sessionId }) {
@@ -75,6 +76,12 @@ data class WorkingMemory(
      * @return строковое представление контекста для включения в промпт
      */
     fun toPromptContext(): String = buildString {
+        if (taskDescription != null) {
+            appendLine("Task Description:")
+            appendLine(taskDescription)
+            appendLine()
+        }
+
         if (summary != null) {
             appendLine("Context Summary:")
             appendLine(summary)
@@ -116,16 +123,19 @@ data class WorkingMemory(
          *
          * @param sessionId идентификатор сессии
          * @param steps список шагов задачи (по умолчанию пустой)
+         * @param taskDescription описание задачи (опционально)
          * @return новый экземпляр [WorkingMemory]
          */
         fun forTaskLevel(
             sessionId: SessionId,
-            steps: List<TaskStep> = emptyList()
+            steps: List<TaskStep> = emptyList(),
+            taskDescription: String? = null
         ): WorkingMemory = WorkingMemory(
             sessionId = sessionId,
             currentMessages = emptyList(),
             summary = null,
-            steps = steps
+            steps = steps,
+            taskDescription = taskDescription
         )
     }
 }

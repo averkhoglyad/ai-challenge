@@ -330,4 +330,15 @@ class InMemoryTaskRepository : TaskRepository {
     override suspend fun exists(id: TaskId): Boolean {
         return tasks.containsKey(id)
     }
+
+    override suspend fun saveSteps(
+        taskId: TaskId,
+        steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>
+    ) {
+        // no-op for task management tests
+    }
+
+    override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> {
+        return emptyList()
+    }
 }

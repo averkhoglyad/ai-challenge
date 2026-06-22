@@ -7,6 +7,7 @@ import io.averkhogliad.ai.challenge.week2.application.DialogService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.application.executor.Task1Executor
 import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
+import io.averkhogliad.ai.challenge.week2.application.executor.Task3Executor
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
 import io.averkhogliad.ai.challenge.week2.cli.CliApplication
 import io.averkhogliad.ai.challenge.week2.cli.ConsoleCliRenderer
@@ -145,13 +146,32 @@ object ApplicationBootstrap {
         // 6a. Application: Task 2 executor (CLI-ассистент, копия Task 1) + profile delegation
         val task2Executor = Task2Executor(dialogService, memoryService, profileService)
 
+        // 6b. Application: Task 3 executor (CLI-ассистент, копия Task 2) + profile delegation
+        val task3Executor = Task3Executor(dialogService, memoryService, profileService)
+
+        // 6c. Application: PlanCommandExecutor (FSM-based планирование)
+        val planCommandExecutor = io.averkhogliad.ai.challenge.week2.application.executor.PlanCommandExecutor(
+            taskRepository = taskRepository,
+            factRepository = factRepository,
+            commandEngine = io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine(),
+            llmPort = llmPort
+        )
+
+        // 6d. Domain: DebugMode (управление debug-режимом)
+        val debugMode = io.averkhogliad.ai.challenge.week2.domain.model.DebugMode()
+
+        // 6e. Application: DebugCommandExecutor (управление debug-режимом через CLI)
+        val debugCommandExecutor =
+            io.averkhogliad.ai.challenge.week2.application.executor.DebugCommandExecutor(debugMode)
+
         // 7. CLI: renderer + facade
         val renderer = ConsoleCliRenderer()
 
         return CliApplication(
             executors = mapOf(
                 task1Executor.taskId to task1Executor,
-                task2Executor.taskId to task2Executor
+                task2Executor.taskId to task2Executor,
+                task3Executor.taskId to task3Executor
             ),
             renderer = renderer,
             taskManagerExecutor = taskManagerExecutor,
@@ -159,7 +179,9 @@ object ApplicationBootstrap {
             taskStepRepository = taskStepRepository,
             factRepository = factRepository,
             dialogService = dialogService,
-            profileRepository = profileRepository
+            profileRepository = profileRepository,
+            planCommandExecutor = planCommandExecutor,
+            debugCommandExecutor = debugCommandExecutor
         )
     }
 
