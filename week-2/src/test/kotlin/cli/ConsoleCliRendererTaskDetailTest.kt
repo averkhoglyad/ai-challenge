@@ -110,8 +110,8 @@ class ConsoleCliRendererTaskDetailTest {
             "Должна быть подсказка об отсутствии описания"
         )
         assertTrue(
-            output.contains(":describe"),
-            "Подсказка должна содержать команду :describe"
+            output.contains(":edit"),
+            "Подсказка должна содержать команду :edit"
         )
     }
 

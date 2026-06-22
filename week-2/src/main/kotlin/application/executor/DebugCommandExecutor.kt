@@ -39,18 +39,23 @@ class DebugCommandExecutor(
         when (action) {
             DebugAction.TOGGLE -> {
                 debugMode.toggle()
-                val state = if (debugMode.isEnabled) "включен" else "выключен"
-                return "Debug-режим $state."
+                return if (debugMode.isEnabled) "Debug mode enabled" else "Debug mode disabled"
             }
 
             DebugAction.ON -> {
+                if (debugMode.isEnabled) {
+                    return "Debug mode already enabled"
+                }
                 debugMode.enable()
-                return "Debug-режим включен."
+                return "Debug mode enabled"
             }
 
             DebugAction.OFF -> {
+                if (!debugMode.isEnabled) {
+                    return "Debug mode already disabled"
+                }
                 debugMode.disable()
-                return "Debug-режим выключен."
+                return "Debug mode disabled"
             }
         }
     }

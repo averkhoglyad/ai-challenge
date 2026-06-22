@@ -72,6 +72,10 @@ class CommandHandler(
             is Command.SwitchDialog -> state
             is Command.ShowHistory -> state
 
+            // Goto commands (no-op for CommandHandler, handled by CliApplication)
+            is Command.Goto -> state
+            is Command.GotoState -> state
+
             // Compression commands (no-op for now, handled by CliApplication)
             is Command.SetCompressionEnabled -> state
             is Command.SetCompressionWindow -> state
@@ -130,12 +134,6 @@ class CommandHandler(
             is Command.CancelTask -> {
                 taskManagerExecutor?.handleCancelTask(command.id)
                 state.copy(currentTodoTaskId = null)
-            }
-
-            is Command.Describe -> {
-                // Обработка команды :describe будет в CliApplication
-                // (требует многострочного ввода для нового описания)
-                state
             }
 
             // Step management commands
@@ -282,6 +280,10 @@ class CommandHandler(
                 // (требует подтверждения и вызова CommandEngine.abortCommand())
                 state
             }
+
+            is Command.InvariantAdd -> state
+            is Command.InvariantList -> state
+            is Command.InvariantRemove -> state
 
             is Command.UserInput -> state
             is Command.Unknown -> state

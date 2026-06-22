@@ -15,7 +15,8 @@ class DialogService(
     private val memoryService: MemoryService,
     private val promptBuilder: PromptBuilder,
     private val taskExecutionConfig: TaskExecutionConfig = TaskExecutionConfig(),
-    private val profileRepository: ProfileRepository? = null  // NEW: доступ к активному профилю для встраивания в промпт
+    private val profileRepository: ProfileRepository? = null,  // доступ к активному профилю для встраивания в промпт
+    private val invariantService: InvariantService? = null  // NEW: доступ к инвариантам для встраивания в промпт
 ) {
     suspend fun chat(
         userInput: String,
@@ -34,12 +35,15 @@ class DialogService(
             )
             // NEW: получаем активный профиль для встраивания в промпт
             val activeProfile = profileRepository?.findActive()
+            // NEW: получаем активные инварианты для встраивания в промпт
+            val invariants = invariantService?.list() ?: emptyList()
             val chatMessages = promptBuilder.buildChatMessages(
                 workingMemory = memoryContext.workingMemory,
                 relevantFacts = memoryContext.relevantFacts,
                 recentMessages = memoryContext.recentMessages,
                 userInput = userInput,
-                profile = activeProfile  // NEW: передача активного профиля
+                profile = activeProfile,  // NEW: передача активного профиля
+                invariants = invariants  // NEW: передача инвариантов
             )
             memoryService.saveUserMessage(level, taskId, userInput)
             val result = llmPort.chatWithMessages(chatMessages, taskExecutionConfig)
@@ -70,11 +74,14 @@ class DialogService(
                 userQuery = taskTitle,
                 factSearchLimit = 3
             )
+            // NEW: получаем активные инварианты для встраивания в промпт планирования
+            val invariants = invariantService?.list() ?: emptyList()
             val planPrompt = promptBuilder.buildPlanPrompt(
                 taskTitle = taskTitle,
                 taskDescription = taskDescription,
                 workingMemory = memoryContext.workingMemory,
-                relevantFacts = memoryContext.relevantFacts
+                relevantFacts = memoryContext.relevantFacts,
+                invariants = invariants  // NEW: передача инвариантов
             )
             llmPort.chat(Prompt(planPrompt), taskExecutionConfig)
         } catch (e: kotlinx.coroutines.CancellationException) {

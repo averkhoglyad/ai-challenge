@@ -36,12 +36,13 @@ class TaskManagerExecutor(
      * @param title название задачи
      * @return созданная задача
      */
-    suspend fun handleAddTask(title: String): Task {
+    suspend fun handleAddTask(title: String, description: String? = null): Task {
         val taskId = TaskId(UUID.randomUUID().toString())
         val now = Instant.now()
         val task = Task(
             id = taskId,
             title = title,
+            description = description?.takeIf { it.isNotBlank() },
             status = TaskStatus.OPEN,
             createdAt = now,
             updatedAt = now
@@ -143,6 +144,24 @@ class TaskManagerExecutor(
             currentTaskId = null
         }
         return cancelledTask
+    }
+
+    /**
+     * Обновляет описание задачи.
+     *
+     * @param id идентификатор задачи (если null, используется [currentTaskId])
+     * @param description новое описание задачи
+     * @return обновлённая задача
+     * @throws IllegalStateException если не указан ID и нет открытой задачи
+     * @throws IllegalArgumentException если задача не найдена
+     */
+    suspend fun handleUpdateDescription(id: TaskId?, description: String): Task {
+        val taskId =
+            id ?: currentTaskId ?: throw IllegalStateException("No task specified and no task is currently open")
+        val task = taskRepository.findById(taskId) ?: throw IllegalArgumentException("Task not found: $taskId")
+        val updatedTask = task.updateDescription(description)
+        taskRepository.save(updatedTask)
+        return updatedTask
     }
 
     /**

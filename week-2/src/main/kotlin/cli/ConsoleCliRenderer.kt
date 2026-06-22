@@ -107,8 +107,10 @@ class ConsoleCliRenderer : CliRenderer {
     }
 
     override fun renderPrompt(state: CliState) {
-        if (state.currentTaskId == null) {
+        if (state.currentTaskId == null && !state.taskListMode) {
             print("Выберите задачу (номер, 0=выход, :help=помощь): ")
+        } else if (state.taskListMode) {
+            print("task> ")
         } else {
             print("prompt> ")
         }
@@ -116,7 +118,7 @@ class ConsoleCliRenderer : CliRenderer {
 
     override fun renderHelp(state: CliState) {
         println()
-        if (state.currentTaskId == null) {
+        if (state.currentTaskId == null && !state.taskListMode) {
             println("Доступные команды:")
             println("  :help, :h     — эта справка")
             println("  :quit, :q     — выход из программы")
@@ -127,21 +129,54 @@ class ConsoleCliRenderer : CliRenderer {
             println("  :help, :h     — эта справка")
             println("  :quit, :q     — выход из программы")
             println("  :back, :b     — вернуться к выбору задачи")
-            println("  :temp [value] — установить температуру (0.0-2.0); без аргументов — показать")
-            println("  :maxtokens [n]— установить макс. кол-во токенов; без аргументов — показать")
-            println("  :stop [s1,s2] — установить стоп-последовательности; без аргументов — сбросить")
-            println("  :reset        — сбросить все параметры к значениям по умолчанию")
-            println("  :params       — показать текущие параметры")
             println()
-            println("Команды диалогов:")
-            println("  :new [title]  — создать новый диалог (заголовок опционально)")
-            println("  :list         — список всех диалогов")
-            println("  :history [id] — показать историю сообщений диалога (по умолчанию — текущий)")
-            println("  :switch <id>  — переключиться на диалог по ID")
-            println("  :delete <id>  — удалить диалог по ID")
+
+            // ──── Команды управления задачами ────
+            println("Команды управления задачами:")
+            println("  :add <title>              — добавить новую задачу")
+            println("  :tasks                    — показать список задач")
+            println("  :edit [id] <title>        — редактировать задачу (без id — текущую)")
+            println("  :drop [id]                — удалить задачу (без id — текущую)")
+            println("  :open <id>                — открыть задачу")
+            println("  :close [id]               — закрыть задачу (без id — текущую)")
+            println("  :cancel [id]              — отменить задачу (без id — текущую)")
+            println()
+
+            // ──── Команды управления шагами ────
+            println("Команды управления шагами:")
+            println("  :step-add <text>          — добавить шаг к текущей задаче")
+            println("  :step-list                — показать список шагов")
+            println("  :step-done <id>           — отметить шаг выполненным")
+            println()
+
+            // ──── Команды планирования и FSM ────
+            println("Команды планирования и FSM:")
+            println("  :plan [title] [desc]      — сгенерировать план шагов через LLM")
+            println("  :debug [on|off]           — вкл/выкл debug-режим (без аргументов — toggle)")
+            println("  :state                    — показать состояние активной FSM-команды")
+            println("  :abort                    — прервать активную FSM-команду")
+            println()
+
+            // ──── Команды памяти ────
+            println("Команды памяти:")
+            println("  :status                   — показать состояние памяти (STM/WM/LTM)")
+            println("  :clear                    — очистить STM текущей сессии")
+            println("  :ctx-save <content>       — сохранить факт в LTM")
+            println("  :ctx-list                 — показать все факты LTM")
+            println("  :ctx-forget <id>          — удалить факт из LTM")
+            println("  :ctx-search <query>       — поиск фактов в LTM")
+            println()
+
+            // ──── Команды управления параметрами LLM ────
+            println("Команды управления параметрами LLM:")
+            println("  :temp [value]             — установить температуру (0.0-2.0); без аргументов — показать")
+            println("  :maxtokens [n]            — установить макс. кол-во токенов; без аргументов — показать")
+            println("  :stop [s1,s2,...]         — установить стоп-последовательности; без аргументов — сбросить")
+            println("  :reset                    — сбросить все параметры к значениям по умолчанию")
+            println("  :params                   — показать текущие параметры")
+            println()
 
             // ──── Команды управления профилями ────
-            println()
             println("Команды управления профилями:")
             println("  :profile-new <name>      — создать новый профиль")
             println("  :profile-list            — список всех профилей")
@@ -149,40 +184,13 @@ class ConsoleCliRenderer : CliRenderer {
             println("  :profile-edit <name>     — редактировать профиль")
             println("  :profile-delete <name>   — удалить профиль")
             println("  :profile-show [name]     — показать содержимое профиля")
+            println()
 
-            // ──── Task 4: команды сжатия контекста ────
-            if ((state.currentTaskId ?: 0) >= 4) {
-                println()
-                println("Команды сжатия контекста:")
-                println("  :compression on          — включить сжатие")
-                println("  :compression off         — выключить сжатие")
-                println("  :compression window <N>  — размер скользящего окна")
-                println("  :compression block <K>   — размер блока для суммаризации")
-                println("  :compression status      — показать текущий статус сжатия")
-            }
-
-            // ──── Task 5: команды стратегий контекста ────
-            if (state.currentTaskId == 5) {
-                println()
-                println("Команды стратегий:")
-                println("  :strategy [index]        — меню/выбор стратегии")
-                println("  :strategy info           — показать текущую стратегию")
-                println()
-                println("Команды веток (Branching):")
-                println("  :branch create <name>    — создать новую ветку")
-                println("  :branch switch <name>    — переключиться на ветку")
-                println("  :branch list             — список веток")
-                println()
-                println("Команды чекпоинтов (Branching):")
-                println("  :checkpoint              — создать чекпоинт")
-                println("  :checkpoint list         — список чекпоинтов")
-                println()
-                println("Команды фактов (Sticky Facts):")
-                println("  :facts                   — список фактов")
-                println("  :facts add <key>=<value> — добавить факт")
-                println("  :facts remove <key>      — удалить факт")
-                println("  :facts clear             — очистить все факты")
-            }
+            // ──── Команды управления инвариантами ────
+            println("Команды управления инвариантами:")
+            println("  :invariant add <rule>    — добавить новый инвариант")
+            println("  :invariant list          — показать список инвариантов")
+            println("  :invariant remove <id>   — удалить инвариант по ID")
         }
         println()
     }
@@ -269,7 +277,7 @@ class ConsoleCliRenderer : CliRenderer {
         if (task.hasDescription()) {
             println("    ${task.description}")
         } else {
-            println("    (Описание отсутствует. Используйте :describe ${task.id.value} для добавления)")
+            println("    (Описание отсутствует. Используйте :edit ${task.id.value} для добавления)")
         }
         println()
     }
@@ -777,5 +785,184 @@ class ConsoleCliRenderer : CliRenderer {
         println()
         println("Прерывание отменено")
         println()
+    }
+
+    // ──── Invariant management rendering methods ────
+
+    /**
+     * Отрендерить список инвариантов.
+     */
+    override fun renderInvariantList(invariants: List<Invariant>) {
+        println()
+        if (invariants.isEmpty()) {
+            println("Инварианты не заданы.")
+        } else {
+            println("Активные инварианты:")
+            invariants.forEach { inv ->
+                println("  ${inv.id.value}. ${inv.rule}")
+            }
+        }
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение о добавлении инварианта.
+     */
+    override fun renderInvariantAdded(invariant: Invariant) {
+        println()
+        println("[OK] Инвариант #${invariant.id.value} добавлен.")
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об удалении инварианта.
+     */
+    override fun renderInvariantRemoved(id: Int) {
+        println()
+        println("[OK] Инвариант #$id удалён.")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: инвариант не найден.
+     */
+    override fun renderInvariantNotFound(id: Int) {
+        println()
+        println("[ОШИБКА] Инвариант #$id не найден.")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: пустое правило.
+     */
+    override fun renderInvariantEmptyRule() {
+        println()
+        println("[ОШИБКА] Инвариант не может быть пустым.")
+        println()
+    }
+
+    /**
+     * Отрендерить запрос подтверждения удаления инварианта.
+     */
+    override fun renderInvariantRemoveConfirmation(id: Int) {
+        println()
+        print("Удалить инвариант #$id? Это расширит границы дозволенного для агента. (y/n): ")
+        System.out.flush()
+    }
+
+    /**
+     * Отрендерить количество инвариантов в :status.
+     */
+    override fun renderStatusInvariants(count: Int) {
+        println("  Inv: $count инвариант${if (count == 1) "" else if (count in 2..4) "а" else "ов"}")
+    }
+
+    // ──── FSM status in :status command ────
+
+    /**
+     * Отрендерить информацию о FSM в выводе команды :status.
+     *
+     * Формат: "FSM: :plan в состоянии EXECUTION (доступно: VALIDATION, PLANNING)"
+     * Если нет активной команды: "FSM: нет активной команды"
+     *
+     * @param stage текущий этап FSM или null если нет активной команды
+     * @param availableTransitions список доступных переходов
+     */
+    override fun renderStatusFsm(stage: CommandStage?, availableTransitions: List<Transition>) {
+        if (stage != null && availableTransitions.isNotEmpty()) {
+            val transitionNames = availableTransitions.joinToString(", ") { it.to.name }
+            println("  FSM: :plan в состоянии $stage (доступно: $transitionNames)")
+        } else if (stage != null) {
+            println("  FSM: :plan в состоянии $stage (доступно: нет)")
+        } else {
+            println("  FSM: нет активной команды")
+        }
+    }
+
+    // ──── Goto command rendering methods ────
+
+    /**
+     * Отрендерить карту состояний FSM.
+     */
+    override fun renderStateMap(stateMap: StateMap) {
+        println()
+        println("=== Карта состояний FSM ===")
+        println("Активная команда: :plan")
+        println("Текущее состояние: ● ${stateMap.currentState}")
+        println()
+
+        println("Состояния:")
+        for (stateInfo in stateMap.states) {
+            val marker = if (stateInfo.isCurrent) "●" else "○"
+            val availability = if (stateInfo.isCurrent) " (текущее)" else stateInfo.reason
+            println("  $marker ${stateInfo.state} $availability")
+        }
+
+        println()
+        if (stateMap.availableTransitions.isNotEmpty()) {
+            println("Доступные переходы:")
+            for (transition in stateMap.availableTransitions) {
+                println("  → ${transition.to} — ${transition.description}")
+            }
+        } else {
+            println("Доступные переходы: нет")
+        }
+        println()
+    }
+
+    /**
+     * Отрендерить успешный переход.
+     */
+    override fun renderGotoSuccess(from: CommandStage, to: CommandStage) {
+        println()
+        println("[OK] Переход $from → $to выполнен.")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку перехода.
+     */
+    override fun renderGotoError(reason: String) {
+        println()
+        println("[ОШИБКА ПЕРЕХОДА] $reason")
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об отсутствии активной команды.
+     */
+    override fun renderGotoNoActiveCommand() {
+        println()
+        println("Нет активной команды")
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение о неверном имени состояния.
+     */
+    override fun renderGotoInvalidState(stateName: String) {
+        println()
+        println("[ОШИБКА] Некорректное состояние: \"$stateName\"")
+        println("Допустимые состояния: ${CommandStage.entries.joinToString(", ") { it.name }}")
+        println()
+    }
+
+    // ──── Debug mode — available transitions rendering ────
+
+    /**
+     * Отрендерить доступные переходы в debug-режиме после каждого шага.
+     *
+     * Выводит список целевых состояний с описаниями в формате:
+     *   → STATE (описание)
+     *
+     * @param transitions список доступных переходов из текущего состояния
+     */
+    override fun renderAvailableTransitions(transitions: List<Transition>) {
+        if (transitions.isNotEmpty()) {
+            println("  Available transitions:")
+            for (transition in transitions) {
+                println("  → ${transition.to} (${transition.description})")
+            }
+        }
     }
 }

@@ -275,13 +275,25 @@ sealed interface Command {
     data object Abort : Command
 
     /**
-     * Обновить описание задачи.
-     * Команда `:describe <taskId>`.
+     * Показать карту состояний активной команды FSM.
+     * Команда `:goto` (без аргументов).
      *
-     * Запускает FSM-процесс обновления описания задачи.
-     * ID задачи обязателен.
+     * Выводит все состояния и доступные переходы из текущего состояния.
+     * Если нет активной команды — сообщение "Нет активной команды".
      */
-    data class Describe(val taskId: TaskId) : Command
+    data object Goto : Command
+
+    /**
+     * Выполнить явный переход в указанное состояние FSM.
+     * Команда `:goto <state>`.
+     *
+     * Валидирует переход через TransitionValidator.
+     * При успехе — показывает `[OK] Переход X → Y выполнен.`
+     * При ошибке — показывает причину и список доступных переходов.
+     *
+     * @param targetStage целевое состояние, введённое пользователем (строка)
+     */
+    data class GotoState(val targetStage: String) : Command
 
     /**
      * Действие для команды debug.
@@ -318,6 +330,25 @@ sealed interface Command {
 
     /** Показать содержимое профиля: `:profile-show [name]` */
     data class ProfileShow(val name: String? = null) : Command
+
+    // ═══════════════════════════════════════════════════════════════
+    // Команды управления инвариантами агента
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Добавить новый инвариант.
+     * Команда `:invariant add <rule>`.
+     */
+    data class InvariantAdd(val rule: String) : Command
+
+    /** Показать список всех инвариантов: `:invariant list` */
+    data object InvariantList : Command
+
+    /**
+     * Удалить инвариант по ID.
+     * Команда `:invariant remove <id>`.
+     */
+    data class InvariantRemove(val id: Int) : Command
 
     // ═══════════════════════════════════════════════════════════════
     // Пользовательский ввод

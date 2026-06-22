@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.application.executor
 
+import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
@@ -34,7 +35,8 @@ class PlanCommandExecutor(
     private val taskRepository: TaskRepository,
     private val factRepository: FactRepository,
     private val commandEngine: CommandEngine,
-    private val llmPort: LlmPort? = null
+    private val llmPort: LlmPort? = null,
+    private val invariantService: InvariantService? = null
 ) {
 
     val commandName: String = "plan"
@@ -77,6 +79,17 @@ class PlanCommandExecutor(
         commandEngine.putContext("description", task.description ?: "")
         commandEngine.advanceStep("Сбор релевантных фактов из LTM...")
 
+        // Загружаем инварианты и сохраняем в контекст FSM
+        val invariants = invariantService?.list() ?: emptyList()
+        if (invariants.isNotEmpty()) {
+            val invariantsText = buildInvariantsBlock(invariants)
+            commandEngine.putContext("invariants", invariantsText)
+            commandEngine.putContext("invariantsCount", invariants.size.toString())
+        } else {
+            commandEngine.putContext("invariants", "")
+            commandEngine.putContext("invariantsCount", "0")
+        }
+
         // Собираем факты из LTM (поиск по названию задачи)
         val relevantFacts = collectRelevantFacts(task.title, task.description)
 
@@ -92,7 +105,7 @@ class PlanCommandExecutor(
         // Переходим к этапу EXECUTION
         commandEngine.advanceToStage(CommandStage.EXECUTION, "Формирование промпта для LLM...")
 
-        return buildPlanningReadyMessage(task.title, task.description, relevantFacts)
+        return buildPlanningReadyMessage(task.title, task.description, relevantFacts, invariants.size)
     }
 
     /**
@@ -118,6 +131,17 @@ class PlanCommandExecutor(
         commandEngine.putContext("description", userInput)
         commandEngine.advanceStep("Сбор релевантных фактов из LTM...")
 
+        // Загружаем инварианты и сохраняем в контекст FSM
+        val invariants = invariantService?.list() ?: emptyList()
+        if (invariants.isNotEmpty()) {
+            val invariantsText = buildInvariantsBlock(invariants)
+            commandEngine.putContext("invariants", invariantsText)
+            commandEngine.putContext("invariantsCount", invariants.size.toString())
+        } else {
+            commandEngine.putContext("invariants", "")
+            commandEngine.putContext("invariantsCount", "0")
+        }
+
         // Собираем факты из LTM
         val taskTitle = commandEngine.getContext("taskTitle") ?: ""
         val relevantFacts = collectRelevantFacts(taskTitle, userInput)
@@ -134,7 +158,7 @@ class PlanCommandExecutor(
         // Переходим к этапу EXECUTION
         commandEngine.advanceToStage(CommandStage.EXECUTION, "Формирование промпта для LLM...")
 
-        return buildPlanningReadyMessage(taskTitle, userInput, relevantFacts)
+        return buildPlanningReadyMessage(taskTitle, userInput, relevantFacts, invariants.size)
     }
 
     /**
@@ -207,13 +231,19 @@ class PlanCommandExecutor(
      * @param facts список релевантных фактов
      * @return готовое сообщение
      */
-    private fun buildPlanningReadyMessage(taskTitle: String, description: String?, facts: List<Fact>): String {
+    private fun buildPlanningReadyMessage(
+        taskTitle: String,
+        description: String?,
+        facts: List<Fact>,
+        invariantsCount: Int = 0
+    ): String {
         val sb = StringBuilder()
         sb.appendLine("✅ Этап PLANNING завершён для задачи '$taskTitle'.")
         sb.appendLine()
         sb.appendLine("📋 Контекст собран:")
         sb.appendLine("• Description: ${description ?: "(не указан)"}")
         sb.appendLine("• Релевантных фактов из LTM: ${facts.size}")
+        sb.appendLine("• Активных инвариантов: $invariantsCount")
 
         if (facts.isNotEmpty()) {
             sb.appendLine()
@@ -254,9 +284,10 @@ class PlanCommandExecutor(
         val taskTitle = commandEngine.getContext("taskTitle") ?: ""
         val description = commandEngine.getContext("description") ?: ""
         val relevantFacts = commandEngine.getContext("relevantFacts") ?: ""
+        val invariants = commandEngine.getContext("invariants") ?: ""
 
         // Формируем промпт для LLM
-        val prompt = buildPlanningPrompt(taskTitle, description, relevantFacts)
+        val prompt = buildPlanningPrompt(taskTitle, description, relevantFacts, invariants)
 
         // Отправляем запрос к LLM
         val config = TaskExecutionConfig(
@@ -267,25 +298,37 @@ class PlanCommandExecutor(
         val result = try {
             llmPort.chat(Prompt(prompt), config)
         } catch (e: Exception) {
-            return "Ошибка при обращении к LLM: ${e.message}"
+            // US-ROLLBACK-1: Сохраняем ошибку в контекст FSM и предлагаем откат
+            commandEngine.putContext("executionError", e.message ?: "Неизвестная ошибка")
+            return buildExecutionErrorMessage(e.message ?: "Неизвестная ошибка")
         }
 
         // Обрабатываем результат
         return when (result) {
             is TaskResult.Success -> {
-                val steps = parseStepsFromLlmResponse(result.content)
-                if (steps.isEmpty()) {
-                    "Ошибка: LLM не вернула список шагов. Попробуйте переформулировать запрос."
+                // Проверяем, не содержит ли ответ отказ из-за инвариантов
+                if (invariants.isNotEmpty() && isInvariantRefusal(result.content)) {
+                    // Конфликт с инвариантами — завершаем FSM с ошибкой
+                    commandEngine.completeCommand()
+                    val conflictingRule = extractConflictingRule(result.content)
+                    buildInvariantConflictMessage(taskTitle, conflictingRule)
                 } else {
-                    // Сохраняем шаги в контекст FSM
-                    val stepsJson = steps.joinToString("\n") { it }
-                    commandEngine.putContext("generatedSteps", stepsJson)
-                    commandEngine.putContext("stepsCount", steps.size.toString())
+                    val steps = parseStepsFromLlmResponse(result.content)
+                    if (steps.isEmpty()) {
+                        // US-ROLLBACK-1: Пустой ответ LLM — сохраняем ошибку и предлагаем откат
+                        commandEngine.putContext("executionError", "LLM не вернула список шагов")
+                        buildExecutionErrorMessage("LLM не вернула список шагов")
+                    } else {
+                        // Сохраняем шаги в контекст FSM
+                        val stepsJson = steps.joinToString("\n") { it }
+                        commandEngine.putContext("generatedSteps", stepsJson)
+                        commandEngine.putContext("stepsCount", steps.size.toString())
 
-                    // Переходим к этапу VALIDATION
-                    commandEngine.advanceToStage(CommandStage.VALIDATION, "Ожидание подтверждения пользователя...")
+                        // Переходим к этапу VALIDATION
+                        commandEngine.advanceToStage(CommandStage.VALIDATION, "Ожидание подтверждения пользователя...")
 
-                    buildValidationMessage(steps)
+                        buildValidationMessage(steps)
+                    }
                 }
             }
 
@@ -305,12 +348,42 @@ class PlanCommandExecutor(
      * @param taskTitle название задачи
      * @param description описание задачи
      * @param relevantFacts релевантные факты из LTM
+     * @param invariantsText текстовый блок инвариантов (может быть пустым)
      * @return промпт для LLM
      */
-    private fun buildPlanningPrompt(taskTitle: String, description: String, relevantFacts: String): String {
+    private fun buildPlanningPrompt(
+        taskTitle: String,
+        description: String,
+        relevantFacts: String,
+        invariantsText: String = ""
+    ): String {
         return buildString {
+            // Блок инвариантов — всегда первый, выше всех инструкций
+            if (invariantsText.isNotEmpty()) {
+                appendLine(invariantsText)
+                appendLine()
+            }
+
             appendLine("Ты — помощник по планированию задач. Твоя задача — разбить задачу на конкретные выполнимые шаги.")
             appendLine()
+
+            // Правила обработки инвариантов при планировании
+            if (invariantsText.isNotEmpty()) {
+                appendLine("=== ПРАВИЛА ОБРАБОТКИ ИНВАРИАНТОВ ПРИ ПЛАНИРОВАНИИ ===")
+                appendLine("ЖЁСТКИЕ ПРАВИЛА (ИНВАРИАНТЫ) — это ограничения, которые ты НЕ ИМЕЕШЬ ПРАВА НАРУШАТЬ ни при каких обстоятельствах.")
+                appendLine()
+                appendLine("Перед генерацией шагов ВСЕГДА проверяй:")
+                appendLine("1. Противоречит ли САМА ЗАДАЧА какому-либо инварианту?")
+                appendLine("2. Если задача САМА ПО СЕБЕ нарушает инвариант (например, «Миграция на MongoDB» при инварианте «Только PostgreSQL»):")
+                appendLine("   — НЕ генерируй шаги для этой задачи")
+                appendLine("   — Вместо списка шагов напиши ТОЛЬКО сообщение об отказе в формате:")
+                appendLine("     ❌ Нарушение инварианта: [укажи нарушенный инвариант]")
+                appendLine("     Задача «[название]» противоречит инварианту: [процитируй правило].")
+                appendLine("     💡 Альтернатива: [предложи разрешённую альтернативу]")
+                appendLine("3. Если задача НЕ нарушает инварианты — генерируй шаги как обычно, но не предлагай шагов, нарушающих инварианты.")
+                appendLine()
+            }
+
             appendLine("## Задача:")
             appendLine("Название: $taskTitle")
             appendLine("Описание: $description")
@@ -332,6 +405,12 @@ class PlanCommandExecutor(
             appendLine("2. Второй шаг")
             appendLine("3. Третий шаг")
             appendLine()
+
+            if (invariantsText.isNotEmpty()) {
+                appendLine("ВАЖНО: Если задача сама по себе нарушает инварианты — НЕ генерируй шаги, а верни только отказ с ❌ и 💡.")
+                appendLine()
+            }
+
             appendLine("Сгенерируй список шагов:")
         }
     }
@@ -510,15 +589,33 @@ class PlanCommandExecutor(
         val state = commandEngine.getActiveState()
             ?: return "Ошибка: команда ':plan' не активна"
 
-        if (state.currentStage != CommandStage.VALIDATION) {
-            return "Ошибка: команда ':plan' не на этапе VALIDATION"
-        }
+        return when (state.currentStage) {
+            CommandStage.PLANNING -> {
+                // На этапе PLANNING — обрабатываем ввод description
+                handleDescriptionInput(userInput)
+            }
 
-        val editMode = commandEngine.getContext("editMode")
-        return if (editMode == "true") {
-            handleEditInput(userInput)
-        } else {
-            handleValidationInput(userInput)
+            CommandStage.EXECUTION -> {
+                // На этапе EXECUTION — запускаем выполнение
+                executeExecution()
+            }
+
+            CommandStage.VALIDATION -> {
+                val editMode = commandEngine.getContext("editMode")
+                if (editMode == "true") {
+                    handleEditInput(userInput)
+                } else {
+                    handleValidationInput(userInput)
+                }
+            }
+
+            CommandStage.DONE -> {
+                "Ошибка: команда ':plan' уже завершена"
+            }
+
+            CommandStage.TERMINATED -> {
+                "Ошибка: команда ':plan' была прервана (TERMINATED)"
+            }
         }
     }
 
@@ -572,6 +669,98 @@ class PlanCommandExecutor(
 
         // Показываем обновлённые шаги для подтверждения
         return buildValidationMessage(newSteps)
+    }
+
+    /**
+     * Формирует текстовый блок [INVARIANTS] для вставки в промпт.
+     *
+     * @param invariants список инвариантов
+     * @return текстовая строка блока инвариантов
+     */
+    private fun buildInvariantsBlock(invariants: List<Invariant>): String {
+        val sb = StringBuilder()
+        sb.appendLine("[INVARIANTS - DO NOT VIOLATE]")
+        invariants.forEachIndexed { index, inv ->
+            sb.appendLine("${index + 1}. ${inv.rule}")
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Проверяет, содержит ли ответ LLM отказ из-за инвариантов.
+     * Распознаёт маркер ❌ в ответе.
+     *
+     * @param response ответ от LLM
+     * @return true, если ответ содержит отказ по инвариантам
+     */
+    private fun isInvariantRefusal(response: String): Boolean {
+        return response.contains("❌") && (
+                response.contains("Нарушение инварианта") ||
+                        response.contains("нарушение инварианта") ||
+                        response.contains("противоречит инварианту")
+                )
+    }
+
+    /**
+     * Извлекает текст нарушенного инварианта из ответа LLM с отказом.
+     *
+     * @param response ответ от LLM с отказом
+     * @return текст нарушенного правила или "неизвестный инвариант"
+     */
+    private fun extractConflictingRule(response: String): String {
+        // Ищем строку после "инвариант:" или "инварианту:"
+        val patterns = listOf(
+            Regex("""инварианту:\s*(.+?)(?:\.|$)""", RegexOption.IGNORE_CASE),
+            Regex("""инвариант:\s*(.+?)(?:\.|$)""", RegexOption.IGNORE_CASE)
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(response)
+            if (match != null) {
+                return match.groupValues[1].trim()
+            }
+        }
+        return "неизвестный инвариант"
+    }
+
+    /**
+     * Строит сообщение о конфликте задачи с инвариантами.
+     *
+     * @param taskTitle название задачи
+     * @param conflictingRule текст конфликтующего инварианта
+     * @return сообщение для пользователя
+     */
+    private fun buildInvariantConflictMessage(taskTitle: String, conflictingRule: String): String {
+        val sb = StringBuilder()
+        sb.appendLine("⚠️ Обнаружен конфликт с инвариантом!")
+        sb.appendLine()
+        sb.appendLine("Задача «$taskTitle» противоречит инварианту:")
+        sb.appendLine("\"$conflictingRule\"")
+        sb.appendLine()
+        sb.appendLine("Я не могу составить план для этой задачи, пока инвариант активен.")
+        sb.appendLine()
+        sb.appendLine("Варианты:")
+        sb.appendLine("1. Изменить задачу через :edit или :describe")
+        sb.appendLine("2. Удалить инвариант через :invariant remove <id>")
+        return sb.toString()
+    }
+
+    /**
+     * Строит сообщение об ошибке выполнения с информацией о возможности отката.
+     *
+     * US-ROLLBACK-1: Сообщает пользователю о доступном откате в PLANNING.
+     *
+     * @param errorMessage сообщение об ошибке
+     * @return сообщение для пользователя
+     */
+    private fun buildExecutionErrorMessage(errorMessage: String): String {
+        val sb = StringBuilder()
+        sb.appendLine("Ошибка: $errorMessage")
+        sb.appendLine()
+        sb.appendLine("Доступные действия:")
+        sb.appendLine("  :goto PLANNING  — откатиться на этап планирования (контекст сохранится)")
+        sb.appendLine("  :goto           — посмотреть карту состояний")
+        sb.appendLine("  :abort          — прервать команду")
+        return sb.toString()
     }
 
     /**

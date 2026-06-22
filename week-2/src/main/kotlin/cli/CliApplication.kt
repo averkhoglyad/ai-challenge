@@ -52,7 +52,8 @@ class CliApplication(
     private val profileRepository: ProfileRepository? = null,
     private val planCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.PlanCommandExecutor? = null,
     private val commandEngine: CommandEngine? = null,
-    private val debugCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.DebugCommandExecutor? = null
+    private val debugCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.DebugCommandExecutor? = null,
+    private val invariantService: io.averkhogliad.ai.challenge.week2.application.InvariantService? = null
 ) : AutoCloseable {
 
     private val handler = CommandHandler(
@@ -75,6 +76,11 @@ class CliApplication(
             val activeState = commandEngine?.getActiveState()
             if (activeState != null) {
                 renderer.renderFsmState(activeState)
+                // US-DBG-1: Show available transitions after each debug step
+                val availableTransitions = commandEngine?.getAvailableTransitions()
+                if (availableTransitions != null && availableTransitions.isNotEmpty()) {
+                    renderer.renderAvailableTransitions(availableTransitions)
+                }
                 // US-DBG-4: Pause after step in debug mode
                 renderer.waitForEnter()
             }
@@ -231,10 +237,94 @@ class CliApplication(
             is Command.SetMaxTokens,
             is Command.SetStopSequences,
             is Command.ResetParameters,
-            is Command.Describe,
             is Command.ShowState,
             is Command.Abort -> {
                 handler.handle(command, state)
+            }
+
+            // Goto command — карта состояний и переходы
+            is Command.Goto -> {
+                if (commandEngine?.hasActiveCommand() != true) {
+                    renderer.renderGotoNoActiveCommand()
+                } else {
+                    val stateMap = commandEngine?.buildStateMap() ?: return@handleCommandWithRendering state
+                    renderer.renderStateMap(stateMap)
+                }
+                state
+            }
+
+            is Command.GotoState -> {
+                if (commandEngine?.hasActiveCommand() != true) {
+                    renderer.renderGotoNoActiveCommand()
+                } else {
+                    // Разбор имени состояния
+                    val targetStage = try {
+                        io.averkhogliad.ai.challenge.week2.domain.model.CommandStage.valueOf(command.targetStage)
+                    } catch (e: IllegalArgumentException) {
+                        renderer.renderGotoInvalidState(command.targetStage)
+                        return@handleCommandWithRendering state
+                    }
+
+                    try {
+                        val activeState = commandEngine?.getActiveState()
+                        val from = activeState?.currentStage
+                        val fromName = from?.name ?: "UNKNOWN"
+                        commandEngine?.performTransition(targetStage, ":goto command")
+                        val toName = targetStage.name
+                        renderer.renderGotoSuccess(
+                            from = from ?: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage.PLANNING,
+                            to = targetStage
+                        )
+                    } catch (e: io.averkhogliad.ai.challenge.week2.domain.model.TransitionNotAllowedException) {
+                        renderer.renderGotoError(e.message ?: "Переход недопустим")
+                    } catch (e: Exception) {
+                        renderer.renderGotoError(e.message ?: "Ошибка перехода")
+                    }
+                }
+                state
+            }
+
+            // Invariant management commands
+            is Command.InvariantAdd -> {
+                try {
+                    val inv = invariantService?.add(command.rule)
+                        ?: throw IllegalStateException("InvariantService not available")
+                    renderer.renderInvariantAdded(inv)
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
+            }
+
+            is Command.InvariantList -> {
+                try {
+                    val invariants =
+                        invariantService?.list() ?: throw IllegalStateException("InvariantService not available")
+                    renderer.renderInvariantList(invariants)
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
+            }
+
+            is Command.InvariantRemove -> {
+                try {
+                    renderer.renderInvariantRemoveConfirmation(command.id)
+                    val confirmation = readlnOrNull()?.trim()?.lowercase()
+                    if (confirmation == "y" || confirmation == "yes") {
+                        val removed = invariantService?.remove(command.id) == true
+                        if (removed) {
+                            renderer.renderInvariantRemoved(command.id)
+                        } else {
+                            renderer.renderInvariantNotFound(command.id)
+                        }
+                    } else {
+                        renderer.renderInfo("Удаление отменено")
+                    }
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
             }
 
             // Dialog commands (no-op — dialog functionality removed)
@@ -328,7 +418,14 @@ class CliApplication(
             // Task management commands (todo-manager)
             is Command.AddTask -> {
                 try {
-                    val task = taskManagerExecutor?.handleAddTask(command.title)
+                    // Шаг 1: запросить description задачи (многострочный ввод)
+                    renderer.renderInfo("Введите описание задачи (Enter — пропустить, пустая строка — завершить):")
+                    val description = readMultilineInput()
+
+                    val task = taskManagerExecutor?.handleAddTask(
+                        command.title,
+                        description = description.takeIf { it.isNotBlank() }
+                    )
                     if (task != null) {
                         renderer.renderTaskCreated(task.id)
                     } else {
@@ -352,16 +449,25 @@ class CliApplication(
 
             is Command.EditTask -> {
                 try {
+                    // Шаг 1: обновить title задачи
                     val task = taskManagerExecutor?.handleEditTask(command.id, command.title)
-                    if (task != null) {
-                        renderer.renderTaskUpdated(task.id)
-                    } else {
+                    if (task == null) {
                         renderer.renderError("TaskManagerExecutor not available")
+                        state
+                    } else {
+                        // Шаг 2: запросить новое описание (Enter — оставить прежним)
+                        renderer.renderInfo("Введите новое описание (Enter — оставить прежним, пустая строка — завершить):")
+                        val newDescription = readMultilineInput()
+                        if (newDescription.isNotBlank()) {
+                            taskManagerExecutor?.handleUpdateDescription(command.id, newDescription)
+                        }
+                        renderer.renderTaskUpdated(task.id)
+                        state
                     }
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
+                    state
                 }
-                state
             }
 
             is Command.DropTask -> {
@@ -491,9 +597,17 @@ class CliApplication(
                     // US-DBG-5: Отображение статуса debug-режима
                     val isDebugEnabled = debugCommandExecutor?.isEnabled() ?: false
                     renderer.renderStatusDebug(isDebugEnabled)
-                    // US-STATUS-1: Отображение активной FSM-команды
-                    val activeCommandName = commandEngine?.getActiveState()?.commandName
-                    renderer.renderStatusActiveCommand(activeCommandName)
+                    // US-STATUS-1: Отображение статуса FSM с доступными переходами
+                    val activeState = commandEngine?.getActiveState()
+                    val availableTransitions = if (activeState != null) {
+                        commandEngine?.getAvailableTransitions() ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
+                    renderer.renderStatusFsm(activeState?.currentStage, availableTransitions)
+                    // Отображение количества инвариантов
+                    val invariantCount = invariantService?.count() ?: 0
+                    renderer.renderStatusInvariants(invariantCount)
                     state
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
@@ -748,15 +862,17 @@ class CliApplication(
             // Global
             "help", "h", "quit", "q", "back", "b",
             // Task management
-            "add", "list", "edit", "drop", "open", "close", "cancel",
+            "add", "list", "tasks", "edit", "drop", "open", "close", "cancel",
             // Step management
             "step-add", "step-list", "step-done",
             // LLM parameters
             "temp", "maxtokens", "reset", "params", "stop",
             // LLM integration
             "plan",
+            // FSM / debug commands
+            "debug", "state", "abort",
             // Memory management
-            "status", "clear", "ctx-save", "ctx-list", "ctx-forget",
+            "status", "clear", "ctx-save", "ctx-list", "ctx-forget", "ctx-search",
             // Profile management
             "profile-new", "profile-list", "profile-use", "profile-edit", "profile-delete", "profile-show"
         )

@@ -4,11 +4,9 @@ import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.DefaultLlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmClientConfig
 import io.averkhogliad.ai.challenge.week2.application.DialogService
+import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
-import io.averkhogliad.ai.challenge.week2.application.executor.Task1Executor
-import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
-import io.averkhogliad.ai.challenge.week2.application.executor.Task3Executor
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
+import io.averkhogliad.ai.challenge.week2.application.executor.*
 import io.averkhogliad.ai.challenge.week2.cli.CliApplication
 import io.averkhogliad.ai.challenge.week2.cli.ConsoleCliRenderer
 import io.averkhogliad.ai.challenge.week2.domain.config.AppConfig
@@ -129,12 +127,19 @@ object ApplicationBootstrap {
         // 3c. Infrastructure: репозиторий профилей (SQLite persistence)
         val profileRepository = SqliteProfileRepository(dbPath)
 
-        // 5b. Application: DialogService (интеграция с LLM)
+        // 5b. Infrastructure: репозиторий инвариантов (SQLite persistence)
+        val invariantRepository = SqliteInvariantRepository(dbPath)
+
+        // 5c. Application: InvariantService (управление инвариантами агента)
+        val invariantService = InvariantService(invariantRepository)
+
+        // 5d. Application: DialogService (интеграция с LLM)
         val dialogService = DialogService(
             llmPort = llmPort,
             memoryService = memoryService,
             promptBuilder = promptBuilder,
-            profileRepository = profileRepository  // NEW: передача репозитория профилей для встраивания активного профиля в промпт
+            profileRepository = profileRepository,  // передача репозитория профилей для встраивания активного профиля в промпт
+            invariantService = invariantService  // NEW: передача сервиса инвариантов для встраивания в промпт
         )
 
         // 6. Application: Task 1 executor (CLI-ассистент)
@@ -149,12 +154,19 @@ object ApplicationBootstrap {
         // 6b. Application: Task 3 executor (CLI-ассистент, копия Task 2) + profile delegation
         val task3Executor = Task3Executor(dialogService, memoryService, profileService)
 
+        // 6b2. Application: Task 4 executor (CLI-ассистент, копия Task 3) + profile delegation
+        val task4Executor = Task4Executor(dialogService, memoryService, profileService)
+
+        // 6b3. Application: Task 5 executor (CLI-ассистент с FSM, копия Task 4) + profile delegation
+        val task5Executor = Task5Executor(dialogService, memoryService, profileService)
+
         // 6c. Application: PlanCommandExecutor (FSM-based планирование)
         val planCommandExecutor = io.averkhogliad.ai.challenge.week2.application.executor.PlanCommandExecutor(
             taskRepository = taskRepository,
             factRepository = factRepository,
             commandEngine = io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine(),
-            llmPort = llmPort
+            llmPort = llmPort,
+            invariantService = invariantService  // NEW: передача сервиса инвариантов для проверки конфликтов в :plan
         )
 
         // 6d. Domain: DebugMode (управление debug-режимом)
@@ -171,7 +183,9 @@ object ApplicationBootstrap {
             executors = mapOf(
                 task1Executor.taskId to task1Executor,
                 task2Executor.taskId to task2Executor,
-                task3Executor.taskId to task3Executor
+                task3Executor.taskId to task3Executor,
+                task4Executor.taskId to task4Executor,
+                task5Executor.taskId to task5Executor,
             ),
             renderer = renderer,
             taskManagerExecutor = taskManagerExecutor,
@@ -181,7 +195,8 @@ object ApplicationBootstrap {
             dialogService = dialogService,
             profileRepository = profileRepository,
             planCommandExecutor = planCommandExecutor,
-            debugCommandExecutor = debugCommandExecutor
+            debugCommandExecutor = debugCommandExecutor,
+            invariantService = invariantService,
         )
     }
 

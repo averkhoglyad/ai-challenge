@@ -110,7 +110,46 @@ class StatusWithProfileIntegrationTest {
             renderedMessages.add("statusDebug:$enabled")
         }
 
+        override fun renderStatusActiveCommand(commandName: String?) {}
+        override fun renderFsmStateInfo(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {}
+        override fun renderNoActiveCommand() {}
+        override fun renderAbortConfirmation() {}
+        override fun renderAbortSuccess() {}
+        override fun renderAbortCancelled() {}
+        override fun renderInvariantList(invariants: List<io.averkhogliad.ai.challenge.week2.domain.model.Invariant>) {}
+        override fun renderInvariantAdded(invariant: io.averkhogliad.ai.challenge.week2.domain.model.Invariant) {}
+        override fun renderInvariantRemoved(id: Int) {}
+        override fun renderInvariantNotFound(id: Int) {}
+        override fun renderInvariantEmptyRule() {}
+        override fun renderInvariantRemoveConfirmation(id: Int) {}
+        override fun renderStatusInvariants(count: Int) {}
+
         override fun waitForEnter() {}
+
+        override fun renderStatusFsm(
+            stage: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage?,
+            availableTransitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+        ) {
+        }
+
+        override fun renderStateMap(stateMap: io.averkhogliad.ai.challenge.week2.domain.model.StateMap) {}
+
+        override fun renderGotoSuccess(
+            from: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage,
+            to: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage
+        ) {
+        }
+
+        override fun renderGotoError(reason: String) {}
+
+        override fun renderGotoNoActiveCommand() {}
+
+        override fun renderGotoInvalidState(stateName: String) {}
+
+        override fun renderAvailableTransitions(
+            transitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+        ) {
+        }
     }
 
     @Test

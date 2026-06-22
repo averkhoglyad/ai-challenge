@@ -266,8 +266,96 @@ class CliApplicationTest {
             renderedMessages.add("statusDebug:$enabled")
         }
 
+        override fun renderStatusActiveCommand(commandName: String?) {
+            renderedMessages.add("statusActiveCommand:${commandName ?: "null"}")
+        }
+
+        override fun renderFsmStateInfo(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {
+            renderedMessages.add("fsmStateInfo:${state.commandName}")
+        }
+
+        override fun renderNoActiveCommand() {
+            renderedMessages.add("noActiveCommand")
+        }
+
+        override fun renderAbortConfirmation() {
+            renderedMessages.add("abortConfirmation")
+        }
+
+        override fun renderAbortSuccess() {
+            renderedMessages.add("abortSuccess")
+        }
+
+        override fun renderAbortCancelled() {
+            renderedMessages.add("abortCancelled")
+        }
+
+        override fun renderInvariantList(invariants: List<io.averkhogliad.ai.challenge.week2.domain.model.Invariant>) {
+            renderedMessages.add("invariantList:${invariants.size}")
+        }
+
+        override fun renderInvariantAdded(invariant: io.averkhogliad.ai.challenge.week2.domain.model.Invariant) {
+            renderedMessages.add("invariantAdded:${invariant.id.value}")
+        }
+
+        override fun renderInvariantRemoved(id: Int) {
+            renderedMessages.add("invariantRemoved:$id")
+        }
+
+        override fun renderInvariantNotFound(id: Int) {
+            renderedMessages.add("invariantNotFound:$id")
+        }
+
+        override fun renderInvariantEmptyRule() {
+            renderedMessages.add("invariantEmptyRule")
+        }
+
+        override fun renderInvariantRemoveConfirmation(id: Int) {
+            renderedMessages.add("invariantRemoveConfirmation:$id")
+        }
+
+        override fun renderStatusInvariants(count: Int) {
+            renderedMessages.add("statusInvariants:$count")
+        }
+
         override fun waitForEnter() {
             // no-op for tests
+        }
+
+        override fun renderStatusFsm(
+            stage: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage?,
+            availableTransitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+        ) {
+            renderedMessages.add("statusFsm:${stage?.name}:${availableTransitions.size}")
+        }
+
+        override fun renderStateMap(stateMap: io.averkhogliad.ai.challenge.week2.domain.model.StateMap) {
+            renderedMessages.add("stateMap:${stateMap.currentState.name}")
+        }
+
+        override fun renderGotoSuccess(
+            from: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage,
+            to: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage
+        ) {
+            renderedMessages.add("gotoSuccess:${from.name}:${to.name}")
+        }
+
+        override fun renderGotoError(reason: String) {
+            renderedMessages.add("gotoError:$reason")
+        }
+
+        override fun renderGotoNoActiveCommand() {
+            renderedMessages.add("gotoNoActiveCommand")
+        }
+
+        override fun renderGotoInvalidState(stateName: String) {
+            renderedMessages.add("gotoInvalidState:$stateName")
+        }
+
+        override fun renderAvailableTransitions(
+            transitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+        ) {
+            renderedMessages.add("availableTransitions:${transitions.size}")
         }
     }
 

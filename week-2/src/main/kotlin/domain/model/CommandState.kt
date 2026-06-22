@@ -32,7 +32,13 @@ data class CommandState(
     val expectedAction: String = "",
 
     /** Контекст выполнения — промежуточные данные, собираемые по ходу работы */
-    val context: Map<String, String> = emptyMap()
+    val context: Map<String, String> = emptyMap(),
+
+    /** История совершённых переходов (для диагностики и отладки) */
+    val transitionHistory: List<TransitionRecord> = emptyList(),
+
+    /** Флаг паузы FSM (true — FSM приостановлен в точке остановки) */
+    val isPaused: Boolean = false
 ) {
     init {
         require(commandName.isNotBlank()) { "Command name cannot be blank" }
@@ -63,7 +69,34 @@ data class CommandState(
     fun getContext(key: String): String? = context[key]
 
     /**
-     * Проверка, завершена ли команда (этап DONE).
+     * Запись перехода в историю.
+     */
+    fun recordTransition(to: CommandStage, description: String = ""): CommandState =
+        copy(
+            transitionHistory = transitionHistory + TransitionRecord(
+                from = currentStage,
+                to = to,
+                description = description
+            )
+        )
+
+    /**
+     * Установка флага паузы.
+     */
+    fun pause(): CommandState = copy(isPaused = true)
+
+    /**
+     * Снятие флага паузы.
+     */
+    fun resume(): CommandState = copy(isPaused = false)
+
+    /**
+     * Проверка, завершена ли команда (этап DONE или TERMINATED).
      */
     fun isDone(): Boolean = currentStage == CommandStage.DONE
+
+    /**
+     * Проверка, терминальное ли состояние.
+     */
+    fun isTerminated(): Boolean = currentStage == CommandStage.TERMINATED
 }

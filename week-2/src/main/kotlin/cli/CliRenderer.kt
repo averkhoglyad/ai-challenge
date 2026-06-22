@@ -100,4 +100,33 @@ interface CliRenderer {
     fun renderAbortConfirmation()
     fun renderAbortSuccess()
     fun renderAbortCancelled()
+
+    // Invariant management rendering methods
+    fun renderInvariantList(invariants: List<io.averkhogliad.ai.challenge.week2.domain.model.Invariant>)
+    fun renderInvariantAdded(invariant: io.averkhogliad.ai.challenge.week2.domain.model.Invariant)
+    fun renderInvariantRemoved(id: Int)
+    fun renderInvariantNotFound(id: Int)
+    fun renderInvariantEmptyRule()
+    fun renderInvariantRemoveConfirmation(id: Int)
+    fun renderStatusInvariants(count: Int)
+
+    // FSM status in :status command
+    fun renderStatusFsm(
+        stage: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage?,
+        availableTransitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+    )
+
+    // Goto command rendering methods
+    fun renderStateMap(stateMap: io.averkhogliad.ai.challenge.week2.domain.model.StateMap)
+    fun renderGotoSuccess(
+        from: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage,
+        to: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage
+    )
+
+    fun renderGotoError(reason: String)
+    fun renderGotoNoActiveCommand()
+    fun renderGotoInvalidState(stateName: String)
+
+    // Debug mode — available transitions
+    fun renderAvailableTransitions(transitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>)
 }

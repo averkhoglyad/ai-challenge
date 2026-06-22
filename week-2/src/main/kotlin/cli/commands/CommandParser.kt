@@ -25,7 +25,7 @@ data class CommandContext(
         )
 
         /** Глобальные команды, доступные всегда */
-        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "back", "b")
+        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "back", "b", "state", "abort")
     }
 }
 
@@ -192,6 +192,7 @@ object CommandParser {
             // Команды управления состоянием FSM
             "state" -> Command.ShowState
             "abort" -> Command.Abort
+            "goto" -> parseGotoCommand(args, raw)
 
             // Команды управления профилями пользователя (PM)
             "profile-new" -> parseProfileNewCommand(args, raw)
@@ -200,6 +201,9 @@ object CommandParser {
             "profile-edit" -> parseProfileEditCommand(args, raw)
             "profile-delete" -> parseProfileDeleteCommand(args, raw)
             "profile-show" -> parseProfileShowCommand(args, raw)
+
+            // Команды управления инвариантами агента
+            "invariant" -> parseInvariantCommand(args, raw)
 
             else -> Command.Unknown(raw)
         }
@@ -412,18 +416,6 @@ object CommandParser {
         }
     }
 
-    /**
-     * Парсит команду обновления описания задачи: `:describe <taskId>`.
-     * ID задачи обязателен.
-     */
-    internal fun parseDescribeCommand(args: String, raw: String): Command {
-        return if (args.isEmpty()) {
-            Command.Unknown(raw)
-        } else {
-            Command.Describe(TaskId(args))
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════
     // Парсинг команд управления шагами задач
     // ═══════════════════════════════════════════════════════════════
@@ -625,6 +617,44 @@ object CommandParser {
         // Строка, состоящая только из hex-символов (без пробелов и не слов)
         if (token.matches(Regex("[0-9a-fA-F]+")) && token.length >= 8) return true
         return false
+    }
+
+    /**
+     * Парсит команды управления инвариантами: `:invariant add <rule>`, `:invariant list`, `:invariant remove <id>`.
+     */
+    internal fun parseInvariantCommand(args: String, raw: String): Command {
+        val parts = args.split(" ", limit = 2)
+        val subCommand = parts[0].lowercase()
+        val subArgs = parts.getOrElse(1) { "" }.trim()
+
+        return when (subCommand) {
+            "add" -> {
+                if (subArgs.isEmpty()) Command.Unknown(raw)
+                else Command.InvariantAdd(subArgs)
+            }
+
+            "list" -> Command.InvariantList
+            "remove" -> {
+                val id = subArgs.toIntOrNull()
+                if (id != null && id > 0) Command.InvariantRemove(id)
+                else Command.Unknown(raw)
+            }
+
+            else -> Command.Unknown(raw)
+        }
+    }
+
+    /**
+     * Парсит команду :goto [state].
+     * Без аргументов — Goto (показать карту состояний).
+     * С аргументом — GotoState (явный переход).
+     */
+    internal fun parseGotoCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.Goto
+        } else {
+            Command.GotoState(args.uppercase())
+        }
     }
 
     /** Дефолтный промпт, если пользователь ничего не ввёл */

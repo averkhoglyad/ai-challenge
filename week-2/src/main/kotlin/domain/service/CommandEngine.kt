@@ -2,6 +2,9 @@ package io.averkhogliad.ai.challenge.week2.domain.service
 
 import io.averkhogliad.ai.challenge.week2.domain.model.CommandStage
 import io.averkhogliad.ai.challenge.week2.domain.model.CommandState
+import io.averkhogliad.ai.challenge.week2.domain.model.StateMap
+import io.averkhogliad.ai.challenge.week2.domain.model.Transition
+import io.averkhogliad.ai.challenge.week2.domain.model.TransitionValidationResult
 
 /**
  * Интерфейс FSM-движка для управления выполнением команд.
@@ -86,7 +89,7 @@ interface CommandEngine {
 
     /**
      * Завершает текущую команду и уничтожает состояние.
-     * 
+     *
      * @throws IllegalStateException если нет активной команды
      */
     fun completeCommand()
@@ -94,8 +97,55 @@ interface CommandEngine {
     /**
      * Отменяет текущую команду и уничтожает состояние.
      * Используется для принудительной остановки (например, по команде :abort).
-     * 
+     *
      * @throws IllegalStateException если нет активной команды
      */
     fun abortCommand()
+
+    /**
+     * Выполняет переход между состояниями с валидацией через TransitionValidator.
+     *
+     * @param to целевое состояние
+     * @param description описание перехода (для истории)
+     * @throws TransitionNotAllowedException если переход недопустим
+     * @throws IllegalStateException если нет активной команды
+     */
+    fun performTransition(to: CommandStage, description: String = "")
+
+    /**
+     * Проверяет, доступен ли переход.
+     *
+     * @param to целевое состояние
+     * @return результат валидации
+     * @throws IllegalStateException если нет активной команды
+     */
+    fun isTransitionAllowed(to: CommandStage): TransitionValidationResult
+
+    /**
+     * Возвращает список доступных переходов из текущего состояния.
+     *
+     * @return список допустимых переходов
+     * @throws IllegalStateException если нет активной команды
+     */
+    fun getAvailableTransitions(): List<Transition>
+
+    /**
+     * Строит карту состояний для текущего состояния FSM.
+     *
+     * @return StateMap с информацией о всех состояниях и доступных переходах
+     * @throws IllegalStateException если нет активной команды
+     */
+    fun buildStateMap(): StateMap
+
+    /**
+     * Устанавливает флаг паузы FSM.
+     */
+    fun pause()
+
+    /**
+     * Снимает флаг паузы FSM и проверяет условия перехода.
+     *
+     * @throws TransitionNotAllowedException если условия перехода изменились
+     */
+    fun resume()
 }

@@ -74,9 +74,14 @@ class ConsoleCliRendererWaitForEnterTest {
     fun `waitForEnter should flush output before waiting`() {
         // Arrange
         val renderer = ConsoleCliRenderer()
+        val originalIn = System.`in`
         val originalOut = System.out
 
         try {
+            // Устанавливаем mock input с EOF, чтобы waitForEnter() не блокировался
+            val input = ByteArrayInputStream(ByteArray(0))
+            System.setIn(input)
+
             val outputStream = ByteArrayOutputStream()
             System.setOut(PrintStream(outputStream))
 
@@ -87,6 +92,7 @@ class ConsoleCliRendererWaitForEnterTest {
             val output = outputStream.toString()
             assertTrue(output.isNotEmpty(), "Output should not be empty after waitForEnter")
         } finally {
+            System.setIn(originalIn)
             System.setOut(originalOut)
         }
     }
