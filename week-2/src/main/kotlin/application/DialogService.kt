@@ -7,13 +7,15 @@ import io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
+import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
 import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
 
 class DialogService(
     private val llmPort: LlmPort? = null,
     private val memoryService: MemoryService,
     private val promptBuilder: PromptBuilder,
-    private val taskExecutionConfig: TaskExecutionConfig = TaskExecutionConfig()
+    private val taskExecutionConfig: TaskExecutionConfig = TaskExecutionConfig(),
+    private val profileRepository: ProfileRepository? = null  // NEW: доступ к активному профилю для встраивания в промпт
 ) {
     suspend fun chat(
         userInput: String,
@@ -30,11 +32,14 @@ class DialogService(
                 userQuery = userInput,
                 factSearchLimit = 5
             )
+            // NEW: получаем активный профиль для встраивания в промпт
+            val activeProfile = profileRepository?.findActive()
             val chatMessages = promptBuilder.buildChatMessages(
                 workingMemory = memoryContext.workingMemory,
                 relevantFacts = memoryContext.relevantFacts,
                 recentMessages = memoryContext.recentMessages,
-                userInput = userInput
+                userInput = userInput,
+                profile = activeProfile  // NEW: передача активного профиля
             )
             memoryService.saveUserMessage(level, taskId, userInput)
             val result = llmPort.chatWithMessages(chatMessages, taskExecutionConfig)

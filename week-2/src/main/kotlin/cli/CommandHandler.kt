@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
+import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command
@@ -214,6 +215,43 @@ class CommandHandler(
             // LLM integration commands
             is Command.PlanSteps -> state
 
+            // Profile management commands (PM)
+            is Command.ProfileNew -> {
+                // Обработка создания профиля будет в CliApplication
+                // (требует многострочного ввода)
+                state
+            }
+
+            is Command.ProfileList -> {
+                // Рендеринг будет в CliApplication
+                state
+            }
+
+            is Command.ProfileUse -> {
+                if (command.name == "none") {
+                    getTask2Executor()?.handleDeactivateProfile()
+                } else {
+                    getTask2Executor()?.handleActivateByName(command.name)
+                }
+                state
+            }
+
+            is Command.ProfileEdit -> {
+                // Обработка редактирования профиля будет в CliApplication
+                // (требует многострочного ввода)
+                state
+            }
+
+            is Command.ProfileDelete -> {
+                // Обработка удаления профиля будет в CliApplication
+                state
+            }
+
+            is Command.ProfileShow -> {
+                // Рендеринг будет в CliApplication
+                state
+            }
+
             is Command.UserInput -> state
             is Command.Unknown -> state
         }
@@ -270,6 +308,12 @@ class CommandHandler(
     }
 
     fun getExecutor(taskId: TaskId): TaskExecutor? = executors[taskId]
+
+    /**
+     * Возвращает [Task2Executor] из карты executors, если он зарегистрирован.
+     * Task2Executor имеет ID = 2.
+     */
+    fun getTask2Executor(): Task2Executor? = executors[TaskId(2)] as? Task2Executor
 
     fun getAllExecutors(): List<TaskExecutor> = executors.values.toList()
 }

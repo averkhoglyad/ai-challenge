@@ -39,7 +39,16 @@ data class CliState(
      * Используется для двухуровневой навигации: задача → список задач → главное меню.
      * true — показывается список задач, доступны команды управления задачами.
      */
-    val taskListMode: Boolean = false
+    val taskListMode: Boolean = false,
+
+    /** Название профиля, который ожидает создания (многострочный ввод) */
+    val pendingProfileCreation: String? = null,
+
+    /** Название профиля, который ожидает редактирования (многострочный ввод) */
+    val pendingProfileEdit: String? = null,
+
+    /** Буфер для многострочного ввода содержимого профиля */
+    val multilineInputBuffer: StringBuilder = StringBuilder()
 )
 
 /**

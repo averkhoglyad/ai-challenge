@@ -9,6 +9,7 @@ import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.model.FactId
 import io.averkhogliad.ai.challenge.week2.domain.service.FactRepository
+import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
 import io.averkhogliad.ai.challenge.week2.domain.service.ResourceManager
 import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
 import kotlinx.coroutines.runBlocking
@@ -50,7 +51,8 @@ class CliApplication(
     private val memoryService: io.averkhogliad.ai.challenge.week2.domain.service.MemoryService? = null,
     private val taskStepRepository: TaskStepRepository? = null,
     private val factRepository: FactRepository? = null,
-    private val dialogService: io.averkhogliad.ai.challenge.week2.application.DialogService? = null
+    private val dialogService: io.averkhogliad.ai.challenge.week2.application.DialogService? = null,
+    private val profileRepository: ProfileRepository? = null
 ) : AutoCloseable {
 
     private val handler = CommandHandler(
@@ -436,6 +438,9 @@ class CliApplication(
                     } else {
                         renderer.renderInfo("Memory service not available")
                     }
+                    // Отображение информации о профиле
+                    val activeProfile = profileRepository?.findActive()
+                    renderer.renderStatusProfile(activeProfile?.name)
                     state
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
@@ -504,7 +509,172 @@ class CliApplication(
                     state
                 }
             }
+
+            // Profile management commands (PM)
+            // Все profile-команды делегируются в Task2Executor (или Task2Executor→ProfileExecutor)
+            // для соблюдения layered-архитектуры: CLI-слой → Application-слой (Task2Executor)
+            // Ошибки обрабатываются с использованием специфичных методов рендеринга (US-PM-13)
+            is Command.ProfileList -> {
+                try {
+                    val profiles = handler.getTask2Executor()?.handleListProfiles() ?: emptyList()
+                    renderer.renderProfileList(profiles)
+                    state
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                    state
+                }
+            }
+
+            is Command.ProfileNew -> {
+                try {
+                    // Шаг 1: запросить описание профиля
+                    renderer.renderProfileDescriptionPrompt()
+                    val description = readMultilineInput()
+
+                    // Шаг 2: запросить инструкции профиля
+                    renderer.renderProfileInstructionsPrompt()
+                    val instructions = readMultilineInput()
+
+                    if (description.isBlank() && instructions.isBlank()) {
+                        renderer.renderEmptyProfileContent()
+                    } else {
+                        val profile = handler.getTask2Executor()?.handleCreateProfile(
+                            command.name, description, instructions
+                        )
+                        if (profile != null) {
+                            renderer.renderSuccess("Профиль \"${profile.name}\" создан")
+                        }
+                    }
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.AlreadyExists) {
+                    renderer.renderProfileAlreadyExists(command.name)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.EmptyContent) {
+                    renderer.renderEmptyProfileContent()
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.ContentTooLong) {
+                    renderer.renderProfileContentTooLong(e.length)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
+                    renderer.renderProfileError(e.message ?: "Ошибка создания профиля")
+                } catch (e: IllegalArgumentException) {
+                    renderer.renderError(e.message ?: "Ошибка создания профиля")
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
+            }
+
+            is Command.ProfileUse -> {
+                try {
+                    if (command.name == "none") {
+                        handler.getTask2Executor()?.handleDeactivateProfile()
+                        renderer.renderInfo("Профиль деактивирован")
+                    } else {
+                        val profile = handler.getTask2Executor()?.handleActivateByName(command.name)
+                        if (profile != null) {
+                            renderer.renderProfileDetail(profile)
+                        }
+                    }
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
+                    renderer.renderProfileNotFoundByName(command.name)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
+                    renderer.renderProfileError(e.message ?: "Ошибка активации профиля")
+                } catch (e: IllegalArgumentException) {
+                    renderer.renderProfileError(e.message ?: "Ошибка активации профиля")
+                } catch (e: Exception) {
+                    renderer.renderProfileError(e.message ?: "Unknown error")
+                }
+                state
+            }
+
+            is Command.ProfileEdit -> {
+                try {
+                    // Запросить новое название (Enter — оставить прежним)
+                    renderer.renderInfo("Введите новое название профиля (Enter — оставить прежним):")
+                    val newName = readlnOrNull()?.trim() ?: ""
+                    // Запросить новое описание (многострочный ввод)
+                    renderer.renderProfileDescriptionPrompt()
+                    val newDescription = readMultilineInput()
+                    // Запросить новые инструкции (многострочный ввод)
+                    renderer.renderProfileInstructionsPrompt()
+                    val newInstructions = readMultilineInput()
+
+                    if (newName.isEmpty() && newDescription.isBlank() && newInstructions.isBlank()) {
+                        renderer.renderError("Не указаны изменения для профиля")
+                    } else {
+                        val profile = handler.getTask2Executor()?.handleEditProfile(
+                            command.name,
+                            newName.ifEmpty { null },
+                            newDescription.ifBlank { null },
+                            newInstructions.ifBlank { null }
+                        )
+                        if (profile != null) {
+                            renderer.renderProfileUpdated(profile.name)
+                        }
+                    }
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
+                    renderer.renderProfileNotFoundByName(command.name)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.AlreadyExists) {
+                    renderer.renderProfileAlreadyExists(e.profileName)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.ContentTooLong) {
+                    renderer.renderProfileContentTooLong(e.length)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
+                    renderer.renderProfileError(e.message ?: "Ошибка редактирования профиля")
+                } catch (e: IllegalArgumentException) {
+                    renderer.renderError(e.message ?: "Ошибка редактирования профиля")
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
+            }
+
+            is Command.ProfileDelete -> {
+                try {
+                    handler.getTask2Executor()?.handleDeleteProfile(command.name)
+                    renderer.renderProfileDeleted(command.name)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
+                    renderer.renderProfileNotFoundByName(command.name)
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.CannotDeleteActiveProfile) {
+                    renderer.renderCannotDeleteActiveProfile()
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
+                    renderer.renderProfileError(e.message ?: "Ошибка удаления профиля")
+                } catch (e: IllegalArgumentException) {
+                    renderer.renderError(e.message ?: "Ошибка удаления профиля")
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
+            }
+
+            is Command.ProfileShow -> {
+                try {
+                    val profile = handler.getTask2Executor()?.handleShowProfile(command.name)
+                    if (profile != null) {
+                        renderer.renderProfileDetail(profile)
+                    }
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
+                    renderer.renderProfileNotFoundByName(command.name ?: "неизвестно")
+                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
+                    renderer.renderProfileError(e.message ?: "Ошибка просмотра профиля")
+                } catch (e: IllegalArgumentException) {
+                    renderer.renderError(e.message ?: "Ошибка просмотра профиля")
+                } catch (e: Exception) {
+                    renderer.renderError(e.message ?: "Unknown error")
+                }
+                state
+            }
         }
+    }
+
+    /**
+     * Читает многострочный ввод пользователя из stdin.
+     * Ввод завершается пустой строкой.
+     */
+    private fun readMultilineInput(): String {
+        val lines = mutableListOf<String>()
+        while (true) {
+            val line = readlnOrNull() ?: break
+            if (line.isEmpty()) break
+            lines.add(line)
+        }
+        return lines.joinToString("\n")
     }
 
     private fun buildCommandContext(state: CliState): CommandContext {
@@ -533,7 +703,9 @@ class CliApplication(
             // LLM integration
             "plan",
             // Memory management
-            "status", "clear", "ctx-save", "ctx-list", "ctx-forget"
+            "status", "clear", "ctx-save", "ctx-list", "ctx-forget",
+            // Profile management
+            "profile-new", "profile-list", "profile-use", "profile-edit", "profile-delete", "profile-show"
         )
 
         return CommandContext(

@@ -54,4 +54,29 @@ interface CliRenderer {
     fun renderFactNotFound(factId: String)
     fun renderFactSearchResults(facts: List<Fact>, query: String)
     fun renderFactSearchEmpty(query: String)
+
+    // Profile rendering methods
+    fun renderProfileList(profiles: List<io.averkhogliad.ai.challenge.week2.domain.model.Profile>)
+    fun renderProfileDetail(profile: io.averkhogliad.ai.challenge.week2.domain.model.Profile)
+    fun renderProfileDeleted(name: String)
+    fun renderProfileUpdated(name: String)
+    fun renderProfileError(message: String)
+    fun renderMultilineInputPrompt()
+
+    // Profile creation step prompts (description + instructions)
+    fun renderProfileDescriptionPrompt()
+    fun renderProfileInstructionsPrompt()
+
+    // Profile error rendering methods (специфичные сообщения)
+    fun renderProfileNotFoundById(id: String)
+    fun renderProfileNotFoundByName(name: String)
+    fun renderProfileAlreadyExists(name: String)
+    fun renderMissingProfileId()
+    fun renderMissingProfileName()
+    fun renderEmptyProfileContent()
+    fun renderCannotDeleteActiveProfile()
+    fun renderProfileContentTooLong(length: Int)
+
+    // Profile status rendering in :status command
+    fun renderStatusProfile(profileName: String?)
 }

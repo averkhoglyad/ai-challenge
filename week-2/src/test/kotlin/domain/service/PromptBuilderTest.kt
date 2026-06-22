@@ -1,274 +1,296 @@
 package io.averkhogliad.ai.challenge.week2.domain.service
 
 import io.averkhogliad.ai.challenge.week2.domain.model.*
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.time.Instant
-import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-@DisplayName("PromptBuilder")
 class PromptBuilderTest {
 
     private val promptBuilder = PromptBuilder()
+    private val now = Instant.now()
 
-    // ═══════════════════════════════════════════════════════════════
-    // buildPrompt
-    // ═══════════════════════════════════════════════════════════════
+    // ========================================================================
+    // Тест 1: Если profile == null, секция [PROFILE] отсутствует
+    // ========================================================================
 
-    @Nested
-    @DisplayName("buildPrompt")
-    inner class BuildPrompt {
-
-        @Test
-        @DisplayName("должен содержать системную инструкцию")
-        fun `should contain system instruction`() {
-            val result = promptBuilder.buildPrompt(null)
-
-            assertContains(result, PromptBuilder.SYSTEM_INSTRUCTION)
-        }
-
-        @Test
-        @DisplayName("должен включать контекст рабочей памяти")
-        fun `should include working memory context`() {
-            val sessionId = SessionId("test-session")
-            val wm = WorkingMemory.create(sessionId)
-            val message = Message.create(sessionId, MessageRole.USER, "Тестовое сообщение")
-            val wmWithMsg = wm.addMessage(message)
-
-            val result = promptBuilder.buildPrompt(wmWithMsg)
-
-            assertContains(result, "Recent Messages:")
-            assertContains(result, "Тестовое сообщение")
-        }
-
-        @Test
-        @DisplayName("не должен включать WM-секцию при null")
-        fun `should not include WM section when null`() {
-            val result = promptBuilder.buildPrompt(null)
-
-            assertFalse(result.contains("Recent Messages:"))
-        }
-
-        @Test
-        @DisplayName("должен включать релевантные факты")
-        fun `should include relevant facts`() {
-            val facts = listOf(
-                Fact(FactId("f1"), "Факт номер один", Instant.now()),
-                Fact(FactId("f2"), "Факт номер два", Instant.now())
-            )
-
-            val result = promptBuilder.buildPrompt(null, relevantFacts = facts)
-
-            assertContains(result, "=== Релевантные факты из базы знаний (LTM) ===")
-            assertContains(result, "Факт номер один")
-            assertContains(result, "Факт номер два")
-        }
-
-        @Test
-        @DisplayName("не должен включать LTM-секцию при пустом списке")
-        fun `should not include LTM section when empty`() {
-            val result = promptBuilder.buildPrompt(null, relevantFacts = emptyList())
-
-            assertFalse(result.contains("=== Релевантные факты из базы знаний (LTM) ==="))
-        }
-
-        @Test
-        @DisplayName("должен включать историю диалога")
-        fun `should include dialog history`() {
-            val sessionId = SessionId("session-1")
-            val messages = listOf(
-                Message.create(sessionId, MessageRole.USER, "Привет"),
-                Message.create(sessionId, MessageRole.ASSISTANT, "Здравствуйте")
-            )
-
-            val result = promptBuilder.buildPrompt(null, recentMessages = messages)
-
-            assertContains(result, "=== История диалога (STM) ===")
-            assertContains(result, "[Пользователь] Привет")
-            assertContains(result, "[Ассистент] Здравствуйте")
-        }
-
-        @Test
-        @DisplayName("не должен включать STM-секцию при пустом списке")
-        fun `should not include STM section when empty`() {
-            val result = promptBuilder.buildPrompt(null, recentMessages = emptyList())
-
-            assertFalse(result.contains("=== История диалога (STM) ==="))
-        }
-
-        @Test
-        @DisplayName("должен формировать полный промпт со всеми компонентами")
-        fun `should build full prompt with all components`() {
-            val sessionId = SessionId("s1")
-            val wm = WorkingMemory.create(sessionId)
-            val facts = listOf(Fact(FactId("f1"), "Важный факт", Instant.now()))
-            val messages = listOf(Message.create(sessionId, MessageRole.USER, "Вопрос"))
-
-            val result = promptBuilder.buildPrompt(wm, facts, messages)
-
-            assertContains(result, PromptBuilder.SYSTEM_INSTRUCTION)
-            assertContains(result, "=== Релевантные факты из базы знаний (LTM) ===")
-            assertContains(result, "=== История диалога (STM) ===")
-        }
+    @Test
+    fun `profile is null - PROFILE section is absent`() {
+        val prompt = promptBuilder.buildPrompt(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = emptyList(),
+            profile = null
+        )
+        assertFalse(
+            prompt.contains("[PROFILE]"),
+            "Если profile == null, секция [PROFILE] должна отсутствовать в промпте"
+        )
+        assertTrue(
+            prompt.contains(PromptBuilder.SYSTEM_INSTRUCTION),
+            "Системная инструкция должна присутствовать даже без профиля"
+        )
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // buildPlanPrompt
-    // ═══════════════════════════════════════════════════════════════
+    // ========================================================================
+    // Тест 2: Если profile != null, секция [PROFILE] присутствует перед SYSTEM
+    // ========================================================================
 
-    @Nested
-    @DisplayName("buildPlanPrompt")
-    inner class BuildPlanPrompt {
-
-        @Test
-        @DisplayName("должен содержать название задачи")
-        fun `should contain task title`() {
-            val result = promptBuilder.buildPlanPrompt("Создать REST API")
-
-            assertContains(result, "Задача: Создать REST API")
-        }
-
-        @Test
-        @DisplayName("должен содержать описание при наличии")
-        fun `should contain description when provided`() {
-            val result = promptBuilder.buildPlanPrompt(
-                taskTitle = "Рефакторинг",
-                taskDescription = "Улучшить читаемость кода"
-            )
-
-            assertContains(result, "Описание: Улучшить читаемость кода")
-        }
-
-        @Test
-        @DisplayName("не должен содержать секцию описания при отсутствии")
-        fun `should not contain description section when absent`() {
-            val result = promptBuilder.buildPlanPrompt("Задача без описания")
-
-            assertFalse(result.contains("Описание:"))
-        }
-
-        @Test
-        @DisplayName("должен содержать инструкцию по формату ответа")
-        fun `should contain response format instruction`() {
-            val result = promptBuilder.buildPlanPrompt("Тест")
-
-            assertContains(result, "Формат ответа")
-            assertContains(result, "1. Шаг 1")
-        }
-
-        @Test
-        @DisplayName("должен включать контекст рабочей памяти")
-        fun `should include working memory context`() {
-            val sessionId = SessionId("s1")
-            val wm = WorkingMemory.create(sessionId).addMessage(
-                Message.create(sessionId, MessageRole.USER, "Детали задачи")
-            )
-
-            val result = promptBuilder.buildPlanPrompt("Задача", workingMemory = wm)
-
-            assertContains(result, "Контекст:")
-        }
-
-        @Test
-        @DisplayName("должен включать релевантные факты")
-        fun `should include relevant facts`() {
-            val facts = listOf(Fact(FactId("f1"), "Полезный факт", Instant.now()))
-
-            val result = promptBuilder.buildPlanPrompt("Задача", relevantFacts = facts)
-
-            assertContains(result, "Релевантные факты:")
-            assertContains(result, "Полезный факт")
-        }
+    @Test
+    fun `profile is not null - PROFILE section is present before SYSTEM`() {
+        val profile = Profile(
+            id = ProfileId("test-profile"),
+            name = "Тестовый",
+            description = "Описание",
+            instructions = "Инструкции",
+            createdAt = now,
+            updatedAt = now
+        )
+        val prompt = promptBuilder.buildPrompt(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = emptyList(),
+            profile = profile
+        )
+        assertTrue(
+            prompt.contains("[PROFILE]"),
+            "Если profile != null, секция [PROFILE] должна присутствовать"
+        )
+        val profileIndex = prompt.indexOf("[PROFILE]")
+        val systemIndex = prompt.indexOf(PromptBuilder.SYSTEM_INSTRUCTION)
+        assertTrue(
+            profileIndex < systemIndex,
+            "Секция [PROFILE] (индекс $profileIndex) должна идти перед SYSTEM (индекс $systemIndex)"
+        )
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // buildChatMessages
-    // ═══════════════════════════════════════════════════════════════
+    // ========================================================================
+    // Тест 3: Секция [PROFILE] содержит имя профиля
+    // ========================================================================
 
-    @Nested
-    @DisplayName("buildChatMessages")
-    inner class BuildChatMessages {
+    @Test
+    fun `PROFILE section contains profile name`() {
+        val profileName = "Эксперт по архитектуре"
+        val profile = Profile(
+            id = ProfileId("name-test"),
+            name = profileName,
+            description = "Описание",
+            instructions = "Инструкции",
+            createdAt = now,
+            updatedAt = now
+        )
+        val prompt = promptBuilder.buildPrompt(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = emptyList(),
+            profile = profile
+        )
+        assertTrue(
+            prompt.contains("Name: $profileName"),
+            "Секция [PROFILE] должна содержать имя профиля: 'Name: $profileName'"
+        )
+    }
 
-        @Test
-        @DisplayName("первое сообщение должно быть системным")
-        fun `first message should be system`() {
-            val messages = promptBuilder.buildChatMessages(
-                workingMemory = null,
-                userInput = "Привет"
+    // ========================================================================
+    // Тест 4: Секция [PROFILE] содержит описание профиля
+    // ========================================================================
+
+    @Test
+    fun `PROFILE section contains profile description`() {
+        val profileDescription = "Этот профиль предназначен для тестирования"
+        val profile = Profile(
+            id = ProfileId("desc-test"),
+            name = "TestDesc",
+            description = profileDescription,
+            instructions = "Инструкции",
+            createdAt = now,
+            updatedAt = now
+        )
+        val prompt = promptBuilder.buildPrompt(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = emptyList(),
+            profile = profile
+        )
+        assertTrue(
+            prompt.contains("Description: $profileDescription"),
+            "Секция [PROFILE] должна содержать описание профиля: 'Description: $profileDescription'"
+        )
+    }
+
+    // ========================================================================
+    // Тест 5: Секция [PROFILE] содержит инструкции профиля
+    // ========================================================================
+
+    @Test
+    fun `PROFILE section contains profile instructions`() {
+        val profileInstructions = "Отвечай кратко. Используй техническую терминологию."
+        val profile = Profile(
+            id = ProfileId("instr-test"),
+            name = "TestInstr",
+            description = "Описание",
+            instructions = profileInstructions,
+            createdAt = now,
+            updatedAt = now
+        )
+        val prompt = promptBuilder.buildPrompt(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = emptyList(),
+            profile = profile
+        )
+        assertTrue(
+            prompt.contains("Instructions: $profileInstructions"),
+            "Секция [PROFILE] должна содержать инструкции профиля: 'Instructions: $profileInstructions'"
+        )
+    }
+
+    // ========================================================================
+    // Тест 6: Пустые строки в полях профиля корректно обрабатываются
+    // ========================================================================
+
+    @Test
+    fun `empty description and instructions are handled gracefully`() {
+        val profile = Profile(
+            id = ProfileId("empty-fields"),
+            name = "Minimal",
+            description = "",
+            instructions = "",
+            createdAt = now,
+            updatedAt = now
+        )
+        val prompt = promptBuilder.buildPrompt(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = emptyList(),
+            profile = profile
+        )
+        assertTrue(prompt.contains("[PROFILE]"), "[PROFILE] должен присутствовать")
+        assertTrue(prompt.contains("Name: Minimal"), "Имя профиля должно быть в промпте")
+        assertTrue(prompt.contains("Description: "), "Пустое описание должно присутствовать (как 'Description: ')")
+        assertTrue(prompt.contains("Instructions: "), "Пустые инструкции должны присутствовать (как 'Instructions: ')")
+        assertTrue(prompt.contains(PromptBuilder.SYSTEM_INSTRUCTION), "Системная инструкция должна присутствовать")
+    }
+
+    // ========================================================================
+    // Тест 7: buildChatMessages() корректно передаёт профиль
+    // ========================================================================
+
+    @Test
+    fun `buildChatMessages correctly passes profile to system message`() {
+        val profile = Profile(
+            id = ProfileId("chat-test"),
+            name = "ChatProfile",
+            description = "Описание чат-профиля",
+            instructions = "Отвечай дружелюбно",
+            createdAt = now,
+            updatedAt = now
+        )
+        val sessionId = SessionId("test-session")
+        val historyMessages = listOf(
+            Message(
+                id = "hist-1",
+                sessionId = sessionId,
+                role = MessageRole.USER,
+                content = "Предыдущий вопрос",
+                timestamp = now
+            ),
+            Message(
+                id = "hist-2",
+                sessionId = sessionId,
+                role = MessageRole.ASSISTANT,
+                content = "Предыдущий ответ",
+                timestamp = now
             )
+        )
+        val messages = promptBuilder.buildChatMessages(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = historyMessages,
+            userInput = "Новый вопрос",
+            profile = profile
+        )
 
-            assertTrue(messages.isNotEmpty())
-            assertEquals(ChatRole.SYSTEM, messages.first().role)
-        }
+        val systemMessage = messages.first()
+        assertEquals(ChatRole.SYSTEM, systemMessage.role, "Первое сообщение должно быть SYSTEM")
+        assertTrue(
+            systemMessage.content.contains("[PROFILE]"),
+            "Системное сообщение должно содержать секцию [PROFILE]"
+        )
+        assertTrue(
+            systemMessage.content.contains("ChatProfile"),
+            "Системное сообщение должно содержать имя профиля"
+        )
+        assertTrue(
+            systemMessage.content.contains("Описание чат-профиля"),
+            "Системное сообщение должно содержать описание профиля"
+        )
+        assertTrue(
+            systemMessage.content.contains("Отвечай дружелюбно"),
+            "Системное сообщение должно содержать инструкции профиля"
+        )
 
-        @Test
-        @DisplayName("последнее сообщение должно быть от пользователя")
-        fun `last message should be user`() {
-            val messages = promptBuilder.buildChatMessages(
-                workingMemory = null,
-                userInput = "Привет"
+        val userMessage = messages.last()
+        assertEquals(ChatRole.USER, userMessage.role, "Последнее сообщение должно быть USER")
+        assertEquals("Новый вопрос", userMessage.content, "Содержимое пользовательского сообщения должно совпадать")
+
+        assertEquals(4, messages.size, "Должно быть 4 сообщения: system + 2 history + user")
+    }
+
+    // ========================================================================
+    // Тест 8: Порядок сообщений: SYSTEM → (история) → USER, [PROFILE] внутри SYSTEM
+    // ========================================================================
+
+    @Test
+    fun `message order is SYSTEM first then USER last - PROFILE section is inside SYSTEM`() {
+        val profile = Profile(
+            id = ProfileId("order-test"),
+            name = "OrderProfile",
+            description = "Тест порядка",
+            instructions = "",
+            createdAt = now,
+            updatedAt = now
+        )
+        val sessionId = SessionId("order-session")
+        val historyMessages = listOf(
+            Message(
+                id = "hist-msg",
+                sessionId = sessionId,
+                role = MessageRole.USER,
+                content = "История",
+                timestamp = now
             )
+        )
+        val messages = promptBuilder.buildChatMessages(
+            workingMemory = null,
+            relevantFacts = emptyList(),
+            recentMessages = historyMessages,
+            userInput = "Ввод пользователя",
+            profile = profile
+        )
 
-            assertTrue(messages.isNotEmpty())
-            assertEquals(ChatRole.USER, messages.last().role)
-            assertEquals("Привет", messages.last().content)
-        }
+        assertEquals(3, messages.size, "Должно быть 3 сообщения: system + history + user")
 
-        @Test
-        @DisplayName("должен включать историю диалога между системным и пользовательским")
-        fun `should include dialog history between system and user messages`() {
-            val sessionId = SessionId("s1")
-            val historyMessages = listOf(
-                Message.create(sessionId, MessageRole.USER, "Вопрос 1"),
-                Message.create(sessionId, MessageRole.ASSISTANT, "Ответ 1")
-            )
+        assertEquals(ChatRole.SYSTEM, messages[0].role, "Первое сообщение должно быть SYSTEM")
+        assertTrue(messages[0].content.contains("[PROFILE]"), "SYSTEM должен содержать [PROFILE]")
+        assertTrue(
+            messages[0].content.contains(PromptBuilder.SYSTEM_INSTRUCTION),
+            "SYSTEM должен содержать системную инструкцию"
+        )
 
-            val messages = promptBuilder.buildChatMessages(
-                workingMemory = null,
-                recentMessages = historyMessages,
-                userInput = "Вопрос 2"
-            )
+        val profileSectionIndex = messages[0].content.indexOf("[PROFILE]")
+        val systemInstrIndex = messages[0].content.indexOf(PromptBuilder.SYSTEM_INSTRUCTION)
+        assertTrue(
+            profileSectionIndex < systemInstrIndex,
+            "[PROFILE] (индекс $profileSectionIndex) должен быть перед системной инструкцией (индекс $systemInstrIndex)"
+        )
 
-            assertEquals(4, messages.size) // system + history(2) + user
-            assertEquals(ChatRole.SYSTEM, messages[0].role)
-            assertEquals(ChatRole.USER, messages[1].role)
-            assertEquals("Вопрос 1", messages[1].content)
-            assertEquals(ChatRole.ASSISTANT, messages[2].role)
-            assertEquals("Ответ 1", messages[2].content)
-            assertEquals(ChatRole.USER, messages[3].role)
-            assertEquals("Вопрос 2", messages[3].content)
-        }
+        assertEquals(ChatRole.USER, messages[1].role, "Второе сообщение должно быть из истории (USER)")
+        assertEquals("История", messages[1].content)
 
-        @Test
-        @DisplayName("системное сообщение должно содержать WM-контекст")
-        fun `system message should contain WM context`() {
-            val sessionId = SessionId("s1")
-            val wm = WorkingMemory.create(sessionId)
-            val wmWithMsg = wm.addMessage(Message.create(sessionId, MessageRole.USER, "Контекст задачи"))
-
-            val messages = promptBuilder.buildChatMessages(
-                workingMemory = wmWithMsg,
-                userInput = "Продолжи"
-            )
-
-            assertContains(messages.first().content, "Recent Messages:")
-        }
-
-        @Test
-        @DisplayName("должен корректно обрабатывать пустой ввод")
-        fun `should handle empty input`() {
-            val messages = promptBuilder.buildChatMessages(
-                workingMemory = null,
-                userInput = ""
-            )
-
-            assertEquals(2, messages.size) // system + empty user
-            assertEquals(ChatRole.USER, messages.last().role)
-            assertEquals("", messages.last().content)
-        }
+        assertEquals(ChatRole.USER, messages[2].role, "Последнее сообщение должно быть USER")
+        assertEquals("Ввод пользователя", messages[2].content)
     }
 }

@@ -4,27 +4,21 @@ import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.DefaultLlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmClientConfig
 import io.averkhogliad.ai.challenge.week2.application.DialogService
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week2.application.ProfileService
+import io.averkhogliad.ai.challenge.week2.application.executor.Task1Executor
+import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
 import io.averkhogliad.ai.challenge.week2.cli.CliApplication
 import io.averkhogliad.ai.challenge.week2.cli.ConsoleCliRenderer
-import io.averkhogliad.ai.challenge.week2.domain.Prompt
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
-import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
-import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week2.domain.config.LlmConfig
-import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week2.domain.service.ConfigPort
 import io.averkhogliad.ai.challenge.week2.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
 import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
 import io.averkhogliad.ai.challenge.week2.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week2.infrastructure.llm.LlmAdapter
-import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteDialogSessionRepository
-import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteFactRepository
-import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteTaskRepository
-import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteTaskStepRepository
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.*
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -131,27 +125,41 @@ object ApplicationBootstrap {
         // 5a. Application: PromptBuilder (формирование контекстного промпта)
         val promptBuilder = PromptBuilder()
 
+        // 3c. Infrastructure: репозиторий профилей (SQLite persistence)
+        val profileRepository = SqliteProfileRepository(dbPath)
+
         // 5b. Application: DialogService (интеграция с LLM)
         val dialogService = DialogService(
             llmPort = llmPort,
             memoryService = memoryService,
-            promptBuilder = promptBuilder
+            promptBuilder = promptBuilder,
+            profileRepository = profileRepository  // NEW: передача репозитория профилей для встраивания активного профиля в промпт
         )
 
         // 6. Application: Task 1 executor (CLI-ассистент)
-        val task1Executor = createTask1Executor(dialogService, memoryService)
+        val task1Executor = Task1Executor(dialogService, memoryService)
+
+        // 5c. Application: ProfileService (управление профилями)
+        val profileService = ProfileService(profileRepository)
+
+        // 6a. Application: Task 2 executor (CLI-ассистент, копия Task 1) + profile delegation
+        val task2Executor = Task2Executor(dialogService, memoryService, profileService)
 
         // 7. CLI: renderer + facade
         val renderer = ConsoleCliRenderer()
 
         return CliApplication(
-            executors = mapOf(task1Executor.taskId to task1Executor),
+            executors = mapOf(
+                task1Executor.taskId to task1Executor,
+                task2Executor.taskId to task2Executor
+            ),
             renderer = renderer,
             taskManagerExecutor = taskManagerExecutor,
             memoryService = memoryService,
             taskStepRepository = taskStepRepository,
             factRepository = factRepository,
-            dialogService = dialogService
+            dialogService = dialogService,
+            profileRepository = profileRepository
         )
     }
 
@@ -189,41 +197,4 @@ object ApplicationBootstrap {
         )
     }
 
-    /**
-     * Создаёт executor для Задачи 1 (CLI-ассистент).
-     *
-     * Task 1 — это основная задача приложения: общение с ассистентом
-     * через трёхуровневую модель памяти (STM/WM/LTM).
-     */
-    private fun createTask1Executor(
-        dialogService: DialogService,
-        memoryService: MemoryService
-    ): TaskExecutor {
-        return object : TaskExecutor {
-            override val taskId = TaskId(1)
-            override val metadata = TaskMetadata(
-                id = taskId,
-                title = "Task 1: CLI-ассистент",
-                description = "Диалоговый ассистент с трёхуровневой моделью памяти (STM/WM/LTM). " +
-                        "Поддерживает управление задачами, шагами, фактами и общение с LLM.",
-                availableCommands = listOf(
-                    ":add <text>", ":list", ":edit <id> <text>", ":drop <id>",
-                    ":open <id>", ":close", ":cancel", ":back",
-                    ":step-add <text>", ":step-list", ":step-done <id>",
-                    ":ctx-save <text>", ":ctx-list", ":ctx-forget <id>",
-                    ":plan <title>", ":status", ":clear",
-                    "temp <value>", "maxtokens <n>", "params"
-                )
-            )
-
-            override suspend fun execute(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
-                // Делегируем в DialogService.chat() — основную точку входа для общения
-                return dialogService.chat(
-                    userInput = prompt.value,
-                    level = io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_LIST,
-                    taskId = null
-                )
-            }
-        }
-    }
 }

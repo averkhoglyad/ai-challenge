@@ -189,6 +189,74 @@ class CliApplicationTest {
         override fun renderFactSearchEmpty(query: String) {
             renderedMessages.add("factSearchEmpty:$query")
         }
+
+        override fun renderProfileList(profiles: List<io.averkhogliad.ai.challenge.week2.domain.model.Profile>) {
+            renderedMessages.add("profileList:${profiles.size}")
+        }
+
+        override fun renderProfileDetail(profile: io.averkhogliad.ai.challenge.week2.domain.model.Profile) {
+            renderedMessages.add("profileDetail:${profile.name}")
+        }
+
+        override fun renderProfileDeleted(name: String) {
+            renderedMessages.add("profileDeleted:$name")
+        }
+
+        override fun renderProfileUpdated(name: String) {
+            renderedMessages.add("profileUpdated:$name")
+        }
+
+        override fun renderProfileError(message: String) {
+            renderedMessages.add("profileError:$message")
+        }
+
+        override fun renderMultilineInputPrompt() {
+            renderedMessages.add("multilineInputPrompt")
+        }
+
+        override fun renderProfileNotFoundById(id: String) {
+            renderedMessages.add("profileNotFoundById:$id")
+        }
+
+        override fun renderProfileNotFoundByName(name: String) {
+            renderedMessages.add("profileNotFoundByName:$name")
+        }
+
+        override fun renderProfileAlreadyExists(name: String) {
+            renderedMessages.add("profileAlreadyExists:$name")
+        }
+
+        override fun renderMissingProfileId() {
+            renderedMessages.add("missingProfileId")
+        }
+
+        override fun renderMissingProfileName() {
+            renderedMessages.add("missingProfileName")
+        }
+
+        override fun renderEmptyProfileContent() {
+            renderedMessages.add("emptyProfileContent")
+        }
+
+        override fun renderProfileDescriptionPrompt() {
+            renderedMessages.add("profileDescriptionPrompt")
+        }
+
+        override fun renderProfileInstructionsPrompt() {
+            renderedMessages.add("profileInstructionsPrompt")
+        }
+
+        override fun renderCannotDeleteActiveProfile() {
+            renderedMessages.add("cannotDeleteActiveProfile")
+        }
+
+        override fun renderStatusProfile(profileName: String?) {
+            renderedMessages.add("statusProfile:${profileName ?: "null"}")
+        }
+
+        override fun renderProfileContentTooLong(length: Int) {
+            renderedMessages.add("profileContentTooLong:$length")
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════

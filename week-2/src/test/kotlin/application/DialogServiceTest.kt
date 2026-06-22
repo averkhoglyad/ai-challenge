@@ -10,10 +10,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
-import kotlin.test.assertContains
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
+import java.time.Instant
+import kotlin.test.*
 
 @DisplayName("DialogService")
 class DialogServiceTest {
@@ -32,6 +30,10 @@ class DialogServiceTest {
         promptBuilder = PromptBuilder()
         dialogService = DialogService(mockLlmPort, memoryService, promptBuilder)
     }
+
+    // ========================================================================
+    // Существующие тесты Chat
+    // ========================================================================
 
     @Nested
     @DisplayName("chat")
@@ -88,6 +90,10 @@ class DialogServiceTest {
         }
     }
 
+    // ========================================================================
+    // Существующие тесты PlanSteps
+    // ========================================================================
+
     @Nested
     @DisplayName("planSteps")
     inner class PlanSteps {
@@ -115,6 +121,146 @@ class DialogServiceTest {
             assertIs<TaskResult.Error>(result)
             assertContains(result.message, "Plan fail")
         }
+    }
+
+    // ========================================================================
+    // НОВЫЕ тесты: интеграция с профилем
+    // ========================================================================
+
+    @Nested
+    @DisplayName("Profile integration")
+    inner class ProfileIntegration {
+
+        private val now = Instant.now()
+
+        @Test
+        fun `chat with profileRepository passes active profile to prompt`() = runBlocking {
+            val activeProfile = Profile(
+                id = ProfileId("active-1"),
+                name = "ActiveProfile",
+                description = "Пиратский стиль общения",
+                instructions = "Отвечай как пират",
+                isActive = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            val profileRepo = StubProfileRepository(activeProfile = activeProfile)
+
+            val service = DialogService(
+                llmPort = mockLlmPort,
+                memoryService = memoryService,
+                promptBuilder = promptBuilder,
+                profileRepository = profileRepo
+            )
+            mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
+
+            val result = service.chat("Ахой!", SessionLevel.TASK_LIST)
+
+            assertIs<TaskResult.Success>(result)
+            assertTrue(profileRepo.findActiveCalled)
+            // Проверяем, что системное сообщение содержит профиль
+            val msgs = mockLlmPort.lastChatMessages
+            assertTrue(msgs.isNotEmpty())
+            assertContains(msgs.first().content, "[PROFILE]")
+            assertContains(msgs.first().content, "Отвечай как пират")
+        }
+
+        @Test
+        fun `chat with no active profile works correctly`() = runBlocking {
+            val profileRepo = StubProfileRepository(activeProfile = null)
+
+            val service = DialogService(
+                llmPort = mockLlmPort,
+                memoryService = memoryService,
+                promptBuilder = promptBuilder,
+                profileRepository = profileRepo
+            )
+            mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
+
+            val result = service.chat("Обычный запрос", SessionLevel.TASK_LIST)
+
+            assertIs<TaskResult.Success>(result)
+            assertTrue(profileRepo.findActiveCalled)
+            val msgs = mockLlmPort.lastChatMessages
+            assertFalse(msgs.first().content.contains("[PROFILE]"))
+        }
+
+        @Test
+        fun `chat calls findActive on every request`() = runBlocking {
+            val activeProfile = Profile(
+                id = ProfileId("active-2"),
+                name = "RepeatedProfile",
+                description = "Test",
+                instructions = "Отвечай кратко",
+                isActive = true,
+                createdAt = now,
+                updatedAt = now
+            )
+            val profileRepo = StubProfileRepository(activeProfile = activeProfile)
+
+            val service = DialogService(
+                llmPort = mockLlmPort,
+                memoryService = memoryService,
+                promptBuilder = promptBuilder,
+                profileRepository = profileRepo
+            )
+            mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
+
+            // Первый запрос
+            service.chat("Первый запрос", SessionLevel.TASK_LIST)
+            val firstCallCount = profileRepo.findActiveCallCount
+
+            // Второй запрос
+            service.chat("Второй запрос", SessionLevel.TASK_LIST)
+            val secondCallCount = profileRepo.findActiveCallCount
+
+            // Проверяем, что findActive() был вызван дважды (по разу на каждый chat)
+            assertEquals(2, secondCallCount)
+            assertTrue(firstCallCount < secondCallCount)
+        }
+    }
+
+    @Nested
+    @DisplayName("Backward compatibility — null profileRepository")
+    inner class NullProfileRepository {
+
+        @Test
+        fun `dialogService works without profileRepository`() = runBlocking {
+            val service = DialogService(
+                llmPort = mockLlmPort,
+                memoryService = memoryService,
+                promptBuilder = promptBuilder,
+                profileRepository = null
+            )
+            mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
+            val result = service.chat("Test", SessionLevel.TASK_LIST)
+            assertIs<TaskResult.Success>(result)
+        }
+    }
+
+    // ========================================================================
+    // Вспомогательные моки
+    // ========================================================================
+
+    private class StubProfileRepository(
+        private val activeProfile: Profile? = null
+    ) : ProfileRepository {
+        var findActiveCalled = false
+        var findActiveCallCount = 0
+
+        override suspend fun findActive(): Profile? {
+            findActiveCalled = true
+            findActiveCallCount++
+            return activeProfile
+        }
+
+        override suspend fun save(profile: Profile): Profile = profile
+        override suspend fun findById(id: ProfileId): Profile? = null
+        override suspend fun findByName(name: String): Profile? = null
+        override suspend fun findAll(): List<Profile> = emptyList()
+        override suspend fun delete(id: ProfileId) {}
+        override suspend fun existsByName(name: String): Boolean = false
+        override suspend fun clearActive() {}
     }
 
     private class MockLlmPort : LlmPort {

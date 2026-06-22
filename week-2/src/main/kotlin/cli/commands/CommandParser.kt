@@ -184,6 +184,14 @@ object CommandParser {
             // Команды интеграции с LLM
             "plan" -> parsePlanStepsCommand(args, raw)
 
+            // Команды управления профилями пользователя (PM)
+            "profile-new" -> parseProfileNewCommand(args, raw)
+            "profile-list" -> Command.ProfileList
+            "profile-use" -> parseProfileUseCommand(args, raw)
+            "profile-edit" -> parseProfileEditCommand(args, raw)
+            "profile-delete" -> parseProfileDeleteCommand(args, raw)
+            "profile-show" -> parseProfileShowCommand(args, raw)
+
             else -> Command.Unknown(raw)
         }
     }
@@ -476,6 +484,70 @@ object CommandParser {
         val title = parts[0].trim()
         val description = parts.getOrElse(1) { "" }.trim().ifEmpty { null }
         return Command.PlanSteps(title, description)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Парсинг команд управления профилями пользователя (PM)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Парсит команду создания профиля: `:profile-new <name>`.
+     * Название обязательно.
+     */
+    internal fun parseProfileNewCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.Unknown(raw)
+        } else {
+            Command.ProfileNew(args)
+        }
+    }
+
+    /**
+     * Парсит команду активации профиля: `:profile-use <name>`.
+     * Имя обязательно. `none` разрешён — будет обработан как деактивация профиля.
+     */
+    internal fun parseProfileUseCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.Unknown(raw)
+        } else {
+            Command.ProfileUse(args)
+        }
+    }
+
+    /**
+     * Парсит команду редактирования профиля: `:profile-edit <name>`.
+     * Название обязательно.
+     */
+    internal fun parseProfileEditCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.Unknown(raw)
+        } else {
+            Command.ProfileEdit(args)
+        }
+    }
+
+    /**
+     * Парсит команду удаления профиля: `:profile-delete <name>`.
+     * Название обязательно.
+     */
+    internal fun parseProfileDeleteCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.Unknown(raw)
+        } else {
+            Command.ProfileDelete(args)
+        }
+    }
+
+    /**
+     * Парсит команду просмотра профиля: `:profile-show [name]`.
+     * Название опционально (без названия — показать активный профиль).
+     */
+    internal fun parseProfileShowCommand(args: String, raw: String): Command {
+        return if (args.isEmpty()) {
+            Command.ProfileShow(null)
+        } else {
+            Command.ProfileShow(args)
+        }
     }
 
     /**

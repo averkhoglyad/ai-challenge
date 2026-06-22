@@ -222,6 +222,28 @@ sealed interface Command {
     data class PlanSteps(val title: String, val description: String? = null) : Command
 
     // ═══════════════════════════════════════════════════════════════
+    // Команды управления профилями пользователя (PM)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Создать новый профиль: `:profile-new <name>` */
+    data class ProfileNew(val name: String) : Command
+
+    /** Показать список всех профилей: `:profile-list` */
+    data object ProfileList : Command
+
+    /** Активировать профиль по имени: `:profile-use <name>` (или `none` для деактивации) */
+    data class ProfileUse(val name: String) : Command
+
+    /** Редактировать профиль: `:profile-edit <name>` */
+    data class ProfileEdit(val name: String) : Command
+
+    /** Удалить профиль: `:profile-delete <name>` */
+    data class ProfileDelete(val name: String) : Command
+
+    /** Показать содержимое профиля: `:profile-show [name]` */
+    data class ProfileShow(val name: String? = null) : Command
+
+    // ═══════════════════════════════════════════════════════════════
     // Пользовательский ввод
     // ═══════════════════════════════════════════════════════════════
 

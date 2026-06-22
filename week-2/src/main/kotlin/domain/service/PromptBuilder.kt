@@ -1,9 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.domain.service
 
-import io.averkhogliad.ai.challenge.week2.domain.model.Fact
-import io.averkhogliad.ai.challenge.week2.domain.model.Message
-import io.averkhogliad.ai.challenge.week2.domain.model.MessageRole
-import io.averkhogliad.ai.challenge.week2.domain.model.WorkingMemory
+import io.averkhogliad.ai.challenge.week2.domain.model.*
 
 /**
  * Сервис формирования контекстного промпта для LLM.
@@ -14,6 +11,7 @@ import io.averkhogliad.ai.challenge.week2.domain.model.WorkingMemory
  *
  * ## Ответственность
  * - Формирование системной инструкции
+ * - Включение профиля пользователя ([PROFILE])
  * - Включение контекста рабочей памяти (WM)
  * - Включение релевантных фактов из базы знаний (LTM)
  * - Включение истории диалога (STM)
@@ -24,21 +22,33 @@ class PromptBuilder {
      * Формирует системный промпт из контекста памяти.
      *
      * Структура промпта:
-     * 1. Системная инструкция
-     * 2. Контекст рабочей памяти (WM)
-     * 3. Релевантные факты из базы знаний (LTM)
-     * 4. История диалога (STM)
+     * 1. [PROFILE] — профиль пользователя (если активен)
+     * 2. Системная инструкция
+     * 3. Контекст рабочей памяти (WM)
+     * 4. Релевантные факты из базы знаний (LTM)
+     * 5. История диалога (STM)
      *
      * @param workingMemory рабочая память (WM)
      * @param relevantFacts релевантные факты из LTM
      * @param recentMessages последние сообщения из STM
+     * @param profile активный профиль пользователя (опционально)
      * @return сформированный промпт
      */
     fun buildPrompt(
         workingMemory: WorkingMemory?,
         relevantFacts: List<Fact> = emptyList(),
-        recentMessages: List<Message> = emptyList()
+        recentMessages: List<Message> = emptyList(),
+        profile: Profile? = null
     ): String = buildString {
+        // [PROFILE] — вставляется ПЕРЕД системной инструкцией, если профиль активен
+        if (profile != null) {
+            appendLine("[PROFILE]")
+            appendLine("Name: ${profile.name}")
+            appendLine("Description: ${profile.description}")
+            appendLine("Instructions: ${profile.instructions}")
+            appendLine()
+        }
+
         appendLine(SYSTEM_INSTRUCTION)
         appendLine()
 
@@ -126,15 +136,17 @@ class PromptBuilder {
      * @param relevantFacts релевантные факты из LTM
      * @param recentMessages последние сообщения из STM
      * @param userInput ввод пользователя
+     * @param profile активный профиль пользователя (опционально)
      * @return список [ChatMessage] для отправки в LLM
      */
     fun buildChatMessages(
         workingMemory: WorkingMemory?,
         relevantFacts: List<Fact> = emptyList(),
         recentMessages: List<Message> = emptyList(),
-        userInput: String
+        userInput: String,
+        profile: Profile? = null
     ): List<ChatMessage> {
-        val systemPrompt = buildPrompt(workingMemory, relevantFacts, recentMessages)
+        val systemPrompt = buildPrompt(workingMemory, relevantFacts, recentMessages, profile)
         val messages = mutableListOf<ChatMessage>()
 
         // Системное сообщение

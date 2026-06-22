@@ -140,6 +140,16 @@ class ConsoleCliRenderer : CliRenderer {
             println("  :switch <id>  — переключиться на диалог по ID")
             println("  :delete <id>  — удалить диалог по ID")
 
+            // ──── Команды управления профилями ────
+            println()
+            println("Команды управления профилями:")
+            println("  :profile-new <name>      — создать новый профиль")
+            println("  :profile-list            — список всех профилей")
+            println("  :profile-use <name>      — активировать профиль по имени (:profile-use none — деактивировать)")
+            println("  :profile-edit <name>     — редактировать профиль")
+            println("  :profile-delete <name>   — удалить профиль")
+            println("  :profile-show [name]     — показать содержимое профиля")
+
             // ──── Task 4: команды сжатия контекста ────
             if ((state.currentTaskId ?: 0) >= 4) {
                 println()
@@ -407,6 +417,207 @@ class ConsoleCliRenderer : CliRenderer {
         println()
         println("=== Результаты поиска: \"$query\" ===")
         println("Ничего не найдено")
+        println()
+    }
+
+    // ──── Profile rendering methods ────
+
+    /**
+     * Отрендерить список профилей.
+     *
+     * @param profiles список профилей
+     */
+    override fun renderProfileList(profiles: List<io.averkhogliad.ai.challenge.week2.domain.model.Profile>) {
+        println()
+        if (profiles.isEmpty()) {
+            println("Профили не найдены")
+        } else {
+            val activeProfile = profiles.find { it.isActive }
+            println("Профили:")
+            profiles.forEachIndexed { index, profile ->
+                val marker = if (profile.isActive) "*" else " "
+                println("  ${index + 1}. $marker ${profile.name} (id: ${profile.id.value.take(8)}...)")
+            }
+            if (activeProfile == null) {
+                println("Активный профиль не задан")
+            }
+        }
+        println()
+    }
+
+    /**
+     * Отрендерить детальную информацию о профиле.
+     *
+     * @param profile профиль для отображения
+     */
+    override fun renderProfileDetail(profile: io.averkhogliad.ai.challenge.week2.domain.model.Profile) {
+        println()
+        println("=".repeat(60))
+        println("  Профиль: ${profile.name}")
+        println("=".repeat(60))
+        println("  ID: ${profile.id.value}")
+        println("  Статус: ${if (profile.isActive) "АКТИВЕН" else "неактивен"}")
+        println("  Создан: ${profile.createdAt}")
+        println("  Обновлён: ${profile.updatedAt}")
+        println("-".repeat(60))
+        println("  Описание:")
+        println(if (profile.description.isNotEmpty()) profile.description else "(не задано)")
+        println("-".repeat(60))
+        println("  Инструкции:")
+        println(if (profile.instructions.isNotEmpty()) profile.instructions else "(не задано)")
+        println("-".repeat(60))
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об удалении профиля.
+     *
+     * @param name название удалённого профиля
+     */
+    override fun renderProfileDeleted(name: String) {
+        println()
+        println("✓ Профиль \"$name\" удалён")
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об обновлении профиля.
+     *
+     * @param name название обновлённого профиля
+     */
+    override fun renderProfileUpdated(name: String) {
+        println()
+        println("✓ Профиль \"$name\" обновлён")
+        println()
+    }
+
+    /**
+     * Отрендерить сообщение об ошибке операции с профилем.
+     *
+     * @param message сообщение об ошибке
+     */
+    override fun renderProfileError(message: String) {
+        println()
+        println("[ОШИБКА] $message")
+        println()
+    }
+
+    /**
+     * Отрендерить приглашение к многострочному вводу содержимого профиля.
+     */
+    override fun renderMultilineInputPrompt() {
+        println("Введите содержимое профиля (завершите :done, отмените :cancel):")
+        print("> ")
+    }
+
+    override fun renderProfileDescriptionPrompt() {
+        println()
+        println("Введите описание профиля (завершите :done, отмените :cancel):")
+        print("> ")
+    }
+
+    override fun renderProfileInstructionsPrompt() {
+        println()
+        println("Введите инструкции профиля (завершите :done, отмените :cancel):")
+        print("> ")
+    }
+
+    // ──── Profile error rendering methods ────
+
+    /**
+     * Отрендерить ошибку: профиль не найден по ID.
+     *
+     * @param id идентификатор профиля
+     */
+    override fun renderProfileNotFoundById(id: String) {
+        println()
+        println("Ошибка: Профиль с ID \"$id\" не найден")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: профиль не найден по имени.
+     *
+     * @param name имя профиля
+     */
+    override fun renderProfileNotFoundByName(name: String) {
+        println()
+        println("Ошибка: Профиль с именем \"$name\" не найден")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: профиль с таким названием уже существует.
+     *
+     * @param name имя профиля
+     */
+    override fun renderProfileAlreadyExists(name: String) {
+        println()
+        println("Ошибка: Профиль с названием \"$name\" уже существует")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: не указан ID профиля для активации.
+     */
+    override fun renderMissingProfileId() {
+        println()
+        println("Ошибка: Укажите ID профиля. Использование: :profile-activate <id>")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: не указано имя профиля для создания.
+     */
+    override fun renderMissingProfileName() {
+        println()
+        println("Ошибка: Укажите имя профиля. Использование: :profile-create <name>")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: пустое содержимое профиля.
+     */
+    override fun renderEmptyProfileContent() {
+        println()
+        println("Ошибка: Содержимое профиля не может быть пустым")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: попытка удалить активный профиль.
+     */
+    override fun renderCannotDeleteActiveProfile() {
+        println()
+        println("Ошибка: Нельзя удалить активный профиль. Сначала переключитесь на другой профиль.")
+        println()
+    }
+
+    /**
+     * Отрендерить ошибку: содержимое профиля превышает лимит.
+     *
+     * @param length текущая длина содержимого
+     */
+    override fun renderProfileContentTooLong(length: Int) {
+        println()
+        println("Ошибка: Содержимое профиля не может превышать 1000 символов (текущая длина: $length)")
+        println()
+    }
+
+    // ──── Profile status rendering ────
+
+    /**
+     * Отрендерить информацию о профиле в выводе команды :status.
+     *
+     * @param profileName название активного профиля или null, если профиль не задан
+     */
+    override fun renderStatusProfile(profileName: String?) {
+        println()
+        if (profileName != null) {
+            println("PM: Активный профиль \"$profileName\"")
+        } else {
+            println("PM: Профиль не задан")
+        }
         println()
     }
 }
