@@ -44,7 +44,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertTrue(output.contains("[DEBUG] Command: plan"))
+        assertTrue(output.contains("[DEBUG] Команда: plan"))
     }
 
     @Test
@@ -58,7 +58,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertTrue(output.contains("[DEBUG] Stage: EXECUTION"))
+        assertTrue(output.contains("[DEBUG] Этап: EXECUTION"))
     }
 
     @Test
@@ -72,7 +72,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertTrue(output.contains("[DEBUG] Step: 3"))
+        assertTrue(output.contains("[DEBUG] Шаг: 3"))
     }
 
     @Test
@@ -86,7 +86,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertTrue(output.contains("[DEBUG] Action: Check task exists"))
+        assertTrue(output.contains("[DEBUG] Действие: Check task exists"))
     }
 
     @Test
@@ -100,7 +100,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertFalse(output.contains("[DEBUG] Action:"))
+        assertFalse(output.contains("[DEBUG] Действие:"))
     }
 
     @Test
@@ -118,7 +118,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertTrue(output.contains("[DEBUG] Context:"))
+        assertTrue(output.contains("[DEBUG] Контекст:"))
         assertTrue(output.contains("taskId: 123"))
         assertTrue(output.contains("description: Test task"))
     }
@@ -135,7 +135,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertFalse(output.contains("[DEBUG] Context:"))
+        assertFalse(output.contains("[DEBUG] Контекст:"))
     }
 
     @Test
@@ -157,7 +157,7 @@ class ConsoleCliRendererFsmTest {
 
             val output = captureOutput { renderer.renderFsmState(state) }
 
-            assertTrue(output.contains("[DEBUG] Stage: $stage"))
+            assertTrue(output.contains("[DEBUG] Этап: $stage"))
         }
     }
 
@@ -175,7 +175,7 @@ class ConsoleCliRendererFsmTest {
 
             val output = captureOutput { renderer.renderFsmState(state) }
 
-            assertTrue(output.contains("[DEBUG] Command: $commandName"))
+            assertTrue(output.contains("[DEBUG] Команда: $commandName"))
         }
     }
 
@@ -190,7 +190,7 @@ class ConsoleCliRendererFsmTest {
 
         val output = captureOutput { renderer.renderFsmState(state) }
 
-        assertTrue(output.contains("[DEBUG] Step: 999"))
+        assertTrue(output.contains("[DEBUG] Шаг: 999"))
     }
 
     @Test

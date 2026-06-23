@@ -35,8 +35,8 @@ class ConsoleCliRendererWaitForEnterTest {
             // Assert
             val output = outputStream.toString()
             assertTrue(
-                output.contains("Press Enter to continue..."),
-                "Output should contain 'Press Enter to continue...' prompt"
+                output.contains("Нажмите Enter для продолжения"),
+                "Output should contain 'Нажмите Enter для продолжения' prompt"
             )
         } finally {
             // Restore original streams

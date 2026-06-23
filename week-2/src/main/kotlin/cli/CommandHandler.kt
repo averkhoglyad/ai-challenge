@@ -1,10 +1,10 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
-import io.averkhogliad.ai.challenge.week2.application.DialogService
-import io.averkhogliad.ai.challenge.week2.application.executor.*
+import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
+import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week2.domain.model.*
@@ -13,17 +13,13 @@ import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
 import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
 import java.time.Instant
 import java.util.*
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId as ModelTaskId
 
 class CommandHandler(
     private val executors: Map<TaskId, TaskExecutor>,
-    private val taskManagerExecutor: TaskManagerExecutor? = null,
-    private val memoryService: MemoryService? = null,
-    private val taskStepRepository: TaskStepRepository? = null,
-    private val factRepository: FactRepository? = null,
-    private val dialogService: DialogService? = null,
-    private val planCommandExecutor: PlanCommandExecutor? = null,
-    private val debugCommandExecutor: DebugCommandExecutor? = null
+    private val todoTaskService: TodoTaskService,
+    private val memoryService: MemoryService,
+    private val taskStepRepository: TaskStepRepository,
+    private val factRepository: FactRepository,
 ) {
 
     suspend fun handle(command: Command, state: CliState): CliState {
@@ -32,11 +28,11 @@ class CommandHandler(
             is Command.Back -> {
                 if (state.currentTodoTaskId != null) {
                     // Уровень 1: выход из выбранной задачи в список задач
-                    memoryService?.switchToTaskListLevel()
+                    memoryService.switchToTaskListLevel()
                     state.copy(currentTodoTaskId = null, taskListMode = true)
                 } else if (state.taskListMode) {
                     // Уровень 2: выход из списка задач в главное меню
-                    memoryService?.switchToTaskListLevel()
+                    memoryService.switchToTaskListLevel()
                     state.copy(currentTaskId = null, taskListMode = false)
                 } else {
                     // Нет контекста задачи — просто сбрасываем в главное меню
@@ -98,48 +94,48 @@ class CommandHandler(
 
             // Task management commands (todo-manager)
             is Command.AddTask -> {
-                taskManagerExecutor?.handleAddTask(command.title)
+                todoTaskService.addTask(command.title)
                 state
             }
 
             is Command.ListTasks -> {
-                taskManagerExecutor?.handleListTasks()
+                todoTaskService.listTasks()
                 state
             }
 
             is Command.EditTask -> {
-                taskManagerExecutor?.handleEditTask(command.id, command.title)
+                todoTaskService.editTask(command.id, command.title)
                 state
             }
 
             is Command.DropTask -> {
-                taskManagerExecutor?.handleDropTask(command.id)
+                todoTaskService.dropTask(command.id)
                 state
             }
 
             is Command.OpenTask -> {
-                taskManagerExecutor?.handleOpenTask(command.id)
+                todoTaskService.openTask(command.id)
                 // Переключение STM на уровень задачи
-                memoryService?.switchToTaskLevel(ModelTaskId(command.id.value))
+                memoryService.switchToTaskLevel(TaskId(command.id.value))
                 state.copy(currentTodoTaskId = command.id.value, taskListMode = false)
             }
 
             is Command.CloseTask -> {
-                taskManagerExecutor?.handleCloseTask(command.id)
+                todoTaskService?.closeTask(command.id)
                 // Очищаем currentTodoTaskId только если закрывается текущая задача
                 val isCurrentTask = command.id == null || command.id?.value == state.currentTodoTaskId
                 if (isCurrentTask) state.copy(currentTodoTaskId = null) else state
             }
 
             is Command.CancelTask -> {
-                taskManagerExecutor?.handleCancelTask(command.id)
+                todoTaskService?.cancelTask(command.id)
                 state.copy(currentTodoTaskId = null)
             }
 
             // Step management commands
             is Command.AddStep -> {
                 requireTaskOpen(state)
-                val taskId = ModelTaskId(state.currentTodoTaskId!!)
+                val taskId = TaskId(state.currentTodoTaskId!!)
                 val step = TaskStep(
                     id = TaskStepId(UUID.randomUUID().toString()),
                     taskId = taskId,
@@ -155,7 +151,7 @@ class CommandHandler(
 
             is Command.ListSteps -> {
                 requireTaskOpen(state)
-                val taskId = ModelTaskId(state.currentTodoTaskId!!)
+                val taskId = TaskId(state.currentTodoTaskId!!)
                 val steps = taskStepRepository?.findByTaskId(taskId) ?: emptyList()
                 // Rendering is handled by CliApplication
                 state
@@ -175,14 +171,14 @@ class CommandHandler(
             // Memory management commands
             is Command.ClearMemory -> {
                 val level = currentLevel(state)
-                val taskId = state.currentTodoTaskId?.let { ModelTaskId(it) }
+                val taskId = state.currentTodoTaskId?.let { TaskId(it) }
                 memoryService?.clearSession(level, taskId)
                 state
             }
 
             is Command.ShowStatus -> {
                 val level = currentLevel(state)
-                val taskId = state.currentTodoTaskId?.let { ModelTaskId(it) }
+                val taskId = state.currentTodoTaskId?.let { TaskId(it) }
                 memoryService?.getMemoryStatus(level, taskId)
                 state
             }
@@ -316,7 +312,7 @@ class CommandHandler(
      * Обновляет WorkingMemory для уровня задачи, загружая актуальный список шагов
      * из [taskStepRepository] и переключая STM на уровень задачи.
      */
-    private suspend fun updateWorkingMemorySteps(taskId: ModelTaskId) {
+    private suspend fun updateWorkingMemorySteps(taskId: TaskId) {
         val steps = taskStepRepository?.findByTaskId(taskId) ?: emptyList()
         memoryService?.switchToTaskLevel(taskId)
     }
@@ -326,13 +322,13 @@ class CommandHandler(
         var taskId = currentState.currentTaskId
 
         if (taskId == null && executors.size == 1) {
-            taskId = executors.keys.first().value
+            taskId = executors.keys.first().value.toInt()
             currentState = currentState.copy(currentTaskId = taskId)
         }
 
         if (taskId == null) return Pair(currentState, null)
 
-        val executor = executors[TaskId(taskId)] ?: return Pair(currentState, null)
+        val executor = executors[TaskId(taskId.toString())] ?: return Pair(currentState, null)
 
         val prompt = Prompt(command.text)
         val result = executor.execute(prompt, currentState.executionConfig)
@@ -344,9 +340,9 @@ class CommandHandler(
 
     /**
      * Возвращает [Task2Executor] из карты executors, если он зарегистрирован.
-     * Task2Executor имеет ID = 2.
+     * Task2Executor имеет ID = "2".
      */
-    fun getTask2Executor(): Task2Executor? = executors[TaskId(2)] as? Task2Executor
+    fun getTask2Executor(): Task2Executor? = executors[TaskId("2")] as? Task2Executor
 
     fun getAllExecutors(): List<TaskExecutor> = executors.values.toList()
 }

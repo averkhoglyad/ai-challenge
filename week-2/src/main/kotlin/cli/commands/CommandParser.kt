@@ -56,8 +56,8 @@ object CommandParser {
     fun parse(input: String, context: CommandContext = CommandContext.TASK_SELECTION): Command {
         val trimmed = input.trim()
         return when {
-            // Пустой ввод → дефолтный промпт
-            trimmed.isEmpty() -> Command.UserInput(DEFAULT_PROMPT)
+            // Пустой ввод — игнорируем, не создаём промпт
+            trimmed.isEmpty() -> Command.UserInput("")
 
             // Команды (начинаются с ':')
             trimmed.startsWith(":") -> parseCommand(trimmed, context)
@@ -657,8 +657,6 @@ object CommandParser {
         }
     }
 
-    /** Дефолтный промпт, если пользователь ничего не ввёл */
-    const val DEFAULT_PROMPT = "Расскажи короткий анекдот про программиста."
 }
 
 

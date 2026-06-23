@@ -1,20 +1,20 @@
-package io.averkhogliad.ai.challenge.week2.application.executor
+package io.averkhogliad.ai.challenge.week2.application.handler
 
 import io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine
+import io.averkhogliad.ai.challenge.week2.application.InvariantService
+import io.averkhogliad.ai.challenge.week2.application.planner.FactCollector
+import io.averkhogliad.ai.challenge.week2.application.planner.LlmPlanner
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week2.domain.model.*
-import io.averkhogliad.ai.challenge.week2.domain.service.CommandEngine
-import io.averkhogliad.ai.challenge.week2.domain.service.FactRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.LlmPort
-import io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository
+import io.averkhogliad.ai.challenge.week2.domain.service.*
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import kotlin.test.*
 
 /**
- * In-memory реализация [TaskRepository] для тестирования PlanCommandExecutor.
+ * In-memory реализация [TaskRepository] для тестирования PlanCommandHandler.
  */
 private class PlanTestInMemoryTaskRepository : TaskRepository {
     private val tasks = mutableMapOf<TaskId, Task>()
@@ -52,7 +52,7 @@ private class PlanTestInMemoryTaskRepository : TaskRepository {
 }
 
 /**
- * In-memory реализация [FactRepository] для тестирования PlanCommandExecutor.
+ * In-memory реализация [FactRepository] для тестирования PlanCommandHandler.
  */
 private class PlanTestInMemoryFactRepository : FactRepository {
     private val facts = mutableMapOf<FactId, Fact>()
@@ -81,10 +81,16 @@ private class PlanTestInMemoryFactRepository : FactRepository {
     override suspend fun count(): Int {
         return facts.size
     }
+
+    override suspend fun searchBatch(queries: List<String>): List<Fact> {
+        return facts.values.filter { fact ->
+            queries.any { query -> fact.content.contains(query, ignoreCase = true) }
+        }
+    }
 }
 
 /**
- * Unit-тесты для [PlanCommandExecutor].
+ * Unit-тесты для [PlanCommandHandler].
  *
  * ## Тестируемая функциональность
  * - Инициализация команды `:plan` с открытой задачей
@@ -94,19 +100,32 @@ private class PlanTestInMemoryFactRepository : FactRepository {
  * - Обработка ошибок (нет открытой задачи, задача не найдена, задача не открыта)
  * - Интеграция с CommandEngine
  */
-class PlanCommandExecutorTest {
+class PlanCommandHandlerTest {
 
     private lateinit var taskRepository: TaskRepository
     private lateinit var factRepository: FactRepository
     private lateinit var commandEngine: CommandEngine
-    private lateinit var executor: PlanCommandExecutor
+    private lateinit var executor: PlanCommandHandler
+    private lateinit var stubInvariantService: InvariantService
+
+    private fun createStubInvariantService(): InvariantService =
+        object : InvariantService(object : InvariantRepository {
+            override suspend fun save(invariant: Invariant): Invariant = invariant
+            override suspend fun findById(id: InvariantId): Invariant? = null
+            override suspend fun findAll(): List<Invariant> = emptyList()
+            override suspend fun delete(id: InvariantId) = false
+            override suspend fun count() = 0
+        }) {}
 
     @BeforeTest
     fun setUp() {
         taskRepository = PlanTestInMemoryTaskRepository()
         factRepository = PlanTestInMemoryFactRepository()
         commandEngine = DefaultCommandEngine()
-        executor = PlanCommandExecutor(taskRepository, factRepository, commandEngine)
+        stubInvariantService = createStubInvariantService()
+        val factCollector = FactCollector(factRepository)
+        executor =
+            PlanCommandHandler(taskRepository, commandEngine, factCollector, invariantService = stubInvariantService)
     }
 
     // ===== Тесты инициализации команды =====
@@ -445,7 +464,15 @@ class PlanCommandExecutorTest {
     fun `executeExecution without active command returns error`() = runBlocking {
         // Given: executor with LLM but no active command
         val llmPort = MockLlmPort()
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val factCollector = FactCollector(factRepository)
+        val llmPlanner = LlmPlanner(llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            factCollector,
+            llmPlanner,
+            invariantService = stubInvariantService
+        )
 
         // When
         val result = executorWithLlm.executeExecution()
@@ -458,7 +485,13 @@ class PlanCommandExecutorTest {
     fun `executeExecution on wrong stage returns error`() = runBlocking {
         // Given: executor with LLM, command in PLANNING stage
         val llmPort = MockLlmPort()
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -479,11 +512,17 @@ class PlanCommandExecutorTest {
     }
 
     @Test
-    fun `executeExecution with successful LLM response parses steps`() = runBlocking {
+    fun `executeExecution with successful LLM response parses steps`(): Unit = runBlocking {
         // Given: executor with LLM, command in EXECUTION stage
         val llmResponse = "1. First step\n2. Second step\n3. Third step"
         val llmPort = MockLlmPort(TaskResult.Success(llmResponse))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -515,7 +554,13 @@ class PlanCommandExecutorTest {
     fun `executeExecution with LLM error returns error message`() = runBlocking {
         // Given: executor with LLM that returns error
         val llmPort = MockLlmPort(TaskResult.Error("API rate limit exceeded"))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -532,14 +577,20 @@ class PlanCommandExecutorTest {
         val result = executorWithLlm.executeExecution()
 
         // Then
-        assertTrue(result.contains("Ошибка LLM: API rate limit exceeded"))
+        assertTrue(result.contains("Ошибка: API rate limit exceeded"))
     }
 
     @Test
     fun `executeExecution with empty LLM response returns error`() = runBlocking {
         // Given: executor with LLM that returns empty response
         val llmPort = MockLlmPort(TaskResult.Success("No steps here"))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -569,7 +620,13 @@ class PlanCommandExecutorTest {
             2) Fourth step
         """.trimIndent()
         val llmPort = MockLlmPort(TaskResult.Success(llmResponse))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -598,7 +655,13 @@ class PlanCommandExecutorTest {
         // Given
         val llmResponse = "1. Step A\n2. Step B"
         val llmPort = MockLlmPort(TaskResult.Success(llmResponse))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -624,10 +687,16 @@ class PlanCommandExecutorTest {
     /**
      * Подготавливает executor с LLM и переводит команду в этап VALIDATION.
      */
-    private suspend fun setupValidationStage(): PlanCommandExecutor {
+    private suspend fun setupValidationStage(): PlanCommandHandler {
         val llmResponse = "1. First step\n2. Second step\n3. Third step"
         val llmPort = MockLlmPort(TaskResult.Success(llmResponse))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -858,7 +927,13 @@ class PlanCommandExecutorTest {
         // Given: executor with LLM
         val llmResponse = "1. Analyze requirements\n2. Design solution\n3. Implement code"
         val llmPort = MockLlmPort(TaskResult.Success(llmResponse))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,
@@ -895,7 +970,13 @@ class PlanCommandExecutorTest {
         // Given
         val llmResponse = "1. Original step 1\n2. Original step 2"
         val llmPort = MockLlmPort(TaskResult.Success(llmResponse))
-        val executorWithLlm = PlanCommandExecutor(taskRepository, factRepository, commandEngine, llmPort)
+        val executorWithLlm = PlanCommandHandler(
+            taskRepository,
+            commandEngine,
+            FactCollector(factRepository),
+            LlmPlanner(llmPort),
+            invariantService = stubInvariantService
+        )
         val taskId = TaskId("1")
         val task = Task(
             id = taskId,

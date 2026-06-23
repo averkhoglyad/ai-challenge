@@ -65,11 +65,11 @@ class CommandParserTest {
     inner class UserInput {
 
         @Test
-        @DisplayName("пустой ввод даёт дефолтный промпт")
-        fun `empty input gives default prompt`() {
+        @DisplayName("пустой ввод даёт UserInput с пустым текстом")
+        fun `empty input gives UserInput with blank text`() {
             val cmd = CommandParser.parse("")
             assertIs<Command.UserInput>(cmd)
-            assertEquals("Расскажи короткий анекдот про программиста.", cmd.text)
+            assertEquals("", cmd.text)
         }
 
         @Test
@@ -81,11 +81,11 @@ class CommandParserTest {
         }
 
         @Test
-        @DisplayName("пробельный ввод считается пустым и даёт дефолтный промпт")
-        fun `whitespace input is empty and gives default prompt`() {
+        @DisplayName("пробельный ввод даёт UserInput с пустым текстом")
+        fun `whitespace input gives UserInput with blank text`() {
             val cmd = CommandParser.parse("   ")
             assertIs<Command.UserInput>(cmd)
-            assertEquals("Расскажи короткий анекдот про программиста.", cmd.text)
+            assertEquals("", cmd.text)
         }
     }
 

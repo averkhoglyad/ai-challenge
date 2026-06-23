@@ -1,24 +1,64 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
+import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
-import io.averkhogliad.ai.challenge.week2.domain.model.Task
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskStatus
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId
-import io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
+import io.averkhogliad.ai.challenge.week2.domain.model.*
+import io.averkhogliad.ai.challenge.week2.domain.service.*
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.*
 import org.junit.jupiter.api.Test
 import kotlin.test.*
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId as ModelTaskId
+
+/**
+ * In-memory реализация FactRepository для тестирования.
+ */
+private class InMemoryFactRepository : FactRepository {
+    private val facts = mutableMapOf<FactId, Fact>()
+
+    override suspend fun save(fact: Fact): Fact {
+        facts[fact.id] = fact
+        return fact
+    }
+
+    override suspend fun findById(id: FactId): Fact? = facts[id]
+
+    override suspend fun findAll(): List<Fact> = facts.values.toList()
+
+    override suspend fun search(query: String): List<Fact> = emptyList()
+
+    override suspend fun searchBatch(queries: List<String>): List<Fact> = emptyList()
+
+    override suspend fun delete(id: FactId): Boolean = facts.remove(id) != null
+
+    override suspend fun count(): Int = facts.size
+}
+
+/**
+ * In-memory реализация DialogSessionRepository для тестирования.
+ */
+private class InMemoryDialogSessionRepository : DialogSessionRepository {
+    private val sessions = mutableMapOf<String, DialogSession>()
+
+    override fun findById(id: SessionId): DialogSession? = sessions[id.value]
+    override fun save(session: DialogSession): DialogSession {
+        sessions[session.id.value] = session
+        return session
+    }
+
+    override fun findByTaskId(taskId: TaskId): DialogSession? =
+        sessions.values.firstOrNull { it.taskId == taskId }
+
+    override fun findActiveSession(): DialogSession? = sessions.values.firstOrNull()
+
+    override fun delete(id: SessionId) {
+        sessions.remove(id.value)
+    }
+}
 
 /**
  * In-memory реализация TaskRepository для тестирования.
@@ -30,7 +70,7 @@ private class InMemoryTaskRepository : TaskRepository {
         tasks[task.id.value] = task
     }
 
-    override suspend fun findById(id: ModelTaskId): Task? {
+    override suspend fun findById(id: TaskId): Task? {
         return tasks[id.value]
     }
 
@@ -38,19 +78,19 @@ private class InMemoryTaskRepository : TaskRepository {
         return tasks.values.toList()
     }
 
-    override suspend fun delete(id: ModelTaskId) {
+    override suspend fun delete(id: TaskId) {
         tasks.remove(id.value)
     }
 
-    override suspend fun exists(id: ModelTaskId): Boolean {
+    override suspend fun exists(id: TaskId): Boolean {
         return tasks.containsKey(id.value)
     }
 
-    override suspend fun saveSteps(taskId: ModelTaskId, steps: List<TaskStep>) {
+    override suspend fun saveSteps(taskId: TaskId, steps: List<TaskStep>) {
         // No-op for tests
     }
 
-    override suspend fun findStepsByTaskId(taskId: ModelTaskId): List<TaskStep> {
+    override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> {
         return emptyList()
     }
 }
@@ -88,8 +128,19 @@ class CommandHandlerTest {
         }
     }
 
+    private val defaultTodoTaskService = TodoTaskService(InMemoryTaskRepository())
+    private val defaultMemoryService = MemoryService(InMemoryDialogSessionRepository())
+    private val defaultTaskStepRepository = InMemoryTaskStepRepository()
+    private val defaultFactRepository = InMemoryFactRepository()
+
     private fun createHandler(executors: Map<TaskId, TaskExecutor>): CommandHandler =
-        CommandHandler(executors)
+        CommandHandler(
+            executors,
+            defaultTodoTaskService,
+            defaultMemoryService,
+            defaultTaskStepRepository,
+            defaultFactRepository
+        )
 
     // ═══════════════════════════════════════════════════════════════
     // Глобальные команды
@@ -475,8 +526,8 @@ class CommandHandlerTest {
         @Test
         @DisplayName("UserInput without active task does not call executor")
         fun `UserInput without active task does not call executor`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
-            val handler = createHandler(mapOf(TaskId(1) to executor))
+            val executor = MockTaskExecutor(TaskId("1"))
+            val handler = createHandler(mapOf(TaskId("1") to executor))
             val state = CliState(currentTaskId = null)
             val (newState, result) = handler.executeUserInput(Command.UserInput("test"), state)
             // При одном executor'е taskId автоматически устанавливается
@@ -488,8 +539,8 @@ class CommandHandlerTest {
         @Test
         @DisplayName("UserInput with active task calls executor")
         fun `UserInput with active task calls executor`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
-            val handler = createHandler(mapOf(TaskId(1) to executor))
+            val executor = MockTaskExecutor(TaskId("1"))
+            val handler = createHandler(mapOf(TaskId("1") to executor))
             val state = CliState(currentTaskId = 1)
             val (newState, result) = handler.executeUserInput(Command.UserInput("test"), state)
             assertEquals(state, newState)
@@ -501,8 +552,8 @@ class CommandHandlerTest {
         @Test
         @DisplayName("executeUserInput returns result")
         fun `executeUserInput returns result`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
-            val handler = createHandler(mapOf(TaskId(1) to executor))
+            val executor = MockTaskExecutor(TaskId("1"))
+            val handler = createHandler(mapOf(TaskId("1") to executor))
             val state = CliState(currentTaskId = 1)
             val (newState, result) = handler.executeUserInput(Command.UserInput("test"), state)
             assertEquals(state, newState)
@@ -514,8 +565,8 @@ class CommandHandlerTest {
         @Test
         @DisplayName("executeUserInput passes executionConfig")
         fun `executeUserInput passes executionConfig`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
-            val handler = createHandler(mapOf(TaskId(1) to executor))
+            val executor = MockTaskExecutor(TaskId("1"))
+            val handler = createHandler(mapOf(TaskId("1") to executor))
             val config = TaskExecutionConfig(temperature = 0.5, maxTokens = 100)
             val state = CliState(currentTaskId = 1, executionConfig = config)
             handler.executeUserInput(Command.UserInput("p"), state)
@@ -536,18 +587,18 @@ class CommandHandlerTest {
         @Test
         @DisplayName("getExecutor returns executor by taskId")
         fun `getExecutor returns executor by taskId`() {
-            val executor = MockTaskExecutor(TaskId(1))
-            val handler = createHandler(mapOf(TaskId(1) to executor))
-            assertSame(executor, handler.getExecutor(TaskId(1)))
-            assertNull(handler.getExecutor(TaskId(999)))
+            val executor = MockTaskExecutor(TaskId("1"))
+            val handler = createHandler(mapOf(TaskId("1") to executor))
+            assertSame(executor, handler.getExecutor(TaskId("1")))
+            assertNull(handler.getExecutor(TaskId("999")))
         }
 
         @Test
         @DisplayName("getAllExecutors returns all executors")
         fun `getAllExecutors returns all executors`() {
-            val e1 = MockTaskExecutor(TaskId(1))
-            val e2 = MockTaskExecutor(TaskId(2))
-            val handler = createHandler(mapOf(TaskId(1) to e1, TaskId(2) to e2))
+            val e1 = MockTaskExecutor(TaskId("1"))
+            val e2 = MockTaskExecutor(TaskId("2"))
+            val handler = createHandler(mapOf(TaskId("1") to e1, TaskId("2") to e2))
             val all = handler.getAllExecutors()
             assertEquals(2, all.size)
             assertTrue(e1 in all)
@@ -564,14 +615,20 @@ class CommandHandlerTest {
     inner class TaskManagementCommands {
 
         private lateinit var repository: InMemoryTaskRepository
-        private lateinit var executor: TaskManagerExecutor
+        private lateinit var executor: TodoTaskService
         private lateinit var handler: CommandHandler
 
         @BeforeEach
         fun setUp() {
             repository = InMemoryTaskRepository()
-            executor = TaskManagerExecutor(repository)
-            handler = CommandHandler(emptyMap(), executor)
+            executor = TodoTaskService(repository)
+            handler = CommandHandler(
+                emptyMap(),
+                executor,
+                defaultMemoryService,
+                defaultTaskStepRepository,
+                defaultFactRepository
+            )
         }
 
         @Test
@@ -581,7 +638,7 @@ class CommandHandlerTest {
 
             handler.handle(Command.AddTask("Test Task"), state)
 
-            val tasks = executor.handleListTasks()
+            val tasks = executor.listTasks()
             assertEquals(1, tasks.size)
             assertEquals("Test Task", tasks[0].title)
         }
@@ -591,12 +648,12 @@ class CommandHandlerTest {
         fun `ListTasks returns all tasks`() = runBlocking {
             val state = CliState()
 
-            executor.handleAddTask("Task 1")
-            executor.handleAddTask("Task 2")
+            executor.addTask("Task 1")
+            executor.addTask("Task 2")
 
             handler.handle(Command.ListTasks, state)
 
-            val tasks = executor.handleListTasks()
+            val tasks = executor.listTasks()
             assertEquals(2, tasks.size)
         }
 
@@ -605,7 +662,7 @@ class CommandHandlerTest {
         fun `OpenTask sets currentTodoTaskId`() = runBlocking {
             val state = CliState()
 
-            val task = executor.handleAddTask("Task to open")
+            val task = executor.addTask("Task to open")
             val newState = handler.handle(Command.OpenTask(task.id), state)
 
             assertEquals(task.id.value, newState.currentTodoTaskId)
@@ -618,14 +675,14 @@ class CommandHandlerTest {
             var state = CliState()
 
             // Создать и открыть задачу
-            val task = executor.handleAddTask("Original Title")
+            val task = executor.addTask("Original Title")
             state = handler.handle(Command.OpenTask(task.id), state)
 
             // Редактировать без ID (контекстная команда)
             handler.handle(Command.EditTask(null, "Updated Title"), state)
 
             // Проверить что задача обновлена
-            val updated = executor.handleListTasks().find { it.id == task.id }
+            val updated = executor.listTasks().find { it.id == task.id }
             assertNotNull(updated)
             assertEquals("Updated Title", updated.title)
         }
@@ -636,14 +693,14 @@ class CommandHandlerTest {
             var state = CliState()
 
             // Создать и открыть задачу
-            val task = executor.handleAddTask("Task to drop")
+            val task = executor.addTask("Task to drop")
             state = handler.handle(Command.OpenTask(task.id), state)
 
             // Удалить без ID (контекстная команда)
             handler.handle(Command.DropTask(null), state)
 
             // Проверить что задача удалена
-            val tasks = executor.handleListTasks()
+            val tasks = executor.listTasks()
             assertTrue(tasks.isEmpty())
             assertNull(executor.currentTaskId)
         }
@@ -654,14 +711,14 @@ class CommandHandlerTest {
             var state = CliState()
 
             // Создать и открыть задачу
-            val task = executor.handleAddTask("Task to close")
+            val task = executor.addTask("Task to close")
             state = handler.handle(Command.OpenTask(task.id), state)
 
             // Закрыть без ID (контекстная команда)
             state = handler.handle(Command.CloseTask(null), state)
 
             // Проверить что задача закрыта
-            val closed = executor.handleListTasks().find { it.id == task.id }
+            val closed = executor.listTasks().find { it.id == task.id }
             assertNotNull(closed)
             assertEquals(TaskStatus.CLOSED, closed.status)
             assertNull(executor.currentTaskId)
@@ -674,14 +731,14 @@ class CommandHandlerTest {
             var state = CliState()
 
             // Создать и открыть задачу
-            val task = executor.handleAddTask("Task to cancel")
+            val task = executor.addTask("Task to cancel")
             state = handler.handle(Command.OpenTask(task.id), state)
 
             // Отменить без ID (контекстная команда)
             handler.handle(Command.CancelTask(null), state)
 
             // Проверить что задача отменена
-            val cancelled = executor.handleListTasks().find { it.id == task.id }
+            val cancelled = executor.listTasks().find { it.id == task.id }
             assertNotNull(cancelled)
             assertEquals(TaskStatus.CANCELLED, cancelled.status)
             assertNull(executor.currentTaskId)
@@ -692,7 +749,7 @@ class CommandHandlerTest {
         fun `Back clears currentTodoTaskId`() = runBlocking {
             var state = CliState()
 
-            val task = executor.handleAddTask("Task")
+            val task = executor.addTask("Task")
             state = handler.handle(Command.OpenTask(task.id), state)
             assertEquals(task.id.value, state.currentTodoTaskId)
 
@@ -710,7 +767,7 @@ class CommandHandlerTest {
     inner class StepManagementCommands {
 
         private lateinit var repository: InMemoryTaskRepository
-        private lateinit var executor: TaskManagerExecutor
+        private lateinit var executor: TodoTaskService
         private lateinit var stepRepository: InMemoryTaskStepRepository
         private lateinit var handler: CommandHandler
         private lateinit var createdTask: Task
@@ -718,17 +775,19 @@ class CommandHandlerTest {
         @BeforeEach
         fun setUp() {
             repository = InMemoryTaskRepository()
-            executor = TaskManagerExecutor(repository)
+            executor = TodoTaskService(repository)
             stepRepository = InMemoryTaskStepRepository()
             handler = CommandHandler(
                 executors = emptyMap(),
-                taskManagerExecutor = executor,
-                taskStepRepository = stepRepository
+                todoTaskService = executor,
+                memoryService = defaultMemoryService,
+                taskStepRepository = stepRepository,
+                factRepository = defaultFactRepository
             )
         }
 
         private suspend fun openTask(): CliState {
-            createdTask = executor.handleAddTask("Test Task")
+            createdTask = executor.addTask("Test Task")
             return handler.handle(Command.OpenTask(createdTask.id), CliState())
         }
 
@@ -831,7 +890,7 @@ private class InMemoryTaskStepRepository : TaskStepRepository {
         return step
     }
 
-    override fun findByTaskId(taskId: ModelTaskId): List<TaskStep> {
+    override fun findByTaskId(taskId: TaskId): List<TaskStep> {
         return steps.values
             .filter { it.taskId == taskId }
             .sortedBy { it.order }
@@ -845,13 +904,13 @@ private class InMemoryTaskStepRepository : TaskStepRepository {
         return steps.remove(stepId) != null
     }
 
-    override fun deleteByTaskId(taskId: ModelTaskId): Int {
+    override fun deleteByTaskId(taskId: TaskId): Int {
         val toRemove = steps.values.filter { it.taskId == taskId }
         toRemove.forEach { steps.remove(it.id) }
         return toRemove.size
     }
 
-    override fun countByTaskId(taskId: ModelTaskId): Int {
+    override fun countByTaskId(taskId: TaskId): Int {
         return steps.values.count { it.taskId == taskId }
     }
 }

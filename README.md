@@ -8,7 +8,7 @@
 
 - **`week-0`** — базовое приложение: интерактивное меню, работа с LLM API, учебные задачи 1–5
 - **`week-1`** — управление диалогами: контекст, стратегии (SlidingWindow, StickyFacts, Branching)
-- **`week-2`** — профили (Profile Memory): создание, хранение и переключение профилей, определяющих стиль ответов LLM
+- **`week-2`** — расширенное приложение с FSM-планированием, инвариантами, профилями и todo-менеджером
 - **`utils`** — общие утилиты: клиент LLM API, система конфигурации, вспомогательные функции
 
 Общая логика сборки вынесена в convention plugin в `buildSrc`.
@@ -130,7 +130,7 @@ Rate limiting потокобезопасен и работает коррект�
 **Важно:** CLI-слой зависит только от domain-интерфейсов (включая `ResourceManager`) и не импортирует `utils.llm`
 напрямую.
 
-Подробности архитектуры см. в [`arch/refactoring-completion-report.md`](arch/refactoring-completion-report.md).
+Подробности архитектуры см. в отчётах в директории [`docs/reports/`](docs/reports/).
 
 ## Модель памяти
 
@@ -161,7 +161,8 @@ Week-2 добавляет 6 команд для управления профи�
 | `:profile-delete`   | `:profile-delete <name>`  | Удалить профиль по имени. Требуется подтверждение.                                                                                                                |
 | `:profile-content`  | `:profile-content [name]` | Показать содержимое профиля. Если имя не указано, показывает содержимое активного профиля.                                                                        |
 
-Команда [`:status`](week-2/src/main/kotlin/cli/CommandHandler.kt) также была обновлена — теперь она отображает имя
+Команда [`:status`](week-2/src/main/kotlin/cli/handlers/FsmCommandHandler.kt) также была обновлена — теперь она
+отображает имя
 активного профиля (если он установлен) и активную FSM-команду (если есть).
 
 ## Команды управления задачами (FSM)
@@ -312,13 +313,14 @@ Debug mode: disabled
 
 **Ключевые компоненты:**
 
-| Компонент              | Файл                                                                                           | Ответственность                                                                             |
-|------------------------|------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `CommandEngine`        | [`CommandEngine.kt`](week-2/src/main/kotlin/domain/service/CommandEngine.kt)                   | Интерфейс для управления состоянием FSM                                                     |
-| `DefaultCommandEngine` | [`DefaultCommandEngine.kt`](week-2/src/main/kotlin/application/DefaultCommandEngine.kt)        | Реализация FSM с поддержкой `hasActiveCommand()`, `getActiveState()`, `abortCommand()`      |
-| `CommandState`         | [`CommandState.kt`](week-2/src/main/kotlin/domain/model/CommandState.kt)                       | Модель состояния: `commandName`, `currentStage`, `currentStep`, `expectedAction`, `context` |
-| `CommandStage`         | [`CommandStage.kt`](week-2/src/main/kotlin/domain/model/CommandStage.kt)                       | Enum: `PLANNING`, `EXECUTION`, `VALIDATION`, `DONE`                                         |
-| `PlanCommandExecutor`  | [`PlanCommandExecutor.kt`](week-2/src/main/kotlin/application/executor/PlanCommandExecutor.kt) | Пример многошаговой команды с FSM                                                           |
+| Компонент              | Файл                                                                                        | Ответственность                                                                             |
+|------------------------|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `CommandEngine`        | [`CommandEngine.kt`](week-2/src/main/kotlin/domain/service/CommandEngine.kt)                | Интерфейс для управления состоянием FSM                                                     |
+| `DefaultCommandEngine` | [`DefaultCommandEngine.kt`](week-2/src/main/kotlin/application/DefaultCommandEngine.kt)     | Реализация FSM с поддержкой `hasActiveCommand()`, `getActiveState()`, `abortCommand()`      |
+| `CommandState`         | [`CommandState.kt`](week-2/src/main/kotlin/domain/model/CommandState.kt)                    | Модель состояния: `commandName`, `currentStage`, `currentStep`, `expectedAction`, `context` |
+| `CommandStage`         | [`CommandStage.kt`](week-2/src/main/kotlin/domain/model/CommandStage.kt)                    | Enum: `PLANNING`, `EXECUTION`, `VALIDATION`, `DONE`, `TERMINATED`                           |
+| `PlanCommandHandler`   | [`PlanCommandHandler.kt`](week-2/src/main/kotlin/application/handler/PlanCommandHandler.kt) | FSM-оркестратор команды `:plan` (сбор фактов, LLM-планирование, валидация)                  |
+| `TransitionValidator`  | [`TransitionValidator.kt`](week-2/src/main/kotlin/domain/service/TransitionValidator.kt)    | Валидация переходов между состояниями FSM                                                   |
 
 **Принципы работы:**
 
@@ -385,6 +387,127 @@ Debug mode: disabled
 | `Профиль с именем "X" не найден`          | Указано несуществующее имя при редактировании/удалении/просмотре | Проверьте правильность имени через `:profile-list`      |
 | `Не указано имя профиля`                  | Команда `:profile-create` вызвана без аргумента                  | Укажите имя: `:profile-create <name>`                   |
 | `Содержимое профиля не может быть пустым` | При создании/редактировании введено пустое содержимое            | Введите хотя бы одну строку описания профиля            |
+
+## Команды управления инвариантами
+
+Инварианты — это правила, которые ограничивают поведение LLM и применяются ко всем запросам.
+
+| Команда             | Синтаксис                | Описание                                                              |
+|---------------------|--------------------------|-----------------------------------------------------------------------|
+| `:invariant-add`    | `:invariant-add <text>`  | Добавить новый инвариант. Текст инварианта указывается после команды. |
+| `:invariant-list`   | `:invariant-list`        | Показать список всех инвариантов с их ID.                             |
+| `:invariant-remove` | `:invariant-remove <id>` | Удалить инвариант по его ID.                                          |
+
+**Пример использования:**
+
+```
+> :invariant-add Отвечай только на русском языке
+Инвариант добавлен (ID: inv-1)
+
+> :invariant-list
+Инварианты (1):
+  [inv-1] Отвечай только на русском языке
+
+> :invariant-remove inv-1
+Инвариант удалён
+```
+
+## Команды управления задачами (Todo Manager)
+
+Week-2 добавляет полноценный todo-менеджер для управления задачами с контекстно-зависимыми командами.
+
+| Команда        | Синтаксис           | Описание                                                                                   |
+|----------------|---------------------|--------------------------------------------------------------------------------------------|
+| `:add-task`    | `:add-task <title>` | Добавить новую задачу с указанным заголовком.                                              |
+| `:list-tasks`  | `:list-tasks`       | Показать список всех задач. Активная задача отмечена символом `*`.                         |
+| `:open-task`   | `:open-task [id]`   | Открыть задачу (сделать активной). Если ID не указан, открывается первая доступная задача. |
+| `:close-task`  | `:close-task [id]`  | Закрыть задачу. Если ID не указан, закрывается активная задача.                            |
+| `:cancel-task` | `:cancel-task [id]` | Отменить задачу. Если ID не указан, отменяется активная задача.                            |
+| `:drop-task`   | `:drop-task <id>`   | Удалить задачу по ID.                                                                      |
+| `:edit-task`   | `:edit-task <id>`   | Редактировать задачу. Открывается многострочный редактор.                                  |
+
+**Пример использования:**
+
+```
+> :add-task Изучить Kotlin Coroutines
+Задача добавлена (ID: task-1)
+
+> :list-tasks
+Задачи:
+* [task-1] Изучить Kotlin Coroutines (OPEN)
+  [task-2] Написать тесты (OPEN)
+
+> :open-task task-2
+Задача "Написать тесты" открыта
+
+> :close-task
+Задача "Написать тесты" закрыта
+```
+
+## Команды управления шагами (Steps)
+
+Для активной задачи можно управлять шагами выполнения.
+
+| Команда          | Синтаксис                 | Описание                               |
+|------------------|---------------------------|----------------------------------------|
+| `:add-step`      | `:add-step <description>` | Добавить шаг к активной задаче.        |
+| `:list-steps`    | `:list-steps`             | Показать список шагов активной задачи. |
+| `:complete-step` | `:complete-step <id>`     | Отметить шаг как выполненный.          |
+
+**Пример использования:**
+
+```
+> :add-step Прочитать документацию по Flow
+Шаг добавлен (ID: step-1)
+
+> :list-steps
+Шаги задачи "Изучить Kotlin Coroutines":
+  [step-1] Прочитать документацию по Flow (PENDING)
+  [step-2] Написать примеры кода (PENDING)
+
+> :complete-step step-1
+Шаг отмечен как выполненный
+```
+
+## Команды долгосрочной памяти (LTM)
+
+Управление фактами в долгосрочной памяти (Long-Term Memory).
+
+| Команда        | Синтаксис           | Описание                                 |
+|----------------|---------------------|------------------------------------------|
+| `:save-fact`   | `:save-fact <text>` | Сохранить факт в LTM.                    |
+| `:list-facts`  | `:list-facts`       | Показать список всех сохранённых фактов. |
+| `:forget-fact` | `:forget-fact <id>` | Удалить факт из LTM по его ID.           |
+
+**Пример использования:**
+
+```
+> :save-fact Пользователь предпочитает Kotlin
+Факт сохранён (ID: fact-1)
+
+> :list-facts
+Факты (1):
+  [fact-1] Пользователь предпочитает Kotlin
+
+> :forget-fact fact-1
+Факт удалён
+```
+
+## Команда отладки (Debug Mode)
+
+| Команда  | Синтаксис | Описание                                                                                                                                         |
+|----------|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------|
+| `:debug` | `:debug`  | Переключить режим отладки. В режиме отладки отображается дополнительная информация о запросах к LLM, используемых промптах и времени выполнения. |
+
+**Пример использования:**
+
+```
+> :debug
+Debug mode: enabled
+
+> :debug
+Debug mode: disabled
+```
 
 ## Дополнительные ссылки
 

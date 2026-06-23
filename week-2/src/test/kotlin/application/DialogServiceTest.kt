@@ -21,6 +21,7 @@ class DialogServiceTest {
     private lateinit var memoryService: MemoryService
     private lateinit var promptBuilder: PromptBuilder
     private lateinit var dialogService: DialogService
+    private lateinit var stubInvariantService: StubInvariantService
 
     @BeforeEach
     fun setUp() {
@@ -28,7 +29,14 @@ class DialogServiceTest {
         sessionRepository = InMemoryDialogSessionRepository()
         memoryService = MemoryService(sessionRepository)
         promptBuilder = PromptBuilder()
-        dialogService = DialogService(mockLlmPort, memoryService, promptBuilder)
+        stubInvariantService = StubInvariantService()
+        dialogService = DialogService(
+            mockLlmPort,
+            memoryService,
+            promptBuilder,
+            profileRepository = StubProfileRepository(),
+            invariantService = stubInvariantService
+        )
     }
 
     // ========================================================================
@@ -150,7 +158,8 @@ class DialogServiceTest {
                 llmPort = mockLlmPort,
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
-                profileRepository = profileRepo
+                profileRepository = profileRepo,
+                invariantService = stubInvariantService
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
 
@@ -173,7 +182,8 @@ class DialogServiceTest {
                 llmPort = mockLlmPort,
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
-                profileRepository = profileRepo
+                profileRepository = profileRepo,
+                invariantService = stubInvariantService
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
 
@@ -202,7 +212,8 @@ class DialogServiceTest {
                 llmPort = mockLlmPort,
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
-                profileRepository = profileRepo
+                profileRepository = profileRepo,
+                invariantService = stubInvariantService
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
 
@@ -230,7 +241,8 @@ class DialogServiceTest {
                 llmPort = mockLlmPort,
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
-                profileRepository = null
+                profileRepository = StubProfileRepository(),
+                invariantService = stubInvariantService
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
             val result = service.chat("Test", SessionLevel.TASK_LIST)
@@ -241,6 +253,14 @@ class DialogServiceTest {
     // ========================================================================
     // Вспомогательные моки
     // ========================================================================
+
+    private class StubInvariantService : InvariantService(object : InvariantRepository {
+        override suspend fun save(invariant: Invariant): Invariant = invariant
+        override suspend fun findById(id: InvariantId): Invariant? = null
+        override suspend fun findAll(): List<Invariant> = emptyList()
+        override suspend fun delete(id: InvariantId) = false
+        override suspend fun count() = 0
+    })
 
     private class StubProfileRepository(
         private val activeProfile: Profile? = null

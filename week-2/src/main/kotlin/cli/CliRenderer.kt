@@ -129,4 +129,7 @@ interface CliRenderer {
 
     // Debug mode — available transitions
     fun renderAvailableTransitions(transitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>)
+
+    // LLM telemetry rendering
+    fun renderTelemetry(result: TaskResult)
 }

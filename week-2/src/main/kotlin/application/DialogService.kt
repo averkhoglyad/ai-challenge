@@ -9,14 +9,15 @@ import io.averkhogliad.ai.challenge.week2.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
 import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
 import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
+import kotlin.coroutines.cancellation.CancellationException
 
 class DialogService(
-    private val llmPort: LlmPort? = null,
+    private val llmPort: LlmPort?,
     private val memoryService: MemoryService,
     private val promptBuilder: PromptBuilder,
     private val taskExecutionConfig: TaskExecutionConfig = TaskExecutionConfig(),
-    private val profileRepository: ProfileRepository? = null,  // доступ к активному профилю для встраивания в промпт
-    private val invariantService: InvariantService? = null  // NEW: доступ к инвариантам для встраивания в промпт
+    private val profileRepository: ProfileRepository,  // доступ к активному профилю для встраивания в промпт
+    private val invariantService: InvariantService  // доступ к инвариантам для встраивания в промпт (CachingInvariantService extends InvariantService)
 ) {
     suspend fun chat(
         userInput: String,
@@ -34,9 +35,9 @@ class DialogService(
                 factSearchLimit = 5
             )
             // NEW: получаем активный профиль для встраивания в промпт
-            val activeProfile = profileRepository?.findActive()
+            val activeProfile = profileRepository.findActive()
             // NEW: получаем активные инварианты для встраивания в промпт
-            val invariants = invariantService?.list() ?: emptyList()
+            val invariants = invariantService.list()
             val chatMessages = promptBuilder.buildChatMessages(
                 workingMemory = memoryContext.workingMemory,
                 relevantFacts = memoryContext.relevantFacts,
@@ -51,7 +52,7 @@ class DialogService(
                 memoryService.saveAssistantMessage(level, taskId, result.content)
             }
             result
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             TaskResult.Error("Error LLM: ${e.message}", e)
@@ -74,8 +75,8 @@ class DialogService(
                 userQuery = taskTitle,
                 factSearchLimit = 3
             )
-            // NEW: получаем активные инварианты для встраивания в промпт планирования
-            val invariants = invariantService?.list() ?: emptyList()
+            // получаем активные инварианты для встраивания в промпт планирования
+            val invariants = invariantService.list()
             val planPrompt = promptBuilder.buildPlanPrompt(
                 taskTitle = taskTitle,
                 taskDescription = taskDescription,

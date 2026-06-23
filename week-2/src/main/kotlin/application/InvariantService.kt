@@ -20,8 +20,8 @@ import java.time.Instant
  *
  * @param invariantRepository репозиторий инвариантов
  */
-class InvariantService(
-    private val invariantRepository: InvariantRepository
+open class InvariantService(
+    protected val invariantRepository: InvariantRepository
 ) {
 
     /**
@@ -31,7 +31,7 @@ class InvariantService(
      * @return сохранённый инвариант с присвоенным ID
      * @throws IllegalArgumentException если правило пустое
      */
-    suspend fun add(rule: String): Invariant {
+    open suspend fun add(rule: String): Invariant {
         val tempInvariant = Invariant(
             id = InvariantId(1),  // временный ID, будет заменён при save
             rule = rule,
@@ -43,7 +43,7 @@ class InvariantService(
     /**
      * Возвращает список всех инвариантов, отсортированный по ID.
      */
-    suspend fun list(): List<Invariant> {
+    open suspend fun list(): List<Invariant> {
         return invariantRepository.findAll()
     }
 
@@ -53,14 +53,14 @@ class InvariantService(
      * @param id идентификатор инварианта
      * @return true, если инвариант был удалён
      */
-    suspend fun remove(id: Int): Boolean {
+    open suspend fun remove(id: Int): Boolean {
         return invariantRepository.delete(InvariantId(id))
     }
 
     /**
      * Возвращает количество активных инвариантов.
      */
-    suspend fun count(): Int {
+    open suspend fun count(): Int {
         return invariantRepository.count()
     }
 }

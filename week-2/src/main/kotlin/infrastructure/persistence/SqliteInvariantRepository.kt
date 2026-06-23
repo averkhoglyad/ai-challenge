@@ -170,7 +170,7 @@ class SqliteInvariantRepository(
     /**
      * Закрывает соединение с БД.
      */
-    fun close() {
+    override fun close() {
         if (!connection.isClosed) {
             connection.close()
         }

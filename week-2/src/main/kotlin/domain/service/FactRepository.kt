@@ -36,6 +36,15 @@ interface FactRepository {
      */
     suspend fun search(query: String): List<Fact>
 
+    /**
+     * Batch-поиск фактов по нескольким ключевым словам за один запрос.
+     * Устраняет N+1 проблему при последовательном вызове [search] для каждого ключевого слова.
+     *
+     * @param queries список поисковых запросов (ключевых слов)
+     * @return уникальный список фактов, соответствующих хотя бы одному из запросов
+     */
+    suspend fun searchBatch(queries: List<String>): List<Fact>
+
     /** Удаляет факт по идентификатору. Возвращает true, если факт был удалён. */
     suspend fun delete(id: FactId): Boolean
 

@@ -48,7 +48,7 @@ data class CliState(
     val pendingProfileEdit: String? = null,
 
     /** Буфер для многострочного ввода содержимого профиля */
-    val multilineInputBuffer: StringBuilder = StringBuilder()
+    val multilineInputBuffer: List<String> = emptyList()
 )
 
 /**

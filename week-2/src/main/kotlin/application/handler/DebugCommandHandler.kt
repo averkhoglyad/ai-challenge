@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week2.application.executor
+package io.averkhogliad.ai.challenge.week2.application.handler
 
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command.DebugAction
 import io.averkhogliad.ai.challenge.week2.domain.model.DebugMode
@@ -19,11 +19,11 @@ import io.averkhogliad.ai.challenge.week2.domain.model.DebugMode
  * ## Использование
  * ```kotlin
  * val debugMode = DebugMode()
- * val executor = DebugCommandExecutor(debugMode)
+ * val executor = DebugCommandHandler(debugMode)
  * executor.execute(DebugAction.TOGGLE) // переключит режим
  * ```
  */
-class DebugCommandExecutor(
+class DebugCommandHandler(
     private val debugMode: DebugMode
 ) {
 

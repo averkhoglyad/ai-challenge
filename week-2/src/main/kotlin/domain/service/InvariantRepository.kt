@@ -17,7 +17,7 @@ import io.averkhogliad.ai.challenge.week2.domain.model.InvariantId
  * - [delete] — удаляет инвариант по ID. Возвращает true, если удалён
  * - [count] — возвращает количество инвариантов
  */
-interface InvariantRepository {
+interface InvariantRepository : AutoCloseable {
     /** Сохраняет инвариант. Возвращает сохранённый экземпляр с присвоенным ID. */
     suspend fun save(invariant: Invariant): Invariant
 
@@ -32,4 +32,8 @@ interface InvariantRepository {
 
     /** Возвращает общее количество инвариантов. */
     suspend fun count(): Int
+
+    override fun close() {
+        // do nothing
+    }
 }

@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.integration
 
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
+import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week2.domain.model.Task
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
@@ -35,7 +35,7 @@ class TaskStepIntegrationTest {
     private lateinit var tempDbFile: File
     private lateinit var taskRepository: TaskRepository
     private lateinit var taskStepRepository: TaskStepRepository
-    private lateinit var taskManagerExecutor: TaskManagerExecutor
+    private lateinit var TodoTaskService: TodoTaskService
 
     @BeforeEach
     fun setUp() {
@@ -64,7 +64,7 @@ class TaskStepIntegrationTest {
 
             override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> = emptyList()
         }
-        taskManagerExecutor = TaskManagerExecutor(taskRepository)
+        TodoTaskService = TodoTaskService(taskRepository)
     }
 
     @AfterEach
@@ -83,12 +83,12 @@ class TaskStepIntegrationTest {
     @DisplayName("full step management scenario: open → add → list → complete → back → open → persisted")
     fun `full step management scenario`() = runBlocking {
         // 1. Создаём задачу
-        val createdTask = taskManagerExecutor.handleAddTask("Implement feature")
+        val createdTask = TodoTaskService.addTask("Implement feature")
         val taskId = createdTask.id
 
         // 2. Открываем задачу
-        taskManagerExecutor.handleOpenTask(taskId)
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        TodoTaskService.openTask(taskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
 
         // 3. Добавляем шаги
         val step1 = addStep(taskId, "Design the API", 0)
@@ -114,11 +114,11 @@ class TaskStepIntegrationTest {
         assertEquals(false, updatedSteps[2].isCompleted)
 
         // 7. Возвращаемся к списку задач
-        taskManagerExecutor.handleBack()
-        assertEquals(null, taskManagerExecutor.currentTaskId)
+        TodoTaskService.back()
+        assertEquals(null, TodoTaskService.currentTaskId)
 
         // 8. Снова открываем задачу — шаги должны сохраниться
-        taskManagerExecutor.handleOpenTask(taskId)
+        TodoTaskService.openTask(taskId)
         val stepsAfterReopen = taskStepRepository.findByTaskId(taskId)
         assertEquals(3, stepsAfterReopen.size)
         assertEquals(true, stepsAfterReopen[0].isCompleted, "Step 1 should still be completed")

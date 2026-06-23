@@ -1,5 +1,7 @@
 package io.averkhogliad.ai.challenge.week2.domain
 
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
+
 /**
  * Метаданные учебной задачи.
  *

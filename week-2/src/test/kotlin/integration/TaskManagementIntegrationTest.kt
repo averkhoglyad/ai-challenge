@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.integration
 
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
+import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week2.domain.model.Task
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskStatus
@@ -21,12 +21,12 @@ import kotlin.test.assertTrue
 class TaskManagementIntegrationTest {
 
     private lateinit var taskRepository: TaskRepository
-    private lateinit var taskManagerExecutor: TaskManagerExecutor
+    private lateinit var TodoTaskService: TodoTaskService
 
     @BeforeEach
     fun setup() {
         taskRepository = InMemoryTaskRepository()
-        taskManagerExecutor = TaskManagerExecutor(taskRepository)
+        TodoTaskService = TodoTaskService(taskRepository)
     }
 
     // ========================================================================
@@ -39,7 +39,7 @@ class TaskManagementIntegrationTest {
         assertTrue(taskRepository.findAll().isEmpty())
 
         // Когда: выполняем :add "Купить молоко"
-        val createdTask = taskManagerExecutor.handleAddTask("Купить молоко")
+        val createdTask = TodoTaskService.addTask("Купить молоко")
 
         // Тогда: задача создана, статус OPEN, можно найти по ID
         assertNotNull(createdTask.id)
@@ -59,19 +59,19 @@ class TaskManagementIntegrationTest {
     @Test
     fun `list all tasks`() = runBlocking {
         // Дано: 3 задачи с разными статусами
-        val task1 = taskManagerExecutor.handleAddTask("Задача 1")
-        val task2 = taskManagerExecutor.handleAddTask("Задача 2")
-        val task3 = taskManagerExecutor.handleAddTask("Задача 3")
+        val task1 = TodoTaskService.addTask("Задача 1")
+        val task2 = TodoTaskService.addTask("Задача 2")
+        val task3 = TodoTaskService.addTask("Задача 3")
 
         // Закрываем вторую задачу
-        taskManagerExecutor.handleOpenTask(task2.id)
-        taskManagerExecutor.handleCloseTask(null)
+        TodoTaskService.openTask(task2.id)
+        TodoTaskService.closeTask(null)
 
         // Отменяем третью задачу
-        taskManagerExecutor.handleCancelTask(task3.id)
+        TodoTaskService.cancelTask(task3.id)
 
         // Когда: выполняем :list
-        val allTasks = taskManagerExecutor.handleListTasks()
+        val allTasks = TodoTaskService.listTasks()
 
         // Тогда: все задачи отображаются
         assertEquals(3, allTasks.size)
@@ -87,11 +87,11 @@ class TaskManagementIntegrationTest {
     @Test
     fun `edit task by id`() = runBlocking {
         // Дано: задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Старое название")
+        val createdTask = TodoTaskService.addTask("Старое название")
         val taskId = createdTask.id
 
         // Когда: выполняем :edit abc123 "Новое название"
-        val updatedTask = taskManagerExecutor.handleEditTask(taskId, "Новое название")
+        val updatedTask = TodoTaskService.editTask(taskId, "Новое название")
 
         // Тогда: заголовок задачи обновлен
         assertEquals("Новое название", updatedTask.title)
@@ -109,13 +109,13 @@ class TaskManagementIntegrationTest {
     @Test
     fun `drop task by id`() = runBlocking {
         // Дано: задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Задача для удаления")
+        val createdTask = TodoTaskService.addTask("Задача для удаления")
         val taskId = createdTask.id
 
         assertTrue(taskRepository.exists(taskId))
 
         // Когда: выполняем :drop abc123
-        taskManagerExecutor.handleDropTask(taskId)
+        TodoTaskService.dropTask(taskId)
 
         // Тогда: задача удалена из репозитория
         assertNull(taskRepository.findById(taskId))
@@ -129,16 +129,16 @@ class TaskManagementIntegrationTest {
     @Test
     fun `open task sets currentTaskId`() = runBlocking {
         // Дано: задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Задача для открытия")
+        val createdTask = TodoTaskService.addTask("Задача для открытия")
         val taskId = createdTask.id
 
-        assertNull(taskManagerExecutor.currentTaskId)
+        assertNull(TodoTaskService.currentTaskId)
 
         // Когда: выполняем :open abc123
-        val openedTask = taskManagerExecutor.handleOpenTask(taskId)
+        val openedTask = TodoTaskService.openTask(taskId)
 
         // Тогда: currentTaskId установлен в "abc123"
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
         assertEquals(taskId, openedTask.id)
     }
 
@@ -149,19 +149,19 @@ class TaskManagementIntegrationTest {
     @Test
     fun `close task changes status to CLOSED`() = runBlocking {
         // Дано: открытая задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Задача для закрытия")
+        val createdTask = TodoTaskService.addTask("Задача для закрытия")
         val taskId = createdTask.id
-        taskManagerExecutor.handleOpenTask(taskId)
+        TodoTaskService.openTask(taskId)
 
         assertEquals(TaskStatus.OPEN, createdTask.status)
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
 
         // Когда: выполняем :close
-        val closedTask = taskManagerExecutor.handleCloseTask(null)
+        val closedTask = TodoTaskService.closeTask(null)
 
         // Тогда: статус задачи изменен на CLOSED, currentTaskId очищен
         assertEquals(TaskStatus.CLOSED, closedTask.status)
-        assertNull(taskManagerExecutor.currentTaskId)
+        assertNull(TodoTaskService.currentTaskId)
 
         val foundTask = taskRepository.findById(taskId)
         assertNotNull(foundTask)
@@ -175,13 +175,13 @@ class TaskManagementIntegrationTest {
     @Test
     fun `cancel task changes status to CANCELLED`() = runBlocking {
         // Дано: задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Задача для отмены")
+        val createdTask = TodoTaskService.addTask("Задача для отмены")
         val taskId = createdTask.id
 
         assertEquals(TaskStatus.OPEN, createdTask.status)
 
         // Когда: выполняем :cancel abc123
-        val cancelledTask = taskManagerExecutor.handleCancelTask(taskId)
+        val cancelledTask = TodoTaskService.cancelTask(taskId)
 
         // Тогда: статус задачи изменен на CANCELLED
         assertEquals(TaskStatus.CANCELLED, cancelledTask.status)
@@ -198,17 +198,17 @@ class TaskManagementIntegrationTest {
     @Test
     fun `back command clears currentTaskId`() = runBlocking {
         // Дано: открытая задача
-        val createdTask = taskManagerExecutor.handleAddTask("Задача для возврата")
+        val createdTask = TodoTaskService.addTask("Задача для возврата")
         val taskId = createdTask.id
-        taskManagerExecutor.handleOpenTask(taskId)
+        TodoTaskService.openTask(taskId)
 
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
 
         // Когда: выполняем :back
-        taskManagerExecutor.handleBack()
+        TodoTaskService.back()
 
         // Тогда: currentTaskId очищен
-        assertNull(taskManagerExecutor.currentTaskId)
+        assertNull(TodoTaskService.currentTaskId)
     }
 
     // ========================================================================
@@ -218,14 +218,14 @@ class TaskManagementIntegrationTest {
     @Test
     fun `contextual edit without id uses currentTaskId`() = runBlocking {
         // Дано: открытая задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Старое название")
+        val createdTask = TodoTaskService.addTask("Старое название")
         val taskId = createdTask.id
-        taskManagerExecutor.handleOpenTask(taskId)
+        TodoTaskService.openTask(taskId)
 
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
 
         // Когда: выполняем :edit "Новое название" (без ID)
-        val updatedTask = taskManagerExecutor.handleEditTask(null, "Новое название")
+        val updatedTask = TodoTaskService.editTask(null, "Новое название")
 
         // Тогда: задача с ID "abc123" обновлена
         assertEquals("Новое название", updatedTask.title)
@@ -239,20 +239,20 @@ class TaskManagementIntegrationTest {
     @Test
     fun `contextual close without id uses currentTaskId`() = runBlocking {
         // Дано: открытая задача с ID "abc123"
-        val createdTask = taskManagerExecutor.handleAddTask("Задача для контекстного закрытия")
+        val createdTask = TodoTaskService.addTask("Задача для контекстного закрытия")
         val taskId = createdTask.id
-        taskManagerExecutor.handleOpenTask(taskId)
+        TodoTaskService.openTask(taskId)
 
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
         assertEquals(TaskStatus.OPEN, createdTask.status)
 
         // Когда: выполняем :close (без ID)
-        val closedTask = taskManagerExecutor.handleCloseTask(null)
+        val closedTask = TodoTaskService.closeTask(null)
 
         // Тогда: задача с ID "abc123" закрыта
         assertEquals(TaskStatus.CLOSED, closedTask.status)
         assertEquals(taskId, closedTask.id)
-        assertNull(taskManagerExecutor.currentTaskId)
+        assertNull(TodoTaskService.currentTaskId)
 
         val foundTask = taskRepository.findById(taskId)
         assertNotNull(foundTask)
@@ -266,28 +266,28 @@ class TaskManagementIntegrationTest {
     @Test
     fun `full workflow - create, open, edit, close, list`() = runBlocking {
         // 1. Создаем задачу: :add "Задача 1"
-        val createdTask = taskManagerExecutor.handleAddTask("Задача 1")
+        val createdTask = TodoTaskService.addTask("Задача 1")
         val taskId = createdTask.id
         assertEquals(TaskStatus.OPEN, createdTask.status)
 
         // 2. Открываем задачу: :open <id>
-        val openedTask = taskManagerExecutor.handleOpenTask(taskId)
-        assertEquals(taskId, taskManagerExecutor.currentTaskId)
+        val openedTask = TodoTaskService.openTask(taskId)
+        assertEquals(taskId, TodoTaskService.currentTaskId)
         assertEquals(taskId, openedTask.id)
 
         // 3. Редактируем контекстно: :edit "Обновленное название"
-        val updatedTask = taskManagerExecutor.handleEditTask(null, "Обновленное название")
+        val updatedTask = TodoTaskService.editTask(null, "Обновленное название")
         assertEquals("Обновленное название", updatedTask.title)
         assertEquals(taskId, updatedTask.id)
 
         // 4. Закрываем контекстно: :close
-        val closedTask = taskManagerExecutor.handleCloseTask(null)
+        val closedTask = TodoTaskService.closeTask(null)
         assertEquals(TaskStatus.CLOSED, closedTask.status)
         assertEquals(taskId, closedTask.id)
-        assertNull(taskManagerExecutor.currentTaskId)
+        assertNull(TodoTaskService.currentTaskId)
 
         // 5. Проверяем список: :list
-        val allTasks = taskManagerExecutor.handleListTasks()
+        val allTasks = TodoTaskService.listTasks()
         assertEquals(1, allTasks.size)
 
         // 6. Задача должна быть в статусе CLOSED

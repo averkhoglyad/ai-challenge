@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week2.application.executor
+package io.averkhogliad.ai.challenge.week2.application.handler
 
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command.DebugAction
 import io.averkhogliad.ai.challenge.week2.domain.model.DebugMode
@@ -6,15 +6,15 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
-class DebugCommandExecutorTest {
+class DebugCommandHandlerTest {
 
     private lateinit var debugMode: DebugMode
-    private lateinit var executor: DebugCommandExecutor
+    private lateinit var executor: DebugCommandHandler
 
     @BeforeEach
     fun setUp() {
         debugMode = DebugMode()
-        executor = DebugCommandExecutor(debugMode)
+        executor = DebugCommandHandler(debugMode)
     }
 
     @Test

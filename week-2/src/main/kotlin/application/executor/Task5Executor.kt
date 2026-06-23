@@ -3,13 +3,13 @@ package io.averkhogliad.ai.challenge.week2.application.executor
 import io.averkhogliad.ai.challenge.week2.application.DialogService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week2.domain.model.Profile
 import io.averkhogliad.ai.challenge.week2.domain.model.ProfileId
 import io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
 
 /**
@@ -37,7 +37,7 @@ class Task5Executor(
     private val profileService: ProfileService
 ) : TaskExecutor {
 
-    override val taskId: TaskId = TaskId(5)
+    override val taskId: TaskId = TaskId("5")
 
     override val metadata: TaskMetadata = TaskMetadata(
         id = taskId,

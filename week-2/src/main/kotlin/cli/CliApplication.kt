@@ -1,91 +1,67 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
+import io.averkhogliad.ai.challenge.week2.application.DialogService
+import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
-import io.averkhogliad.ai.challenge.week2.application.executor.TaskManagerExecutor
+import io.averkhogliad.ai.challenge.week2.application.handler.DebugCommandHandler
+import io.averkhogliad.ai.challenge.week2.application.handler.PlanCommandHandler
+import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command
 import io.averkhogliad.ai.challenge.week2.cli.commands.CommandContext
 import io.averkhogliad.ai.challenge.week2.cli.commands.CommandParser
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
+import io.averkhogliad.ai.challenge.week2.cli.handlers.FsmCommandHandler
+import io.averkhogliad.ai.challenge.week2.cli.handlers.InvariantCommandHandler
+import io.averkhogliad.ai.challenge.week2.cli.handlers.ProfileCommandHandler
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.model.FactId
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.service.*
 import kotlinx.coroutines.runBlocking
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId as ModelTaskId
 
-/**
- * CLI-приложение на основе Clean Architecture.
- *
- * ## Архитектура
- * Это Imperative Shell — тонкая оболочка, которая:
- * 1. Читает ввод пользователя (stdin)
- * 2. Парсит ввод в typed commands ([CommandParser])
- * 3. Обрабатывает команды ([CommandHandler])
- * 4. Рендерит результат ([CliRenderer])
- *
- * Не содержит бизнес-логики — она делегирована в [TaskExecutor].
- * Не содержит логики рендеринга — она делегирована в [CliRenderer].
- *
- * ## REPL-цикл
- * ```
- * while (state.isRunning) {
- *     prompt → parse → handle → render → repeat
- * }
- * ```
- *
- * ## Управление ресурсами
- * [CliApplication] владеет [resourceManager] и вызывает его при завершении работы ([close]).
- * Это гарантирует освобождение HTTP-соединений и пулов потоков.
- *
- * @param executors мапа TaskId → TaskExecutor
- * @param renderer рендерер CLI вывода
- * @param resourceManager порт для управления ресурсами (закрывается при завершении работы)
- */
 class CliApplication(
     private val executors: Map<TaskId, TaskExecutor>,
     private val renderer: CliRenderer = ConsoleCliRenderer(),
-    private val resourceManager: ResourceManager? = null,
-    private val taskManagerExecutor: TaskManagerExecutor? = null,
-    private val memoryService: io.averkhogliad.ai.challenge.week2.domain.service.MemoryService? = null,
-    private val taskStepRepository: TaskStepRepository? = null,
-    private val factRepository: FactRepository? = null,
-    private val dialogService: io.averkhogliad.ai.challenge.week2.application.DialogService? = null,
-    private val profileRepository: ProfileRepository? = null,
-    private val planCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.PlanCommandExecutor? = null,
-    private val commandEngine: CommandEngine? = null,
-    private val debugCommandExecutor: io.averkhogliad.ai.challenge.week2.application.executor.DebugCommandExecutor? = null,
-    private val invariantService: io.averkhogliad.ai.challenge.week2.application.InvariantService? = null
+    private val todoTaskService: TodoTaskService,
+    private val memoryService: MemoryService,
+    private val taskStepRepository: TaskStepRepository,
+    private val factRepository: FactRepository,
+    private val dialogService: DialogService,
+    private val profileRepository: ProfileRepository,
+    private val planCommandHandler: PlanCommandHandler,
+    private val commandEngine: CommandEngine,
+    private val debugCommandHandler: DebugCommandHandler,
+    private val invariantService: InvariantService,
+    private val invariantRepository: InvariantRepository,
 ) : AutoCloseable {
 
     private val handler = CommandHandler(
         executors = executors,
-        taskManagerExecutor = taskManagerExecutor,
+        todoTaskService = todoTaskService,
         memoryService = memoryService,
         taskStepRepository = taskStepRepository,
-        factRepository = factRepository,
-        dialogService = dialogService,
-        debugCommandExecutor = debugCommandExecutor
+        factRepository = factRepository
     )
 
-    /**
-     * Визуализирует состояние FSM, если debug-режим включен.
-     * Вызывается после обработки FSM-команд для отладки.
-     * В debug-режиме также вызывает паузу для пошагового просмотра.
-     */
-    private fun renderFsmStateIfDebug() {
-        if (debugCommandExecutor?.isEnabled() == true && commandEngine?.hasActiveCommand() == true) {
-            val activeState = commandEngine?.getActiveState()
-            if (activeState != null) {
-                renderer.renderFsmState(activeState)
-                // US-DBG-1: Show available transitions after each debug step
-                val availableTransitions = commandEngine?.getAvailableTransitions()
-                if (availableTransitions != null && availableTransitions.isNotEmpty()) {
-                    renderer.renderAvailableTransitions(availableTransitions)
-                }
-                // US-DBG-4: Pause after step in debug mode
-                renderer.waitForEnter()
-            }
-        }
-    }
+    private val fsmHandler = FsmCommandHandler(
+        commandEngine = commandEngine,
+        debugCommandHandler = debugCommandHandler,
+        memoryService = memoryService,
+        profileRepository = profileRepository,
+        invariantService = invariantService,
+        renderer = renderer
+    )
+
+    private val invariantHandler = InvariantCommandHandler(
+        invariantService = invariantService,
+        renderer = renderer,
+        readInput = { readlnOrNull() }
+    )
+
+    private val profileHandler = ProfileCommandHandler(
+        handler = handler,
+        renderer = renderer,
+        readMultiline = { readMultilineInput() }
+    )
 
     fun run(args: Array<String>) {
         runBlocking {
@@ -95,15 +71,12 @@ class CliApplication(
 
     override fun close() {
         try {
-            resourceManager?.close()
+            invariantRepository.close()
         } catch (e: Exception) {
-            System.err.println("Warning: Failed to close ResourceManager: ${e.message}")
+            System.err.println("Warning: Failed to close InvariantRepository: ${e.message}")
         }
     }
 
-    /**
-     * Основной REPL-цикл.
-     */
     private suspend fun repl() {
         var state = CliState()
 
@@ -112,21 +85,11 @@ class CliApplication(
 
         while (state.isRunning) {
             try {
-                // 1. Показать промпт
                 renderer.renderPrompt(state)
-
-                // 2. Прочитать ввод
                 val input = readlnOrNull() ?: break
-
-                // 3. Построить контекст парсинга
                 val context = buildCommandContext(state)
-
-                // 4. Парсинг
                 val command = CommandParser.parse(input, context)
-
-                // 5. Обработка команды + рендеринг
                 state = handleCommandWithRendering(command, state)
-
             } catch (e: Exception) {
                 renderer.renderError("Неожиданная ошибка: ${e.message}")
             }
@@ -135,9 +98,6 @@ class CliApplication(
         renderer.renderGoodbye()
     }
 
-    /**
-     * Обрабатывает команду и выполняет соответствующий рендеринг.
-     */
     private suspend fun handleCommandWithRendering(command: Command, state: CliState): CliState {
         return when (command) {
             is Command.Help -> {
@@ -157,7 +117,7 @@ class CliApplication(
 
             is Command.SelectTask -> {
                 val newState = handler.handle(command, state)
-                val executor = handler.getExecutor(TaskId(command.taskId))
+                val executor = handler.getExecutor(TaskId(command.taskId.toString()))
                 if (executor != null) {
                     renderer.renderTaskHeader(executor.metadata)
                 } else {
@@ -169,8 +129,7 @@ class CliApplication(
             is Command.Back -> {
                 val newState = handler.handle(command, state)
                 if (newState.taskListMode) {
-                    // Возврат в список задач (не в главное меню)
-                    val tasks = taskManagerExecutor?.handleListTasks() ?: emptyList()
+                    val tasks = todoTaskService.listTasks()
                     renderer.renderTaskList(tasks)
                 } else {
                     renderer.renderMenu(handler.getAllExecutors())
@@ -188,18 +147,16 @@ class CliApplication(
             }
 
             is Command.UserInput -> {
-                // Проверка активной FSM-команды (например, :plan)
-                if (planCommandExecutor != null && commandEngine?.hasActiveCommand() == true) {
-                    val activeState = commandEngine?.getActiveState()
+                if (commandEngine.hasActiveCommand()) {
+                    val activeState = commandEngine.getActiveState()
                     if (activeState?.commandName == "plan") {
-                        val result = planCommandExecutor.handleUserInput(command.text)
+                        val result = planCommandHandler.handleUserInput(command.text)
                         renderer.renderInfo(result)
                         return state
                     }
                 }
-                
-                if (dialogService == null && state.currentTaskId != null) {
-                    // Fallback: use old task executors if dialogService not available but task selected
+
+                if (state.currentTaskId != null) {
                     renderer.renderRequestInfo(command.text, state.executionConfig)
                     renderer.renderLoadingStart("Отправка запроса...")
                     val (newState, result) = handler.executeUserInput(command, state)
@@ -211,14 +168,14 @@ class CliApplication(
                         null -> renderer.renderMenu(handler.getAllExecutors())
                     }
                     newState
-                } else if (dialogService != null) {
+                } else {
                     renderer.renderLoadingStart("Общение с ассистентом...")
                     val level = if (state.currentTodoTaskId != null) {
                         io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_DETAIL
                     } else {
                         io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_LIST
                     }
-                    val taskId = state.currentTodoTaskId?.let { ModelTaskId(it) }
+                    val taskId = state.currentTodoTaskId?.let { TaskId(it) }
                     val result = dialogService.chat(command.text, level, taskId)
                     renderer.renderLoadingStop()
                     when (result) {
@@ -226,9 +183,6 @@ class CliApplication(
                         is TaskResult.Error -> renderer.renderError(result.message)
                         is TaskResult.Partial -> renderer.renderResult(result)
                     }
-                    state
-                } else {
-                    renderer.renderError("Ни один executor не доступен. Выберите задачу или настройте LLM.")
                     state
                 }
             }
@@ -242,89 +196,26 @@ class CliApplication(
                 handler.handle(command, state)
             }
 
-            // Goto command — карта состояний и переходы
+            // Goto commands delegated to FsmCommandHandler
             is Command.Goto -> {
-                if (commandEngine?.hasActiveCommand() != true) {
-                    renderer.renderGotoNoActiveCommand()
-                } else {
-                    val stateMap = commandEngine?.buildStateMap() ?: return@handleCommandWithRendering state
-                    renderer.renderStateMap(stateMap)
-                }
-                state
+                fsmHandler.handleGoto(state); state
             }
 
             is Command.GotoState -> {
-                if (commandEngine?.hasActiveCommand() != true) {
-                    renderer.renderGotoNoActiveCommand()
-                } else {
-                    // Разбор имени состояния
-                    val targetStage = try {
-                        io.averkhogliad.ai.challenge.week2.domain.model.CommandStage.valueOf(command.targetStage)
-                    } catch (e: IllegalArgumentException) {
-                        renderer.renderGotoInvalidState(command.targetStage)
-                        return@handleCommandWithRendering state
-                    }
-
-                    try {
-                        val activeState = commandEngine?.getActiveState()
-                        val from = activeState?.currentStage
-                        val fromName = from?.name ?: "UNKNOWN"
-                        commandEngine?.performTransition(targetStage, ":goto command")
-                        val toName = targetStage.name
-                        renderer.renderGotoSuccess(
-                            from = from ?: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage.PLANNING,
-                            to = targetStage
-                        )
-                    } catch (e: io.averkhogliad.ai.challenge.week2.domain.model.TransitionNotAllowedException) {
-                        renderer.renderGotoError(e.message ?: "Переход недопустим")
-                    } catch (e: Exception) {
-                        renderer.renderGotoError(e.message ?: "Ошибка перехода")
-                    }
-                }
-                state
+                fsmHandler.handleGotoState(command, state); state
             }
 
-            // Invariant management commands
+            // Invariant management commands delegated to InvariantCommandHandler
             is Command.InvariantAdd -> {
-                try {
-                    val inv = invariantService?.add(command.rule)
-                        ?: throw IllegalStateException("InvariantService not available")
-                    renderer.renderInvariantAdded(inv)
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                invariantHandler.handleInvariantAdd(command, state); state
             }
 
             is Command.InvariantList -> {
-                try {
-                    val invariants =
-                        invariantService?.list() ?: throw IllegalStateException("InvariantService not available")
-                    renderer.renderInvariantList(invariants)
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                invariantHandler.handleInvariantList(state); state
             }
 
             is Command.InvariantRemove -> {
-                try {
-                    renderer.renderInvariantRemoveConfirmation(command.id)
-                    val confirmation = readlnOrNull()?.trim()?.lowercase()
-                    if (confirmation == "y" || confirmation == "yes") {
-                        val removed = invariantService?.remove(command.id) == true
-                        if (removed) {
-                            renderer.renderInvariantRemoved(command.id)
-                        } else {
-                            renderer.renderInvariantNotFound(command.id)
-                        }
-                    } else {
-                        renderer.renderInfo("Удаление отменено")
-                    }
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                invariantHandler.handleInvariantRemove(command, state); state
             }
 
             // Dialog commands (no-op — dialog functionality removed)
@@ -355,38 +246,28 @@ class CliApplication(
 
             // LLM integration commands
             is Command.Plan -> {
-                if (planCommandExecutor == null) {
-                    renderer.renderError("PlanCommandExecutor not available")
-                    state
-                } else {
-                    val taskId = state.currentTodoTaskId?.toIntOrNull()
-                    val result = planCommandExecutor.execute(taskId)
-                    renderer.renderInfo(result)
-                    state
-                }
+                val taskId = state.currentTodoTaskId?.toIntOrNull()
+                val result = planCommandHandler.execute(taskId)
+                renderer.renderInfo(result)
+                state
             }
 
             is Command.PlanSteps -> {
-                if (dialogService == null) {
-                    renderer.renderError("DialogService not available — LLM integration not configured")
-                    state
+                renderer.renderLoadingStart("Запрос плана шагов...")
+                val level = if (state.currentTodoTaskId != null) {
+                    io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_DETAIL
                 } else {
-                    renderer.renderLoadingStart("Запрос плана шагов...")
-                    val level = if (state.currentTodoTaskId != null) {
-                        io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_DETAIL
-                    } else {
-                        io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_LIST
-                    }
-                    val taskId = state.currentTodoTaskId?.let { ModelTaskId(it) }
-                    val result = dialogService.planSteps(command.title, command.description, level, taskId)
-                    renderer.renderLoadingStop()
-                    when (result) {
-                        is TaskResult.Success -> renderer.renderResult(result)
-                        is TaskResult.Error -> renderer.renderError(result.message)
-                        is TaskResult.Partial -> renderer.renderResult(result)
-                    }
-                    state
+                    io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_LIST
                 }
+                val taskId = state.currentTodoTaskId?.let { TaskId(it) }
+                val result = dialogService.planSteps(command.title, command.description, level, taskId)
+                renderer.renderLoadingStop()
+                when (result) {
+                    is TaskResult.Success -> renderer.renderResult(result)
+                    is TaskResult.Error -> renderer.renderError(result.message)
+                    is TaskResult.Partial -> renderer.renderResult(result)
+                }
+                state
             }
 
             // Compression commands (no-op for now)
@@ -418,19 +299,13 @@ class CliApplication(
             // Task management commands (todo-manager)
             is Command.AddTask -> {
                 try {
-                    // Шаг 1: запросить description задачи (многострочный ввод)
                     renderer.renderInfo("Введите описание задачи (Enter — пропустить, пустая строка — завершить):")
                     val description = readMultilineInput()
-
-                    val task = taskManagerExecutor?.handleAddTask(
+                    val task = todoTaskService.addTask(
                         command.title,
                         description = description.takeIf { it.isNotBlank() }
                     )
-                    if (task != null) {
-                        renderer.renderTaskCreated(task.id)
-                    } else {
-                        renderer.renderError("TaskManagerExecutor not available")
-                    }
+                    renderer.renderTaskCreated(task.id)
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
                 }
@@ -439,7 +314,7 @@ class CliApplication(
 
             is Command.ListTasks -> {
                 try {
-                    val tasks = taskManagerExecutor?.handleListTasks() ?: emptyList()
+                    val tasks = todoTaskService.listTasks()
                     renderer.renderTaskList(tasks)
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
@@ -449,17 +324,15 @@ class CliApplication(
 
             is Command.EditTask -> {
                 try {
-                    // Шаг 1: обновить title задачи
-                    val task = taskManagerExecutor?.handleEditTask(command.id, command.title)
+                    val task = todoTaskService.editTask(command.id, command.title)
                     if (task == null) {
-                        renderer.renderError("TaskManagerExecutor not available")
+                        renderer.renderError("TodoTaskService not available")
                         state
                     } else {
-                        // Шаг 2: запросить новое описание (Enter — оставить прежним)
                         renderer.renderInfo("Введите новое описание (Enter — оставить прежним, пустая строка — завершить):")
                         val newDescription = readMultilineInput()
                         if (newDescription.isNotBlank()) {
-                            taskManagerExecutor?.handleUpdateDescription(command.id, newDescription)
+                            todoTaskService.updateDescription(command.id, newDescription)
                         }
                         renderer.renderTaskUpdated(task.id)
                         state
@@ -472,8 +345,8 @@ class CliApplication(
 
             is Command.DropTask -> {
                 try {
-                    val taskId = command.id ?: taskManagerExecutor?.currentTaskId
-                    taskManagerExecutor?.handleDropTask(command.id)
+                    val taskId = command.id ?: todoTaskService.currentTaskId
+                    todoTaskService.dropTask(command.id)
                     if (taskId != null) {
                         renderer.renderTaskDeleted(taskId)
                     }
@@ -485,14 +358,9 @@ class CliApplication(
 
             is Command.OpenTask -> {
                 try {
-                    val task = taskManagerExecutor?.handleOpenTask(command.id)
-                    if (task != null) {
-                        renderer.renderTaskDetail(task)
-                        state.copy(currentTodoTaskId = command.id.value)
-                    } else {
-                        renderer.renderError("TaskManagerExecutor not available")
-                        state
-                    }
+                    val task = todoTaskService.openTask(command.id)
+                    renderer.renderTaskDetail(task)
+                    state.copy(currentTodoTaskId = command.id.value)
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
                     state
@@ -501,14 +369,9 @@ class CliApplication(
 
             is Command.CloseTask -> {
                 try {
-                    val task = taskManagerExecutor?.handleCloseTask(command.id)
-                    if (task != null) {
-                        renderer.renderTaskClosed(task.id)
-                        state.copy(currentTodoTaskId = null)
-                    } else {
-                        renderer.renderError("TaskManagerExecutor not available")
-                        state
-                    }
+                    val task = todoTaskService.closeTask(command.id)
+                    renderer.renderTaskClosed(task.id)
+                    state.copy(currentTodoTaskId = null)
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
                     state
@@ -517,14 +380,9 @@ class CliApplication(
 
             is Command.CancelTask -> {
                 try {
-                    val task = taskManagerExecutor?.handleCancelTask(command.id)
-                    if (task != null) {
-                        renderer.renderTaskCancelled(task.id)
-                        state.copy(currentTodoTaskId = null)
-                    } else {
-                        renderer.renderError("TaskManagerExecutor not available")
-                        state
-                    }
+                    val task = todoTaskService.cancelTask(command.id)
+                    renderer.renderTaskCancelled(task.id)
+                    state.copy(currentTodoTaskId = null)
                 } catch (e: Exception) {
                     renderer.renderError(e.message ?: "Unknown error")
                     state
@@ -583,30 +441,24 @@ class CliApplication(
                     } else {
                         io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_LIST
                     }
-                    val taskId =
-                        state.currentTodoTaskId?.let { io.averkhogliad.ai.challenge.week2.domain.model.TaskId(it) }
-                    val status = memoryService?.getMemoryStatus(level, taskId)
-                    if (status != null) {
-                        renderer.renderMemoryStatus(status)
-                    } else {
-                        renderer.renderInfo("Memory service not available")
-                    }
-                    // Отображение информации о профиле
-                    val activeProfile = profileRepository?.findActive()
+                    val taskId = state.currentTodoTaskId?.let { TaskId(it) }
+                    val status = memoryService.getMemoryStatus(level, taskId)
+                    renderer.renderMemoryStatus(status)
+
+                    val activeProfile = profileRepository.findActive()
                     renderer.renderStatusProfile(activeProfile?.name)
-                    // US-DBG-5: Отображение статуса debug-режима
-                    val isDebugEnabled = debugCommandExecutor?.isEnabled() ?: false
+
+                    val isDebugEnabled = debugCommandHandler.isEnabled() ?: false
                     renderer.renderStatusDebug(isDebugEnabled)
-                    // US-STATUS-1: Отображение статуса FSM с доступными переходами
-                    val activeState = commandEngine?.getActiveState()
+
+                    val activeState = commandEngine.getActiveState()
                     val availableTransitions = if (activeState != null) {
-                        commandEngine?.getAvailableTransitions() ?: emptyList()
+                        commandEngine.getAvailableTransitions()
                     } else {
                         emptyList()
                     }
                     renderer.renderStatusFsm(activeState?.currentStage, availableTransitions)
-                    // Отображение количества инвариантов
-                    val invariantCount = invariantService?.count() ?: 0
+                    val invariantCount = invariantService.count()
                     renderer.renderStatusInvariants(invariantCount)
                     state
                 } catch (e: Exception) {
@@ -619,8 +471,7 @@ class CliApplication(
             is Command.SaveFact -> {
                 try {
                     val newState = handler.handle(command, state)
-                    // Получаем последний сохранённый факт для рендеринга
-                    val facts = factRepository?.findAll() ?: emptyList()
+                    val facts = factRepository.findAll()
                     val savedFact = facts.maxByOrNull { it.createdAt }
                     if (savedFact != null) {
                         renderer.renderFactSaved(savedFact)
@@ -635,7 +486,7 @@ class CliApplication(
             is Command.ListLtmFacts -> {
                 try {
                     handler.handle(command, state)
-                    val facts = factRepository?.findAll() ?: emptyList()
+                    val facts = factRepository.findAll()
                     renderer.renderFactList(facts)
                     state
                 } catch (e: Exception) {
@@ -647,9 +498,9 @@ class CliApplication(
             is Command.ForgetFact -> {
                 try {
                     val factId = command.factId
-                    val exists = factRepository?.findById(FactId(factId)) != null
+                    val exists = factRepository.findById(FactId(factId)) != null
                     if (exists) {
-                        factRepository?.delete(FactId(factId))
+                        factRepository.delete(FactId(factId))
                         renderer.renderFactForgotten(factId)
                     } else {
                         renderer.renderFactNotFound(factId)
@@ -664,7 +515,7 @@ class CliApplication(
             is Command.SearchFacts -> {
                 try {
                     handler.handle(command, state)
-                    val facts = factRepository?.search(command.query) ?: emptyList()
+                    val facts = factRepository.search(command.query)
                     if (facts.isEmpty()) {
                         renderer.renderFactSearchEmpty(command.query)
                     } else {
@@ -677,163 +528,33 @@ class CliApplication(
                 }
             }
 
-            // Profile management commands (PM)
-            // Все profile-команды делегируются в Task2Executor (или Task2Executor→ProfileExecutor)
-            // для соблюдения layered-архитектуры: CLI-слой → Application-слой (Task2Executor)
-            // Ошибки обрабатываются с использованием специфичных методов рендеринга (US-PM-13)
+            // Profile management commands delegated to ProfileCommandHandler
             is Command.ProfileList -> {
-                try {
-                    val profiles = handler.getTask2Executor()?.handleListProfiles() ?: emptyList()
-                    renderer.renderProfileList(profiles)
-                    state
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                    state
-                }
+                profileHandler.handleProfileList(state); state
             }
 
             is Command.ProfileNew -> {
-                try {
-                    // Шаг 1: запросить описание профиля
-                    renderer.renderProfileDescriptionPrompt()
-                    val description = readMultilineInput()
-
-                    // Шаг 2: запросить инструкции профиля
-                    renderer.renderProfileInstructionsPrompt()
-                    val instructions = readMultilineInput()
-
-                    if (description.isBlank() && instructions.isBlank()) {
-                        renderer.renderEmptyProfileContent()
-                    } else {
-                        val profile = handler.getTask2Executor()?.handleCreateProfile(
-                            command.name, description, instructions
-                        )
-                        if (profile != null) {
-                            renderer.renderSuccess("Профиль \"${profile.name}\" создан")
-                        }
-                    }
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.AlreadyExists) {
-                    renderer.renderProfileAlreadyExists(command.name)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.EmptyContent) {
-                    renderer.renderEmptyProfileContent()
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.ContentTooLong) {
-                    renderer.renderProfileContentTooLong(e.length)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
-                    renderer.renderProfileError(e.message ?: "Ошибка создания профиля")
-                } catch (e: IllegalArgumentException) {
-                    renderer.renderError(e.message ?: "Ошибка создания профиля")
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                profileHandler.handleProfileNew(command, state); state
             }
 
             is Command.ProfileUse -> {
-                try {
-                    if (command.name == "none") {
-                        handler.getTask2Executor()?.handleDeactivateProfile()
-                        renderer.renderInfo("Профиль деактивирован")
-                    } else {
-                        val profile = handler.getTask2Executor()?.handleActivateByName(command.name)
-                        if (profile != null) {
-                            renderer.renderProfileDetail(profile)
-                        }
-                    }
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
-                    renderer.renderProfileNotFoundByName(command.name)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
-                    renderer.renderProfileError(e.message ?: "Ошибка активации профиля")
-                } catch (e: IllegalArgumentException) {
-                    renderer.renderProfileError(e.message ?: "Ошибка активации профиля")
-                } catch (e: Exception) {
-                    renderer.renderProfileError(e.message ?: "Unknown error")
-                }
-                state
+                profileHandler.handleProfileUse(command, state); state
             }
 
             is Command.ProfileEdit -> {
-                try {
-                    // Запросить новое название (Enter — оставить прежним)
-                    renderer.renderInfo("Введите новое название профиля (Enter — оставить прежним):")
-                    val newName = readlnOrNull()?.trim() ?: ""
-                    // Запросить новое описание (многострочный ввод)
-                    renderer.renderProfileDescriptionPrompt()
-                    val newDescription = readMultilineInput()
-                    // Запросить новые инструкции (многострочный ввод)
-                    renderer.renderProfileInstructionsPrompt()
-                    val newInstructions = readMultilineInput()
-
-                    if (newName.isEmpty() && newDescription.isBlank() && newInstructions.isBlank()) {
-                        renderer.renderError("Не указаны изменения для профиля")
-                    } else {
-                        val profile = handler.getTask2Executor()?.handleEditProfile(
-                            command.name,
-                            newName.ifEmpty { null },
-                            newDescription.ifBlank { null },
-                            newInstructions.ifBlank { null }
-                        )
-                        if (profile != null) {
-                            renderer.renderProfileUpdated(profile.name)
-                        }
-                    }
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
-                    renderer.renderProfileNotFoundByName(command.name)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.AlreadyExists) {
-                    renderer.renderProfileAlreadyExists(e.profileName)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.ContentTooLong) {
-                    renderer.renderProfileContentTooLong(e.length)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
-                    renderer.renderProfileError(e.message ?: "Ошибка редактирования профиля")
-                } catch (e: IllegalArgumentException) {
-                    renderer.renderError(e.message ?: "Ошибка редактирования профиля")
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                profileHandler.handleProfileEdit(command, state); state
             }
 
             is Command.ProfileDelete -> {
-                try {
-                    handler.getTask2Executor()?.handleDeleteProfile(command.name)
-                    renderer.renderProfileDeleted(command.name)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
-                    renderer.renderProfileNotFoundByName(command.name)
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.CannotDeleteActiveProfile) {
-                    renderer.renderCannotDeleteActiveProfile()
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
-                    renderer.renderProfileError(e.message ?: "Ошибка удаления профиля")
-                } catch (e: IllegalArgumentException) {
-                    renderer.renderError(e.message ?: "Ошибка удаления профиля")
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                profileHandler.handleProfileDelete(command, state); state
             }
 
             is Command.ProfileShow -> {
-                try {
-                    val profile = handler.getTask2Executor()?.handleShowProfile(command.name)
-                    if (profile != null) {
-                        renderer.renderProfileDetail(profile)
-                    }
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError.NotFoundByName) {
-                    renderer.renderProfileNotFoundByName(command.name ?: "неизвестно")
-                } catch (e: io.averkhogliad.ai.challenge.week2.application.ProfileOperationError) {
-                    renderer.renderProfileError(e.message ?: "Ошибка просмотра профиля")
-                } catch (e: IllegalArgumentException) {
-                    renderer.renderError(e.message ?: "Ошибка просмотра профиля")
-                } catch (e: Exception) {
-                    renderer.renderError(e.message ?: "Unknown error")
-                }
-                state
+                profileHandler.handleProfileShow(command, state); state
             }
         }
     }
 
-    /**
-     * Читает многострочный ввод пользователя из stdin.
-     * Ввод завершается пустой строкой.
-     */
     private fun readMultilineInput(): String {
         val lines = mutableListOf<String>()
         while (true) {
@@ -845,35 +566,21 @@ class CliApplication(
     }
 
     private fun buildCommandContext(state: CliState): CommandContext {
-        // Активен ли какой-либо контекст задачи:
-        // - старый executor (currentTaskId: Int)
-        // - новый todo-менеджер (currentTodoTaskId: String / UUID)
-        // - режим списка задач без конкретной открытой задачи (taskListMode)
         val isTaskActive = state.currentTaskId != null || state.currentTodoTaskId != null || state.taskListMode
         if (!isTaskActive) {
             return CommandContext.TASK_SELECTION
         }
 
-        // currentTaskId для CommandContext (Int?).
-        // Если активна задача todo-менеджера (UUID-строка), используем 1 как placeholder.
         val taskId = state.currentTaskId ?: 1
 
         val availableCommands = mutableSetOf(
-            // Global
             "help", "h", "quit", "q", "back", "b",
-            // Task management
             "add", "list", "tasks", "edit", "drop", "open", "close", "cancel",
-            // Step management
             "step-add", "step-list", "step-done",
-            // LLM parameters
             "temp", "maxtokens", "reset", "params", "stop",
-            // LLM integration
             "plan",
-            // FSM / debug commands
             "debug", "state", "abort",
-            // Memory management
             "status", "clear", "ctx-save", "ctx-list", "ctx-forget", "ctx-search",
-            // Profile management
             "profile-new", "profile-list", "profile-use", "profile-edit", "profile-delete", "profile-show"
         )
 

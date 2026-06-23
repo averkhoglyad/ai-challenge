@@ -188,6 +188,34 @@ class SqliteFactRepository(
         }
     }
 
+    override suspend fun searchBatch(queries: List<String>): List<Fact> {
+        if (queries.isEmpty()) return emptyList()
+
+        // Build a single FTS5 query with OR between terms
+        val sanitizedQueries = queries.map { it.replace("\"", "\"\"") }
+        // FTS5 MATCH: terms joined with OR
+        val ftsQuery = sanitizedQueries.joinToString(" OR ") { "\"$it\"" }
+
+        val sql = """
+            SELECT DISTINCT f.id, f.content, f.created_at
+            FROM facts f
+            INNER JOIN facts_fts fts ON f.rowid = fts.rowid
+            WHERE facts_fts MATCH ?
+            ORDER BY rank
+        """.trimIndent()
+
+        return connection.prepareStatement(sql).use { stmt ->
+            stmt.setString(1, ftsQuery)
+            stmt.executeQuery().use { rs ->
+                val facts = mutableSetOf<Fact>()
+                while (rs.next()) {
+                    facts.add(mapRowToFact(rs))
+                }
+                facts.toList()
+            }
+        }
+    }
+
     override suspend fun delete(id: FactId): Boolean {
         connection.autoCommit = false
         try {

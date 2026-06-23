@@ -12,7 +12,7 @@ import kotlin.test.assertIs
  *
  * Проверяют:
  * - Корректную сборку всех компонентов архитектуры
- * - Создание TaskManagerExecutor вместо Task1Executor
+ * - Создание TodoTaskService вместо Task1Executor
  * - Создание SqliteTaskRepository вместо SqliteDialogRepository
  */
 @DisplayName("ApplicationBootstrap")
@@ -51,8 +51,8 @@ class ApplicationBootstrapTest {
     inner class ApplicationAssembly {
 
         @Test
-        @DisplayName("should create valid CliApplication with TaskManagerExecutor")
-        fun `creates application with TaskManagerExecutor`() {
+        @DisplayName("should create valid CliApplication with TodoTaskService")
+        fun `creates application with TodoTaskService`() {
             val config = minimalConfig()
 
             val application = ApplicationBootstrap.createApplication(config)

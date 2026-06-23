@@ -1,14 +1,13 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
 import io.averkhogliad.ai.challenge.week2.application.DialogService
+import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.application.executor.Task2Executor
+import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week2.cli.commands.Command
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
-import io.averkhogliad.ai.challenge.week2.domain.model.DialogSession
-import io.averkhogliad.ai.challenge.week2.domain.service.DialogSessionRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
-import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
+import io.averkhogliad.ai.challenge.week2.domain.model.*
+import io.averkhogliad.ai.challenge.week2.domain.service.*
 import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.InMemoryProfileRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -120,20 +119,109 @@ class CommandHandlerProfileTest {
         val sessionRepo = InMemoryDialogSessionRepository()
         val memoryService = MemoryService(sessionRepo)
         val promptBuilder = PromptBuilder()
+        val profileRepository = InMemoryProfileRepository()
+        val invariantService = InvariantService(InMemoryInvariantRepository())
         val dialogService = DialogService(
             llmPort = null,
             memoryService = memoryService,
-            promptBuilder = promptBuilder
+            promptBuilder = promptBuilder,
+            profileRepository = profileRepository,
+            invariantService = invariantService
         )
         val executor = Task2Executor(dialogService, memoryService, profileService)
+        val taskRepo = InMemoryTaskRepository()
+        val todoTaskService = TodoTaskService(taskRepo)
+        val taskStepRepository = InMemoryTaskStepRepository()
+        val factRepository = InMemoryFactRepository()
         return CommandHandler(
-            executors = mapOf(TaskId(2) to executor),
-            taskManagerExecutor = null,
+            executors = mapOf(TaskId("2") to executor),
+            todoTaskService = todoTaskService,
             memoryService = memoryService,
-            taskStepRepository = null,
-            factRepository = null,
-            dialogService = null
+            taskStepRepository = taskStepRepository,
+            factRepository = factRepository
         )
+    }
+
+    /** In-memory реализация TaskRepository для тестов. */
+    private class InMemoryTaskRepository : TaskRepository {
+        private val tasks = mutableMapOf<String, Task>()
+
+        override suspend fun save(task: Task) {
+            tasks[task.id.value] = task
+        }
+
+        override suspend fun findById(id: TaskId): Task? = tasks[id.value]
+        override suspend fun findAll(): List<Task> = tasks.values.toList()
+        override suspend fun delete(id: TaskId) {
+            tasks.remove(id.value)
+        }
+
+        override suspend fun exists(id: TaskId): Boolean = tasks.containsKey(id.value)
+        override suspend fun saveSteps(taskId: TaskId, steps: List<TaskStep>) {}
+        override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> = emptyList()
+    }
+
+    /** In-memory реализация FactRepository для тестов. */
+    private class InMemoryFactRepository : FactRepository {
+        private val facts = mutableMapOf<FactId, Fact>()
+
+        override suspend fun save(fact: Fact): Fact {
+            facts[fact.id] = fact; return fact
+        }
+
+        override suspend fun findById(id: FactId): Fact? = facts[id]
+        override suspend fun findAll(): List<Fact> = facts.values.toList()
+        override suspend fun search(query: String): List<Fact> = emptyList()
+        override suspend fun searchBatch(queries: List<String>): List<Fact> = emptyList()
+        override suspend fun delete(id: FactId): Boolean = facts.remove(id) != null
+        override suspend fun count(): Int = facts.size
+    }
+
+    /** In-memory реализация TaskStepRepository для тестов. */
+    private class InMemoryTaskStepRepository : TaskStepRepository {
+        private val steps = mutableMapOf<TaskStepId, TaskStep>()
+
+        override fun save(step: TaskStep): TaskStep {
+            steps[step.id] = step; return step
+        }
+
+        override fun findByTaskId(taskId: TaskId): List<TaskStep> =
+            steps.values.filter { it.taskId == taskId }.sortedBy { it.order }
+
+        override fun findById(stepId: TaskStepId): TaskStep? = steps[stepId]
+        override fun delete(stepId: TaskStepId): Boolean = steps.remove(stepId) != null
+        override fun deleteByTaskId(taskId: TaskId): Int {
+            val toRemove = steps.values.filter { it.taskId == taskId }
+            toRemove.forEach { steps.remove(it.id) }
+            return toRemove.size
+        }
+
+        override fun countByTaskId(taskId: TaskId): Int =
+            steps.values.count { it.taskId == taskId }
+    }
+
+    /** In-memory реализация InvariantRepository для тестов. */
+    private class InMemoryInvariantRepository : InvariantRepository {
+        private val invariants = mutableMapOf<Int, Invariant>()
+
+        override suspend fun save(invariant: Invariant): Invariant {
+            val id = invariant.id.value.toInt()
+            invariants[id] = invariant
+            return invariant
+        }
+
+        override suspend fun findById(id: InvariantId): Invariant? =
+            invariants[id.value.toInt()]
+
+        override suspend fun findAll(): List<Invariant> =
+            invariants.values.toList()
+
+        override suspend fun delete(id: InvariantId): Boolean =
+            invariants.remove(id.value.toInt()) != null
+
+        override suspend fun count(): Int = invariants.size
+
+        override fun close() {}
     }
 
     /** Простейшая in-memory реализация [DialogSessionRepository] для тестов. */

@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week2.application.executor
+package io.averkhogliad.ai.challenge.week2.application.service
 
 import io.averkhogliad.ai.challenge.week2.domain.model.Task
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
@@ -8,10 +8,10 @@ import java.time.Instant
 import java.util.*
 
 /**
- * Executor для управления задачами в todo-менеджере.
+ * Service для управления задачами в todo-менеджере.
  *
  * ## Архитектурная роль
- * - **Application Layer** — оркестрация операций с задачами
+ * - **Application Layer** — Service для CRUD-операций над задачами
  * - **Состояние** — хранит [currentTaskId] для поддержки контекстных команд
  * - **Не зависит** от UI (CLI, Mordant)
  * - **Зависит только** от domain port [TaskRepository]
@@ -20,7 +20,7 @@ import java.util.*
  * Если команда не получает явный ID задачи, используется [currentTaskId].
  * Это позволяет работать с "текущей открытой задачей" без указания ID каждый раз.
  */
-class TaskManagerExecutor(
+class TodoTaskService(
     private val taskRepository: TaskRepository
 ) {
     /**
@@ -34,9 +34,10 @@ class TaskManagerExecutor(
      * Создаёт новую задачу с указанным названием.
      *
      * @param title название задачи
+     * @param description описание задачи (опционально)
      * @return созданная задача
      */
-    suspend fun handleAddTask(title: String, description: String? = null): Task {
+    suspend fun addTask(title: String, description: String? = null): Task {
         val taskId = TaskId(UUID.randomUUID().toString())
         val now = Instant.now()
         val task = Task(
@@ -56,7 +57,7 @@ class TaskManagerExecutor(
      *
      * @return список всех задач
      */
-    suspend fun handleListTasks(): List<Task> {
+    suspend fun listTasks(): List<Task> {
         return taskRepository.findAll()
     }
 
@@ -69,7 +70,7 @@ class TaskManagerExecutor(
      * @throws IllegalStateException если не указан ID и нет открытой задачи
      * @throws IllegalArgumentException если задача не найдена
      */
-    suspend fun handleEditTask(id: TaskId?, title: String): Task {
+    suspend fun editTask(id: TaskId?, title: String): Task {
         val taskId =
             id ?: currentTaskId ?: throw IllegalStateException("No task specified and no task is currently open")
         val task = taskRepository.findById(taskId) ?: throw IllegalArgumentException("Task not found: $taskId")
@@ -84,7 +85,7 @@ class TaskManagerExecutor(
      * @param id идентификатор задачи (если null, используется [currentTaskId])
      * @throws IllegalStateException если не указан ID и нет открытой задачи
      */
-    suspend fun handleDropTask(id: TaskId?) {
+    suspend fun dropTask(id: TaskId?) {
         val taskId =
             id ?: currentTaskId ?: throw IllegalStateException("No task specified and no task is currently open")
         taskRepository.delete(taskId)
@@ -100,7 +101,7 @@ class TaskManagerExecutor(
      * @return открытая задача
      * @throws IllegalArgumentException если задача не найдена
      */
-    suspend fun handleOpenTask(id: TaskId): Task {
+    suspend fun openTask(id: TaskId): Task {
         val task = taskRepository.findById(id) ?: throw IllegalArgumentException("Task not found: $id")
         currentTaskId = id
         return task
@@ -114,7 +115,7 @@ class TaskManagerExecutor(
      * @throws IllegalStateException если не указан ID и нет открытой задачи
      * @throws IllegalArgumentException если задача не найдена
      */
-    suspend fun handleCloseTask(id: TaskId?): Task {
+    suspend fun closeTask(id: TaskId?): Task {
         val taskId =
             id ?: currentTaskId ?: throw IllegalStateException("No task specified and no task is currently open")
         val task = taskRepository.findById(taskId) ?: throw IllegalArgumentException("Task not found: $taskId")
@@ -134,7 +135,7 @@ class TaskManagerExecutor(
      * @throws IllegalStateException если не указан ID и нет открытой задачи
      * @throws IllegalArgumentException если задача не найдена
      */
-    suspend fun handleCancelTask(id: TaskId?): Task {
+    suspend fun cancelTask(id: TaskId?): Task {
         val taskId =
             id ?: currentTaskId ?: throw IllegalStateException("No task specified and no task is currently open")
         val task = taskRepository.findById(taskId) ?: throw IllegalArgumentException("Task not found: $taskId")
@@ -155,7 +156,7 @@ class TaskManagerExecutor(
      * @throws IllegalStateException если не указан ID и нет открытой задачи
      * @throws IllegalArgumentException если задача не найдена
      */
-    suspend fun handleUpdateDescription(id: TaskId?, description: String): Task {
+    suspend fun updateDescription(id: TaskId?, description: String): Task {
         val taskId =
             id ?: currentTaskId ?: throw IllegalStateException("No task specified and no task is currently open")
         val task = taskRepository.findById(taskId) ?: throw IllegalArgumentException("Task not found: $taskId")
@@ -167,7 +168,7 @@ class TaskManagerExecutor(
     /**
      * Возвращается к списку задач (очищает [currentTaskId]).
      */
-    fun handleBack() {
+    fun back() {
         currentTaskId = null
     }
 }

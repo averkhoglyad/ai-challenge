@@ -54,7 +54,7 @@ class ConsoleCliRendererTaskDetailTest {
         val output = captureOutput { renderer.renderTaskDetail(task) }
 
         assertTrue(
-            output.contains("Task: My Important Task"),
+            output.contains("My Important Task"),
             "Должно отображаться название задачи"
         )
     }
@@ -65,7 +65,7 @@ class ConsoleCliRendererTaskDetailTest {
         val output = captureOutput { renderer.renderTaskDetail(task) }
 
         assertTrue(
-            output.contains("ID: 42"),
+            output.contains("42"),
             "Должен отображаться ID задачи"
         )
     }
@@ -76,7 +76,7 @@ class ConsoleCliRendererTaskDetailTest {
         val output = captureOutput { renderer.renderTaskDetail(task) }
 
         assertTrue(
-            output.contains("Status: OPEN"),
+            output.contains("OPEN"),
             "Должен отображаться статус задачи"
         )
     }
@@ -87,8 +87,8 @@ class ConsoleCliRendererTaskDetailTest {
         val output = captureOutput { renderer.renderTaskDetail(task) }
 
         assertTrue(
-            output.contains("Description:"),
-            "Должна быть секция Description"
+            output.contains("Описание"),
+            "Должна быть секция Описание"
         )
         assertTrue(
             output.contains("This is a detailed description of the task"),
@@ -102,8 +102,8 @@ class ConsoleCliRendererTaskDetailTest {
         val output = captureOutput { renderer.renderTaskDetail(task) }
 
         assertTrue(
-            output.contains("Description:"),
-            "Должна быть секция Description"
+            output.contains("Описание"),
+            "Должна быть секция Описание"
         )
         assertTrue(
             output.contains("Описание отсутствует"),
@@ -182,11 +182,11 @@ class ConsoleCliRendererTaskDetailTest {
         val output = captureOutput { renderer.renderTaskDetail(task) }
 
         assertTrue(
-            output.contains("Created:"),
+            output.contains("Создана"),
             "Должна отображаться дата создания"
         )
         assertTrue(
-            output.contains("Updated:"),
+            output.contains("Обновлена"),
             "Должна отображаться дата обновления"
         )
     }

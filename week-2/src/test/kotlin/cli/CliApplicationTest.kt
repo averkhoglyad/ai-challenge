@@ -1,11 +1,13 @@
 package io.averkhogliad.ai.challenge.week2.cli
 
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week2.application.handler.DebugCommandHandler
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week2.domain.model.DebugMode
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.service.MemoryStatus
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -357,7 +359,144 @@ class CliApplicationTest {
         ) {
             renderedMessages.add("availableTransitions:${transitions.size}")
         }
+
+        override fun renderTelemetry(result: TaskResult) {
+            renderedMessages.add("telemetry:${result::class.simpleName}")
+        }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Stubs for CliApplication dependencies
+    // ═══════════════════════════════════════════════════════════════
+
+    private val stubTaskRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository {
+        override suspend fun save(task: io.averkhogliad.ai.challenge.week2.domain.model.Task) {}
+        override suspend fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): io.averkhogliad.ai.challenge.week2.domain.model.Task? =
+            null
+
+        override suspend fun findAll(): List<io.averkhogliad.ai.challenge.week2.domain.model.Task> = emptyList()
+        override suspend fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {}
+        override suspend fun exists(id: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): Boolean = false
+        override suspend fun saveSteps(
+            taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId,
+            steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>
+        ) {
+        }
+
+        override suspend fun findStepsByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
+            emptyList()
+    }
+
+    private val stubTodoTaskService =
+        io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService(stubTaskRepository)
+
+    private val stubDialogSessionRepository =
+        object : io.averkhogliad.ai.challenge.week2.domain.service.DialogSessionRepository {
+            override fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.SessionId): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? =
+                null
+
+            override fun save(session: io.averkhogliad.ai.challenge.week2.domain.model.DialogSession): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession =
+                session
+
+            override fun findByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? =
+                null
+
+            override fun findActiveSession(): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? = null
+            override fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.SessionId) {}
+        }
+
+    private val stubMemoryService =
+        io.averkhogliad.ai.challenge.week2.domain.service.MemoryService(stubDialogSessionRepository)
+
+    private val stubTaskStepRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository {
+        override fun save(step: io.averkhogliad.ai.challenge.week2.domain.model.TaskStep): io.averkhogliad.ai.challenge.week2.domain.model.TaskStep =
+            step
+
+        override fun findById(stepId: io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId): io.averkhogliad.ai.challenge.week2.domain.model.TaskStep? =
+            null
+
+        override fun findByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
+            emptyList()
+
+        override fun delete(stepId: io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId): Boolean = true
+        override fun deleteByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): Int = 0
+        override fun countByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): Int = 0
+    }
+
+    private val stubFactRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.FactRepository {
+        override suspend fun save(fact: io.averkhogliad.ai.challenge.week2.domain.model.Fact): io.averkhogliad.ai.challenge.week2.domain.model.Fact =
+            fact
+
+        override suspend fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.FactId): io.averkhogliad.ai.challenge.week2.domain.model.Fact? =
+            null
+
+        override suspend fun findAll(): List<io.averkhogliad.ai.challenge.week2.domain.model.Fact> = emptyList()
+        override suspend fun search(query: String): List<io.averkhogliad.ai.challenge.week2.domain.model.Fact> =
+            emptyList()
+
+        override suspend fun searchBatch(queries: List<String>): List<io.averkhogliad.ai.challenge.week2.domain.model.Fact> =
+            emptyList()
+
+        override suspend fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.FactId): Boolean = true
+        override suspend fun count(): Int = 0
+    }
+
+    private val stubProfileRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository {
+        override suspend fun save(profile: io.averkhogliad.ai.challenge.week2.domain.model.Profile): io.averkhogliad.ai.challenge.week2.domain.model.Profile =
+            profile
+
+        override suspend fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.ProfileId): io.averkhogliad.ai.challenge.week2.domain.model.Profile? =
+            null
+
+        override suspend fun findAll(): List<io.averkhogliad.ai.challenge.week2.domain.model.Profile> = emptyList()
+        override suspend fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.ProfileId) {}
+        override suspend fun findByName(name: String): io.averkhogliad.ai.challenge.week2.domain.model.Profile? = null
+        override suspend fun findActive(): io.averkhogliad.ai.challenge.week2.domain.model.Profile? = null
+        override suspend fun existsByName(name: String): Boolean = false
+        override suspend fun clearActive() {}
+    }
+
+    private val stubInvariantRepository =
+        object : io.averkhogliad.ai.challenge.week2.domain.service.InvariantRepository {
+            override suspend fun save(invariant: io.averkhogliad.ai.challenge.week2.domain.model.Invariant): io.averkhogliad.ai.challenge.week2.domain.model.Invariant =
+                invariant
+
+            override suspend fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.InvariantId): io.averkhogliad.ai.challenge.week2.domain.model.Invariant? =
+                null
+
+            override suspend fun findAll(): List<io.averkhogliad.ai.challenge.week2.domain.model.Invariant> =
+                emptyList()
+
+            override suspend fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.InvariantId): Boolean = true
+            override suspend fun count(): Int = 0
+            override fun close() {}
+        }
+
+    private val stubInvariantService =
+        io.averkhogliad.ai.challenge.week2.application.InvariantService(stubInvariantRepository)
+
+    private val stubPromptBuilder = io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder()
+
+    private val stubDialogService = io.averkhogliad.ai.challenge.week2.application.DialogService(
+        llmPort = null,
+        memoryService = stubMemoryService,
+        promptBuilder = stubPromptBuilder,
+        profileRepository = stubProfileRepository,
+        invariantService = stubInvariantService
+    )
+
+    private val stubCommandEngine = io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine()
+
+    private val stubDebugCommandHandler = DebugCommandHandler(
+        DebugMode()
+    )
+
+    private val stubPlanCommandHandler = io.averkhogliad.ai.challenge.week2.application.handler.PlanCommandHandler(
+        taskRepository = stubTaskRepository,
+        commandEngine = stubCommandEngine,
+        factCollector = io.averkhogliad.ai.challenge.week2.application.planner.FactCollector(stubFactRepository),
+        invariantService = stubInvariantService
+    )
 
     // ═══════════════════════════════════════════════════════════════
     // Command handling
@@ -370,12 +509,23 @@ class CliApplicationTest {
         @Test
         @DisplayName("should create CliApplication with executors")
         fun `creates application with executors`() {
-            val executor = MockTaskExecutor(TaskId(1))
+            val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
 
             val app = CliApplication(
-                executors = mapOf(TaskId(1) to executor),
-                renderer = renderer
+                executors = mapOf(TaskId("1") to executor),
+                renderer = renderer,
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                taskStepRepository = stubTaskStepRepository,
+                factRepository = stubFactRepository,
+                dialogService = stubDialogService,
+                profileRepository = stubProfileRepository,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                debugCommandHandler = stubDebugCommandHandler,
+                invariantService = stubInvariantService,
+                invariantRepository = stubInvariantRepository
             )
 
             assertNotNull(app)
@@ -384,11 +534,22 @@ class CliApplicationTest {
         @Test
         @DisplayName("should handle Help command without changing state")
         fun `handles Help command`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
+            val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
             val app = CliApplication(
-                executors = mapOf(TaskId(1) to executor),
-                renderer = renderer
+                executors = mapOf(TaskId("1") to executor),
+                renderer = renderer,
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                taskStepRepository = stubTaskStepRepository,
+                factRepository = stubFactRepository,
+                dialogService = stubDialogService,
+                profileRepository = stubProfileRepository,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                debugCommandHandler = stubDebugCommandHandler,
+                invariantService = stubInvariantService,
+                invariantRepository = stubInvariantRepository
             )
 
             // Проверяем, что приложение создано корректно
@@ -399,12 +560,23 @@ class CliApplicationTest {
         @Test
         @DisplayName("should handle Quit command to stop REPL")
         fun `handles Quit command`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
+            val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
 
             val app = CliApplication(
-                executors = mapOf(TaskId(1) to executor),
-                renderer = renderer
+                executors = mapOf(TaskId("1") to executor),
+                renderer = renderer,
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                taskStepRepository = stubTaskStepRepository,
+                factRepository = stubFactRepository,
+                dialogService = stubDialogService,
+                profileRepository = stubProfileRepository,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                debugCommandHandler = stubDebugCommandHandler,
+                invariantService = stubInvariantService,
+                invariantRepository = stubInvariantRepository
             )
 
             assertNotNull(app)
@@ -413,12 +585,23 @@ class CliApplicationTest {
         @Test
         @DisplayName("should handle SelectTask command to change current task")
         fun `handles SelectTask command`() = runBlocking {
-            val executor = MockTaskExecutor(TaskId(1))
+            val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
 
             val app = CliApplication(
-                executors = mapOf(TaskId(1) to executor),
-                renderer = renderer
+                executors = mapOf(TaskId("1") to executor),
+                renderer = renderer,
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                taskStepRepository = stubTaskStepRepository,
+                factRepository = stubFactRepository,
+                dialogService = stubDialogService,
+                profileRepository = stubProfileRepository,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                debugCommandHandler = stubDebugCommandHandler,
+                invariantService = stubInvariantService,
+                invariantRepository = stubInvariantRepository
             )
 
             assertNotNull(app)
@@ -481,16 +664,27 @@ class CliApplicationTest {
         @Test
         @DisplayName("should create application with multiple executors")
         fun `creates application with multiple executors`() {
-            val executor1 = MockTaskExecutor(TaskId(1))
-            val executor2 = MockTaskExecutor(TaskId(2))
+            val executor1 = MockTaskExecutor(TaskId("1"))
+            val executor2 = MockTaskExecutor(TaskId("2"))
             val renderer = MockCliRenderer()
 
             val app = CliApplication(
                 executors = mapOf(
-                    TaskId(1) to executor1,
-                    TaskId(2) to executor2
+                    TaskId("1") to executor1,
+                    TaskId("2") to executor2
                 ),
-                renderer = renderer
+                renderer = renderer,
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                taskStepRepository = stubTaskStepRepository,
+                factRepository = stubFactRepository,
+                dialogService = stubDialogService,
+                profileRepository = stubProfileRepository,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                debugCommandHandler = stubDebugCommandHandler,
+                invariantService = stubInvariantService,
+                invariantRepository = stubInvariantRepository
             )
 
             assertNotNull(app)
@@ -503,7 +697,18 @@ class CliApplicationTest {
 
             val app = CliApplication(
                 executors = emptyMap(),
-                renderer = renderer
+                renderer = renderer,
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                taskStepRepository = stubTaskStepRepository,
+                factRepository = stubFactRepository,
+                dialogService = stubDialogService,
+                profileRepository = stubProfileRepository,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                debugCommandHandler = stubDebugCommandHandler,
+                invariantService = stubInvariantService,
+                invariantRepository = stubInvariantRepository
             )
 
             assertNotNull(app)

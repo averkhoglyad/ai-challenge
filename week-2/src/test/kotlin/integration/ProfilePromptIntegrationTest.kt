@@ -1,14 +1,12 @@
 package io.averkhogliad.ai.challenge.week2.integration
 
 import io.averkhogliad.ai.challenge.week2.application.DialogService
+import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
-import io.averkhogliad.ai.challenge.week2.domain.model.DialogSession
-import io.averkhogliad.ai.challenge.week2.domain.model.SessionId
-import io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
+import io.averkhogliad.ai.challenge.week2.domain.model.*
 import io.averkhogliad.ai.challenge.week2.domain.service.*
 import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.InMemoryProfileRepository
 import kotlinx.coroutines.runBlocking
@@ -46,6 +44,7 @@ class ProfilePromptIntegrationTest {
     private lateinit var memoryService: MemoryService
     private lateinit var promptBuilder: PromptBuilder
     private lateinit var dialogService: DialogService
+    private lateinit var stubInvariantService: InvariantService
 
     @BeforeEach
     fun setUp() {
@@ -55,12 +54,21 @@ class ProfilePromptIntegrationTest {
         sessionRepository = InMemoryDialogSessionRepository()
         memoryService = MemoryService(sessionRepository)
         promptBuilder = PromptBuilder()
+        stubInvariantService = InvariantService(object : InvariantRepository {
+            override suspend fun save(invariant: Invariant): Invariant = invariant
+            override suspend fun findById(id: InvariantId): Invariant? = null
+            override suspend fun findAll(): List<Invariant> = emptyList()
+            override suspend fun delete(id: InvariantId): Boolean = true
+            override suspend fun count(): Int = 0
+            override fun close() {}
+        })
         dialogService = DialogService(
             llmPort = mockLlmPort,
             memoryService = memoryService,
             promptBuilder = promptBuilder,
             taskExecutionConfig = TaskExecutionConfig(),
-            profileRepository = profileRepository
+            profileRepository = profileRepository,
+            invariantService = stubInvariantService
         )
     }
 

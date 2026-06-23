@@ -4,19 +4,6 @@ import io.averkhogliad.ai.challenge.week2.domain.model.*
 import java.time.Instant
 
 /**
- * Сервис управления памятью диалога (STM и WM).
- *
- * ## Архитектурная роль
- * - **Application Service** — оркестрирует операции с STM и WM
- * - **Stateless** — состояние хранится в репозиториях
- *
- * ## Ответственность
- * - Управление сессиями диалога для разных уровней (TASK_LIST, TASK_DETAIL)
- * - Ограничение STM скользящим окном
- * - Формирование WM на основе текущего уровня
- * - Переключение между уровнями сессий
- */
-/**
  * Полный контекст памяти для формирования промпта LLM.
  *
  * @property workingMemory рабочая память (WM) с задачами, шагами и свёрткой
@@ -29,6 +16,20 @@ data class MemoryContext(
     val recentMessages: List<Message>
 )
 
+/**
+ * Сервис управления памятью диалога (STM, WM, LTM).
+ *
+ * ## Архитектурная роль
+ * - **Domain Service** — оркестрирует операции с STM, WM и LTM
+ * - **Stateless** — состояние хранится в репозиториях
+ *
+ * ## Ответственность
+ * - Управление сессиями диалога для разных уровней (TASK_LIST, TASK_DETAIL)
+ * - Ограничение STM скользящим окном
+ * - Формирование WM на основе текущего уровня
+ * - Извлечение и поиск релевантных фактов из LTM
+ * - Формирование полного контекста памяти для LLM
+ */
 class MemoryService(
     private val sessionRepository: DialogSessionRepository,
     private val taskRepository: TaskRepository? = null,
@@ -117,16 +118,6 @@ class MemoryService(
             updatedAt = session.updatedAt,
             ltmFactCount = ltmCount
         )
-    }
-
-    /**
-     * Поиск фактов в долговременной памяти (LTM).
-     *
-     * @param query поисковый запрос
-     * @return список фактов, соответствующих запросу
-     */
-    suspend fun searchFacts(query: String): List<Fact> {
-        return factRepository?.search(query) ?: emptyList()
     }
 
     /**

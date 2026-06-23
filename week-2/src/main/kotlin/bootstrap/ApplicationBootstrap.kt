@@ -4,8 +4,8 @@ import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.DefaultLlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmClientConfig
 import io.averkhogliad.ai.challenge.week2.application.DialogService
-import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
+import io.averkhogliad.ai.challenge.week2.application.cache.CachingInvariantService
 import io.averkhogliad.ai.challenge.week2.application.executor.*
 import io.averkhogliad.ai.challenge.week2.cli.CliApplication
 import io.averkhogliad.ai.challenge.week2.cli.ConsoleCliRenderer
@@ -49,7 +49,7 @@ import kotlin.time.Duration.Companion.seconds
  *     ↓
  * SqliteDialogSessionRepository (Infrastructure: dialog persistence)
  *     ↓
- * TaskManagerExecutor (Application: оркестрация задач)
+ * TodoTaskService (Application: CRUD операции с задачами)
  *     ↓
  * MemoryService (Application: управление памятью диалога)
  *     ↓
@@ -81,7 +81,7 @@ object ApplicationBootstrap {
      * 1. Infrastructure: ConfigAdapter → AppConfig
      * 2. Infrastructure: SqliteTaskRepository (persistence)
      * 3. Infrastructure: SqliteDialogSessionRepository (dialog persistence)
-     * 4. Application: TaskManagerExecutor (оркестрация задач)
+     * 4. Application: TodoTaskService (оркестрация задач)
      * 5. Application: MemoryService (управление памятью диалога)
      * 6. CLI: renderer + application
      */
@@ -104,16 +104,22 @@ object ApplicationBootstrap {
         // 3. Infrastructure: репозиторий сессий диалога (SQLite persistence)
         val dialogSessionRepository = SqliteDialogSessionRepository(dbPath)
 
-        // 3a. Infrastructure: репозиторий шагов задач (SQLite persistence)
+        // 4. Infrastructure: репозиторий шагов задач (SQLite persistence)
         val taskStepRepository = SqliteTaskStepRepository(dbPath)
 
-        // 4. Application: TaskManagerExecutor (оркестрация задач)
-        val taskManagerExecutor = TaskManagerExecutor(taskRepository)
-
-        // 3b. Infrastructure: репозиторий фактов LTM (SQLite persistence with FTS5)
+        // 5. Infrastructure: репозиторий фактов LTM (SQLite persistence with FTS5)
         val factRepository = SqliteFactRepository(dbPath)
 
-        // 5. Application: MemoryService (управление памятью диалога)
+        // 6. Infrastructure: репозиторий профилей (SQLite persistence)
+        val profileRepository = SqliteProfileRepository(dbPath)
+
+        // 7. Infrastructure: репозиторий инвариантов (SQLite persistence)
+        val invariantRepository = SqliteInvariantRepository(dbPath)
+
+        // 8. Application: TodoTaskService (CRUD операции с задачами)
+        val todoTaskService = io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService(taskRepository)
+
+        // 9. Application: MemoryService (управление памятью диалога)
         val memoryService = MemoryService(
             sessionRepository = dialogSessionRepository,
             taskRepository = taskRepository,
@@ -121,65 +127,76 @@ object ApplicationBootstrap {
             factRepository = factRepository
         )
 
-        // 5a. Application: PromptBuilder (формирование контекстного промпта)
+        // 10. Application: PromptBuilder (формирование контекстного промпта)
         val promptBuilder = PromptBuilder()
 
-        // 3c. Infrastructure: репозиторий профилей (SQLite persistence)
-        val profileRepository = SqliteProfileRepository(dbPath)
+        // 11. Application: CachingInvariantService (кэширующий декоратор над InvariantService)
+        val cachingInvariantService = CachingInvariantService(invariantRepository)
 
-        // 5b. Infrastructure: репозиторий инвариантов (SQLite persistence)
-        val invariantRepository = SqliteInvariantRepository(dbPath)
+        // 12. Application: ProfileService (управление профилями)
+        val profileService = ProfileService(profileRepository)
 
-        // 5c. Application: InvariantService (управление инвариантами агента)
-        val invariantService = InvariantService(invariantRepository)
-
-        // 5d. Application: DialogService (интеграция с LLM)
+        // 13. Application: DialogService (интеграция с LLM)
         val dialogService = DialogService(
             llmPort = llmPort,
             memoryService = memoryService,
             promptBuilder = promptBuilder,
             profileRepository = profileRepository,  // передача репозитория профилей для встраивания активного профиля в промпт
-            invariantService = invariantService  // NEW: передача сервиса инвариантов для встраивания в промпт
+            invariantService = cachingInvariantService  // передача кэширующего сервиса инвариантов для встраивания в промпт
         )
 
-        // 6. Application: Task 1 executor (CLI-ассистент)
+        // 14. Application: Task executors (CLI-ассистенты)
         val task1Executor = Task1Executor(dialogService, memoryService)
-
-        // 5c. Application: ProfileService (управление профилями)
-        val profileService = ProfileService(profileRepository)
-
-        // 6a. Application: Task 2 executor (CLI-ассистент, копия Task 1) + profile delegation
         val task2Executor = Task2Executor(dialogService, memoryService, profileService)
-
-        // 6b. Application: Task 3 executor (CLI-ассистент, копия Task 2) + profile delegation
         val task3Executor = Task3Executor(dialogService, memoryService, profileService)
-
-        // 6b2. Application: Task 4 executor (CLI-ассистент, копия Task 3) + profile delegation
         val task4Executor = Task4Executor(dialogService, memoryService, profileService)
-
-        // 6b3. Application: Task 5 executor (CLI-ассистент с FSM, копия Task 4) + profile delegation
         val task5Executor = Task5Executor(dialogService, memoryService, profileService)
 
-        // 6c. Application: PlanCommandExecutor (FSM-based планирование)
-        val planCommandExecutor = io.averkhogliad.ai.challenge.week2.application.executor.PlanCommandExecutor(
-            taskRepository = taskRepository,
+        // 15. Application: planner components (выделены из PlanCommandHandler)
+        val keywordExtractor = io.averkhogliad.ai.challenge.week2.application.planner.KeywordExtractor()
+        val factCollector = io.averkhogliad.ai.challenge.week2.application.planner.FactCollector(
             factRepository = factRepository,
-            commandEngine = io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine(),
-            llmPort = llmPort,
-            invariantService = invariantService  // NEW: передача сервиса инвариантов для проверки конфликтов в :plan
+            keywordExtractor = keywordExtractor
+        )
+        val stepParser = io.averkhogliad.ai.challenge.week2.application.planner.StepParser()
+        val llmPlanner = if (llmPort != null) {
+            io.averkhogliad.ai.challenge.week2.application.planner.LlmPlanner(llmPort)
+        } else null
+
+        // 16. Application: CommandEngine (shared FSM engine, must be passed to CliApplication)
+        val commandEngine = io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine()
+
+        // 17. Application: PlanCommandHandler (FSM-based планирование)
+        val planCommandHandler = io.averkhogliad.ai.challenge.week2.application.handler.PlanCommandHandler(
+            taskRepository = taskRepository,
+            commandEngine = commandEngine,
+            factCollector = factCollector,
+            llmPlanner = llmPlanner,
+            stepParser = stepParser,
+            invariantService = cachingInvariantService
         )
 
-        // 6d. Domain: DebugMode (управление debug-режимом)
+        // 18. Domain: DebugMode (управление debug-режимом)
         val debugMode = io.averkhogliad.ai.challenge.week2.domain.model.DebugMode()
 
-        // 6e. Application: DebugCommandExecutor (управление debug-режимом через CLI)
-        val debugCommandExecutor =
-            io.averkhogliad.ai.challenge.week2.application.executor.DebugCommandExecutor(debugMode)
+        // 19. Application: DebugCommandHandler (управление debug-режимом через CLI)
+        val debugCommandHandler =
+            io.averkhogliad.ai.challenge.week2.application.handler.DebugCommandHandler(debugMode)
 
         // 7. CLI: renderer + facade
         val renderer = ConsoleCliRenderer()
 
+        // 7a. Shutdown hook: закрытие SQLite соединений при завершении JVM
+        Runtime.getRuntime().addShutdownHook(Thread {
+            try {
+                invariantRepository.close()
+            } catch (_: Exception) {
+                // silently ignore close errors during shutdown
+            }
+        })
+
         return CliApplication(
+            commandEngine = commandEngine,
             executors = mapOf(
                 task1Executor.taskId to task1Executor,
                 task2Executor.taskId to task2Executor,
@@ -188,15 +205,16 @@ object ApplicationBootstrap {
                 task5Executor.taskId to task5Executor,
             ),
             renderer = renderer,
-            taskManagerExecutor = taskManagerExecutor,
+            todoTaskService = todoTaskService,
             memoryService = memoryService,
             taskStepRepository = taskStepRepository,
             factRepository = factRepository,
             dialogService = dialogService,
             profileRepository = profileRepository,
-            planCommandExecutor = planCommandExecutor,
-            debugCommandExecutor = debugCommandExecutor,
-            invariantService = invariantService,
+            planCommandHandler = planCommandHandler,
+            debugCommandHandler = debugCommandHandler,
+            invariantService = cachingInvariantService,
+            invariantRepository = invariantRepository,
         )
     }
 

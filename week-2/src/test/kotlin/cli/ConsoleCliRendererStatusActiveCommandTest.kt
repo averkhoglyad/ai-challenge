@@ -34,7 +34,7 @@ class ConsoleCliRendererStatusActiveCommandTest {
             renderer.renderStatusActiveCommand("plan")
         }
 
-        assertTrue(output.contains("Active command: plan"))
+        assertTrue(output.contains("Активная команда: plan"))
     }
 
     @Test
@@ -43,7 +43,7 @@ class ConsoleCliRendererStatusActiveCommandTest {
             renderer.renderStatusActiveCommand(null)
         }
 
-        assertTrue(output.contains("Active command: none"))
+        assertTrue(output.contains("Активная команда: нет"))
     }
 
     @Test
@@ -52,7 +52,7 @@ class ConsoleCliRendererStatusActiveCommandTest {
             renderer.renderStatusActiveCommand("describe")
         }
 
-        assertTrue(output.contains("Active command: describe"))
+        assertTrue(output.contains("Активная команда: describe"))
     }
 
     @Test

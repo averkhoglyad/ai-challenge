@@ -1,10 +1,10 @@
 package io.averkhogliad.ai.challenge.week2.application.executor
 
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
-import io.averkhogliad.ai.challenge.week2.domain.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 
 /**
  * Базовый интерфейс для всех executor'ов задач (Application Layer).
