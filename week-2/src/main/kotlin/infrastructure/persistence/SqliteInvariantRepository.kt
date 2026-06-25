@@ -3,8 +3,6 @@ package io.averkhogliad.ai.challenge.week2.infrastructure.persistence
 import io.averkhogliad.ai.challenge.week2.domain.model.Invariant
 import io.averkhogliad.ai.challenge.week2.domain.model.InvariantId
 import io.averkhogliad.ai.challenge.week2.domain.service.InvariantRepository
-import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.ResultSet
 import java.sql.Statement
 import java.time.Instant
@@ -24,25 +22,14 @@ import java.time.Instant
  * - Файл БД задаётся через конструктор (общий с другими репозиториями)
  * - Автоинкремент ID через SQLite INTEGER PRIMARY KEY
  *
- * @param dbPath путь к файлу базы данных
+ * @param database единый владелец SQLite JDBC-соединения
  */
 class SqliteInvariantRepository(
-    private val dbPath: String
+    private val database: SqliteDatabase
 ) : InvariantRepository {
 
-    private val connection: Connection by lazy {
-        val parentDir = java.io.File(dbPath).parentFile
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs()
-        }
+    private val connection get() = database.connection
 
-        DriverManager.getConnection("jdbc:sqlite:$dbPath").apply {
-            createStatement().use { stmt ->
-                stmt.execute("PRAGMA journal_mode=WAL")
-                stmt.execute("PRAGMA synchronous=NORMAL")
-            }
-        }
-    }
 
     init {
         initializeSchema()
@@ -167,12 +154,5 @@ class SqliteInvariantRepository(
         )
     }
 
-    /**
-     * Закрывает соединение с БД.
-     */
-    override fun close() {
-        if (!connection.isClosed) {
-            connection.close()
-        }
-    }
+
 }

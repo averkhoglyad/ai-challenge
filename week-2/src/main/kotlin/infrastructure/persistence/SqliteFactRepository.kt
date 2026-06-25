@@ -3,8 +3,6 @@ package io.averkhogliad.ai.challenge.week2.infrastructure.persistence
 import io.averkhogliad.ai.challenge.week2.domain.model.Fact
 import io.averkhogliad.ai.challenge.week2.domain.model.FactId
 import io.averkhogliad.ai.challenge.week2.domain.service.FactRepository
-import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.ResultSet
 import java.time.Instant
 
@@ -26,25 +24,14 @@ import java.time.Instant
  * - Поддержка транзакций для атомарности операций
  * - Полнотекстовый поиск через MATCH на FTS5
  *
- * @param dbPath путь к файлу базы данных
+ * @param database единый владелец SQLite JDBC-соединения
  */
 class SqliteFactRepository(
-    private val dbPath: String
+    private val database: SqliteDatabase
 ) : FactRepository {
 
-    private val connection: Connection by lazy {
-        val parentDir = java.io.File(dbPath).parentFile
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs()
-        }
+    private val connection get() = database.connection
 
-        DriverManager.getConnection("jdbc:sqlite:$dbPath").apply {
-            createStatement().use { stmt ->
-                stmt.execute("PRAGMA journal_mode=WAL")
-                stmt.execute("PRAGMA synchronous=NORMAL")
-            }
-        }
-    }
 
     init {
         initializeSchema()
@@ -254,12 +241,5 @@ class SqliteFactRepository(
         )
     }
 
-    /**
-     * Закрывает соединение с БД.
-     */
-    fun close() {
-        if (!connection.isClosed) {
-            connection.close()
-        }
-    }
+
 }

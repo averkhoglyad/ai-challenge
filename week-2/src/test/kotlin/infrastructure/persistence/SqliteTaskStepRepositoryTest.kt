@@ -22,18 +22,21 @@ import kotlin.test.*
 class SqliteTaskStepRepositoryTest {
 
     private lateinit var tempDbFile: File
+    private lateinit var database: SqliteDatabase
     private lateinit var repository: SqliteTaskStepRepository
 
     @BeforeEach
     fun setUp() {
         tempDbFile = Files.createTempFile("test-taskstep-", ".db").toFile()
-        repository = SqliteTaskStepRepository(tempDbFile.absolutePath)
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        repository = SqliteTaskStepRepository(database)
     }
 
     @AfterEach
     fun tearDown() {
-        repository.close()
+        database.close()
         tempDbFile.delete()
+
         // Удаляем WAL и SHM файлы, если они существуют
         File(tempDbFile.absolutePath + "-wal").delete()
         File(tempDbFile.absolutePath + "-shm").delete()

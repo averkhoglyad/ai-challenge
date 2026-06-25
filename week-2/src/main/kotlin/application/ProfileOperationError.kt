@@ -19,18 +19,9 @@ sealed class ProfileOperationError(message: String) : Exception(message) {
     class AlreadyExists(val profileName: String) :
         ProfileOperationError("Профиль с названием \"$profileName\" уже существует")
 
-    /** Не указан ID профиля для команды активации */
-    object MissingProfileId : ProfileOperationError(
-        "Укажите ID профиля. Использование: :profile-activate <id>"
-    )
-
-    /** Не указано имя профиля для команды создания */
-    object MissingProfileName : ProfileOperationError(
-        "Укажите имя профиля. Использование: :profile-create <name>"
-    )
-
     /** Пустое содержимое профиля */
-    object EmptyContent : ProfileOperationError("Содержимое профиля не может быть пустым")
+    class EmptyContent : ProfileOperationError("Содержимое профиля не может быть пустым")
+
 
     /** Содержимое профиля превышает допустимый лимит (1000 символов) */
     class ContentTooLong(val length: Int) : ProfileOperationError(
@@ -38,7 +29,8 @@ sealed class ProfileOperationError(message: String) : Exception(message) {
     )
 
     /** Попытка удалить активный профиль */
-    object CannotDeleteActiveProfile : ProfileOperationError(
+    class CannotDeleteActiveProfile : ProfileOperationError(
         "Нельзя удалить активный профиль. Сначала переключитесь на другой профиль."
     )
+
 }

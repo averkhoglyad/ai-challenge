@@ -1,6 +1,5 @@
 package io.averkhogliad.ai.challenge.week2.application.handler
 
-import io.averkhogliad.ai.challenge.week2.cli.commands.Command.DebugAction
 import io.averkhogliad.ai.challenge.week2.domain.model.DebugMode
 
 /**

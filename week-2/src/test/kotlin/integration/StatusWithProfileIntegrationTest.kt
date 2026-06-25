@@ -5,15 +5,11 @@ import io.averkhogliad.ai.challenge.week2.application.InvariantService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week2.application.handler.DebugCommandHandler
-import io.averkhogliad.ai.challenge.week2.cli.CliApplication
-import io.averkhogliad.ai.challenge.week2.cli.CliRenderer
-import io.averkhogliad.ai.challenge.week2.cli.CliState
+import io.averkhogliad.ai.challenge.week2.cli.*
+import io.averkhogliad.ai.challenge.week2.cli.handlers.*
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week2.domain.model.*
-import io.averkhogliad.ai.challenge.week2.domain.service.FactRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.MemoryStatus
-import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
-import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
+import io.averkhogliad.ai.challenge.week2.domain.service.*
 import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.InMemoryProfileRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
@@ -73,9 +69,9 @@ class StatusWithProfileIntegrationTest {
         }
 
         override fun renderMemoryCleared() {}
-        override fun renderStepCreated(step: io.averkhogliad.ai.challenge.week2.domain.model.TaskStep) {}
-        override fun renderStepList(steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>) {}
-        override fun renderStepCompleted(step: io.averkhogliad.ai.challenge.week2.domain.model.TaskStep) {}
+        override fun renderStepCreated(step: TaskStep) {}
+        override fun renderStepList(steps: List<TaskStep>) {}
+        override fun renderStepCompleted(step: TaskStep) {}
         override fun renderStepError(message: String) {}
         override fun renderFactSaved(fact: Fact) {}
         override fun renderFactList(facts: List<Fact>) {}
@@ -88,8 +84,8 @@ class StatusWithProfileIntegrationTest {
         }
 
         override fun renderFactSearchEmpty(query: String) {}
-        override fun renderProfileList(profiles: List<io.averkhogliad.ai.challenge.week2.domain.model.Profile>) {}
-        override fun renderProfileDetail(profile: io.averkhogliad.ai.challenge.week2.domain.model.Profile) {}
+        override fun renderProfileList(profiles: List<Profile>) {}
+        override fun renderProfileDetail(profile: Profile) {}
         override fun renderProfileDeleted(name: String) {}
         override fun renderProfileUpdated(name: String) {}
         override fun renderProfileError(message: String) {}
@@ -109,20 +105,20 @@ class StatusWithProfileIntegrationTest {
 
         override fun renderProfileContentTooLong(length: Int) {}
 
-        override fun renderFsmState(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {}
+        override fun renderFsmState(state: CommandState) {}
 
         override fun renderStatusDebug(enabled: Boolean) {
             renderedMessages.add("statusDebug:$enabled")
         }
 
         override fun renderStatusActiveCommand(commandName: String?) {}
-        override fun renderFsmStateInfo(state: io.averkhogliad.ai.challenge.week2.domain.model.CommandState) {}
+        override fun renderFsmStateInfo(state: CommandState) {}
         override fun renderNoActiveCommand() {}
         override fun renderAbortConfirmation() {}
         override fun renderAbortSuccess() {}
         override fun renderAbortCancelled() {}
-        override fun renderInvariantList(invariants: List<io.averkhogliad.ai.challenge.week2.domain.model.Invariant>) {}
-        override fun renderInvariantAdded(invariant: io.averkhogliad.ai.challenge.week2.domain.model.Invariant) {}
+        override fun renderInvariantList(invariants: List<Invariant>) {}
+        override fun renderInvariantAdded(invariant: Invariant) {}
         override fun renderInvariantRemoved(id: Int) {}
         override fun renderInvariantNotFound(id: Int) {}
         override fun renderInvariantEmptyRule() {}
@@ -132,16 +128,16 @@ class StatusWithProfileIntegrationTest {
         override fun waitForEnter() {}
 
         override fun renderStatusFsm(
-            stage: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage?,
-            availableTransitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+            stage: CommandStage?,
+            availableTransitions: List<Transition>
         ) {
         }
 
-        override fun renderStateMap(stateMap: io.averkhogliad.ai.challenge.week2.domain.model.StateMap) {}
+        override fun renderStateMap(stateMap: StateMap) {}
 
         override fun renderGotoSuccess(
-            from: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage,
-            to: io.averkhogliad.ai.challenge.week2.domain.model.CommandStage
+            from: CommandStage,
+            to: CommandStage
         ) {
         }
 
@@ -152,7 +148,7 @@ class StatusWithProfileIntegrationTest {
         override fun renderGotoInvalidState(stateName: String) {}
 
         override fun renderAvailableTransitions(
-            transitions: List<io.averkhogliad.ai.challenge.week2.domain.model.Transition>
+            transitions: List<Transition>
         ) {
         }
 
@@ -161,7 +157,7 @@ class StatusWithProfileIntegrationTest {
         }
     }
 
-    private val stubTaskRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository {
+    private val stubTaskRepository = object : TaskRepository {
         override suspend fun save(task: Task) {}
         override suspend fun findById(id: TaskId): Task? = null
         override suspend fun findAll(): List<Task> = emptyList()
@@ -169,11 +165,11 @@ class StatusWithProfileIntegrationTest {
         override suspend fun exists(id: TaskId): Boolean = false
         override suspend fun saveSteps(
             taskId: TaskId,
-            steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>
+            steps: List<TaskStep>
         ) {
         }
 
-        override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
+        override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> =
             emptyList()
     }
 
@@ -181,34 +177,34 @@ class StatusWithProfileIntegrationTest {
         io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService(stubTaskRepository)
 
     private val stubDialogSessionRepository =
-        object : io.averkhogliad.ai.challenge.week2.domain.service.DialogSessionRepository {
-            override fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.SessionId): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? =
+        object : DialogSessionRepository {
+            override fun findById(id: SessionId): DialogSession? =
                 null
 
-            override fun save(session: io.averkhogliad.ai.challenge.week2.domain.model.DialogSession): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession =
+            override fun save(session: DialogSession): DialogSession =
                 session
 
-            override fun findByTaskId(taskId: TaskId): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? =
+            override fun findByTaskId(taskId: TaskId): DialogSession? =
                 null
 
-            override fun findActiveSession(): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? = null
-            override fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.SessionId) {}
+            override fun findActiveSession(): DialogSession? = null
+            override fun delete(id: SessionId) {}
         }
 
     private val stubMemoryService =
-        io.averkhogliad.ai.challenge.week2.domain.service.MemoryService(stubDialogSessionRepository)
+        MemoryService(stubDialogSessionRepository)
 
-    private val stubTaskStepRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository {
-        override fun save(step: io.averkhogliad.ai.challenge.week2.domain.model.TaskStep): io.averkhogliad.ai.challenge.week2.domain.model.TaskStep =
+    private val stubTaskStepRepository = object : TaskStepRepository {
+        override fun save(step: TaskStep): TaskStep =
             step
 
-        override fun findById(stepId: io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId): io.averkhogliad.ai.challenge.week2.domain.model.TaskStep? =
+        override fun findById(stepId: TaskStepId): TaskStep? =
             null
 
-        override fun findByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
+        override fun findByTaskId(taskId: TaskId): List<TaskStep> =
             emptyList()
 
-        override fun delete(stepId: io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId): Boolean = true
+        override fun delete(stepId: TaskStepId): Boolean = true
         override fun deleteByTaskId(taskId: TaskId): Int = 0
         override fun countByTaskId(taskId: TaskId): Int = 0
     }
@@ -224,24 +220,22 @@ class StatusWithProfileIntegrationTest {
     }
 
     private val stubInvariantRepository =
-        object : io.averkhogliad.ai.challenge.week2.domain.service.InvariantRepository {
-            override suspend fun save(invariant: io.averkhogliad.ai.challenge.week2.domain.model.Invariant): io.averkhogliad.ai.challenge.week2.domain.model.Invariant =
+        object : InvariantRepository {
+            override suspend fun save(invariant: Invariant): Invariant =
                 invariant
 
-            override suspend fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.InvariantId): io.averkhogliad.ai.challenge.week2.domain.model.Invariant? =
+            override suspend fun findById(id: InvariantId): Invariant? =
                 null
 
-            override suspend fun findAll(): List<io.averkhogliad.ai.challenge.week2.domain.model.Invariant> =
+            override suspend fun findAll(): List<Invariant> =
                 emptyList()
 
-            override suspend fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.InvariantId): Boolean = true
+            override suspend fun delete(id: InvariantId): Boolean = true
             override suspend fun count(): Int = 0
             override fun close() {}
         }
 
     private val stubInvariantService = InvariantService(stubInvariantRepository)
-
-    private fun createStubProfileRepository() = InMemoryProfileRepository()
 
     private fun createStubDialogService(profileRepository: ProfileRepository) =
         io.averkhogliad.ai.challenge.week2.application.DialogService(
@@ -264,28 +258,90 @@ class StatusWithProfileIntegrationTest {
             invariantService = stubInvariantService
         )
 
+    private fun createApp(
+        renderer: CliRenderer,
+        profileRepository: ProfileRepository,
+    ): CliApplication {
+        val input = object : CliInput {
+            override fun readLine(): String? = null
+            override fun readMultiline(): String = ""
+        }
+        val commandHandler = CommandHandler(emptyMap())
+        val handlers = CliCommandHandlers(
+            command = commandHandler,
+            debug = stubDebugCommandHandler,
+            todoTask = TodoTaskCommandHandler(stubTodoTaskService, stubMemoryService, renderer, input::readMultiline),
+
+            taskStep = TaskStepCommandHandler(
+                io.averkhogliad.ai.challenge.week2.application.service.TaskStepService(
+                    taskStepRepository = stubTaskStepRepository,
+                    memoryService = stubMemoryService
+                ),
+                renderer
+            ),
+            memory = MemoryCommandHandler(
+                memoryService = stubMemoryService,
+                profileRepository = profileRepository,
+                debugCommandHandler = stubDebugCommandHandler,
+                commandEngine = stubCommandEngine,
+                invariantService = stubInvariantService,
+                renderer = renderer
+            ),
+            ltm = LtmCommandHandler(
+                io.averkhogliad.ai.challenge.week2.application.service.LtmService(stubFactRepository),
+                renderer
+            ),
+            fsm = FsmCommandHandler(stubCommandEngine, renderer, input::readLine),
+
+            invariant = InvariantCommandHandler(stubInvariantService, renderer, input::readLine),
+            profile = ProfileCommandHandler(
+                ProfileService(profileRepository),
+                renderer,
+                input::readLine,
+                input::readMultiline
+            ),
+        )
+        val dialogService = createStubDialogService(profileRepository)
+        val planCommandHandler = createStubPlanCommandHandler()
+        val userInputFlowHandler = UserInputFlowHandler(
+            renderer = renderer,
+            dialogService = dialogService,
+            planCommandHandler = planCommandHandler,
+            commandEngine = stubCommandEngine,
+            commandHandler = commandHandler
+        )
+        val planFlowHandler = PlanFlowHandler(
+            renderer = renderer,
+            dialogService = dialogService,
+            planCommandHandler = planCommandHandler
+        )
+        val dispatcher = CliCommandDispatcher(
+            renderer = renderer,
+            handlers = handlers,
+            userInputFlowHandler = userInputFlowHandler,
+            planFlowHandler = planFlowHandler
+        )
+        return CliApplication(
+            renderer = renderer,
+            input = input,
+            dispatcher = dispatcher,
+            commandHandler = commandHandler,
+            applicationResources = { }
+        )
+
+
+    }
+
     @Test
+
     @DisplayName("should show active profile name in status")
     fun `status with active profile`() = runBlocking {
         val profileRepository = InMemoryProfileRepository()
         val renderer = TestCliRenderer()
 
         // Создаём приложение с ProfileRepository
-        val app = CliApplication(
-            executors = emptyMap(),
-            renderer = renderer,
-            todoTaskService = stubTodoTaskService,
-            memoryService = stubMemoryService,
-            taskStepRepository = stubTaskStepRepository,
-            factRepository = stubFactRepository,
-            dialogService = createStubDialogService(profileRepository),
-            profileRepository = profileRepository,
-            planCommandHandler = createStubPlanCommandHandler(),
-            commandEngine = stubCommandEngine,
-            debugCommandHandler = stubDebugCommandHandler,
-            invariantService = stubInvariantService,
-            invariantRepository = stubInvariantRepository
-        )
+        val app = createApp(renderer, profileRepository)
+
         assertNotNull(app)
 
         // Создаём профиль через ProfileService и явно активируем
@@ -299,11 +355,19 @@ class StatusWithProfileIntegrationTest {
         assertTrue(active.isActive)
         assertEquals("Test Profile", active.name)
 
-        // Вызываем рендеринг статуса профиля напрямую (симулируя :status)
-        renderer.renderStatusProfile(active.name)
+        val statusHandler = MemoryCommandHandler(
+            memoryService = stubMemoryService,
+            profileRepository = profileRepository,
+            debugCommandHandler = stubDebugCommandHandler,
+            commandEngine = stubCommandEngine,
+            invariantService = stubInvariantService,
+            renderer = renderer
+        )
 
-        // Проверяем, что рендеринг был вызван с правильным именем
+        statusHandler.handleShowStatus(CliState(taskListMode = true))
+
         val statusMsg = renderer.renderedMessages.find { it.startsWith("statusProfile:") }
+
         assertNotNull(statusMsg)
         assertEquals("statusProfile:Test Profile", statusMsg)
     }
@@ -314,32 +378,27 @@ class StatusWithProfileIntegrationTest {
         val profileRepository = InMemoryProfileRepository()
         val renderer = TestCliRenderer()
 
-        val app = CliApplication(
-            executors = emptyMap(),
-            renderer = renderer,
-            todoTaskService = stubTodoTaskService,
-            memoryService = stubMemoryService,
-            taskStepRepository = stubTaskStepRepository,
-            factRepository = stubFactRepository,
-            dialogService = createStubDialogService(profileRepository),
-            profileRepository = profileRepository,
-            planCommandHandler = createStubPlanCommandHandler(),
-            commandEngine = stubCommandEngine,
-            debugCommandHandler = stubDebugCommandHandler,
-            invariantService = stubInvariantService,
-            invariantRepository = stubInvariantRepository
-        )
+        val app = createApp(renderer, profileRepository)
+
         assertNotNull(app)
 
         // Нет активного профиля
         val active = profileRepository.findActive()
         assertNull(active)
 
-        // Вызываем рендеринг статуса профиля напрямую (симулируя :status)
-        renderer.renderStatusProfile(null)
+        val statusHandler = MemoryCommandHandler(
+            memoryService = stubMemoryService,
+            profileRepository = profileRepository,
+            debugCommandHandler = stubDebugCommandHandler,
+            commandEngine = stubCommandEngine,
+            invariantService = stubInvariantService,
+            renderer = renderer
+        )
 
-        // Проверяем, что рендеринг был вызван с null
+        statusHandler.handleShowStatus(CliState(taskListMode = true))
+
         val statusMsg = renderer.renderedMessages.find { it.startsWith("statusProfile:") }
+
         assertNotNull(statusMsg)
         assertEquals("statusProfile:null", statusMsg)
     }

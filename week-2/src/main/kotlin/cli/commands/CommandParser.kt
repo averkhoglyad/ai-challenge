@@ -1,7 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.cli.commands
 
-import io.averkhogliad.ai.challenge.week2.cli.commands.Command.DebugAction
-import io.averkhogliad.ai.challenge.week2.cli.commands.CommandParser.parsePlanCommand
+import io.averkhogliad.ai.challenge.week2.application.handler.DebugAction
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 
 /**
@@ -21,12 +20,39 @@ data class CommandContext(
         /** Контекст для этапа выбора задачи */
         val TASK_SELECTION = CommandContext(
             currentTaskId = null,
-            availableCommands = setOf("help", "h", "quit", "q", "back", "b")
+            availableCommands = setOf("help", "h", "quit", "q", "back", "b", "debug")
         )
 
-        /** Глобальные команды, доступные всегда */
-        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "back", "b", "state", "abort")
+        /** Глобальные команды, доступные всегда. */
+        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "back", "b", "debug", "state", "abort")
+
+        /**
+         * Command roots routed by CliCommandDispatcher in a normal active CLI context.
+         * Keep this list in sync with dispatcher routes so parser availability does not hide commands.
+         */
+        val ACTIVE_COMMANDS = setOf(
+            "help", "h", "quit", "q", "back", "b",
+            "new", "delete", "switch", "history",
+            "add", "list", "tasks", "edit", "drop", "open", "close", "cancel",
+
+            "step-add", "step-list", "step-done",
+            "temp", "maxtokens", "reset", "params", "stop",
+            "plan",
+            "debug", "state", "abort", "goto",
+            "status", "clear", "ctx-save", "ctx-list", "ctx-forget", "ctx-search",
+            "profile-new", "profile-list", "profile-use", "profile-edit", "profile-delete", "profile-show",
+            "invariant",
+            "compression", "comp",
+            "strategy", "branch", "checkpoint", "facts"
+        )
+
+        fun activeTaskContext(taskId: Int = 1): CommandContext = CommandContext(
+            currentTaskId = taskId,
+            availableCommands = ACTIVE_COMMANDS
+        )
+
     }
+
 }
 
 /**
@@ -163,10 +189,10 @@ object CommandParser {
             "add" -> parseAddTaskCommand(args, raw)
             "tasks" -> Command.ListTasks
             "edit" -> parseEditTaskCommand(args, raw)
-            "drop" -> parseDropTaskCommand(args, raw)
+            "drop" -> parseDropTaskCommand(args)
             "open" -> parseOpenTaskCommand(args, raw)
-            "close" -> parseCloseTaskCommand(args, raw)
-            "cancel" -> parseCancelTaskCommand(args, raw)
+            "close" -> parseCloseTaskCommand(args)
+            "cancel" -> parseCancelTaskCommand(args)
 
             // Команды управления шагами задач
             "step-add" -> parseAddStepCommand(args, raw)
@@ -184,7 +210,7 @@ object CommandParser {
             "ctx-search" -> parseSearchFactsCommand(args, raw)
 
             // Команды интеграции с LLM
-            "plan" -> parsePlanCommand(args, raw)
+            "plan" -> parsePlanCommand(args)
 
             // Команды управления debug-режимом
             "debug" -> parseDebugCommand(args, raw)
@@ -192,7 +218,7 @@ object CommandParser {
             // Команды управления состоянием FSM
             "state" -> Command.ShowState
             "abort" -> Command.Abort
-            "goto" -> parseGotoCommand(args, raw)
+            "goto" -> parseGotoCommand(args)
 
             // Команды управления профилями пользователя (PM)
             "profile-new" -> parseProfileNewCommand(args, raw)
@@ -200,7 +226,7 @@ object CommandParser {
             "profile-use" -> parseProfileUseCommand(args, raw)
             "profile-edit" -> parseProfileEditCommand(args, raw)
             "profile-delete" -> parseProfileDeleteCommand(args, raw)
-            "profile-show" -> parseProfileShowCommand(args, raw)
+            "profile-show" -> parseProfileShowCommand(args)
 
             // Команды управления инвариантами агента
             "invariant" -> parseInvariantCommand(args, raw)
@@ -372,7 +398,7 @@ object CommandParser {
      * Парсит команду удаления задачи: `:drop <id>` или `:drop`.
      * Если аргумент пустой, это контекстная команда (id=null).
      */
-    internal fun parseDropTaskCommand(args: String, raw: String): Command {
+    internal fun parseDropTaskCommand(args: String): Command {
         return if (args.isEmpty()) {
             Command.DropTask(null)
         } else {
@@ -396,7 +422,7 @@ object CommandParser {
      * Парсит команду закрытия задачи: `:close <id>` или `:close`.
      * Если аргумент пустой, это контекстная команда (id=null).
      */
-    internal fun parseCloseTaskCommand(args: String, raw: String): Command {
+    internal fun parseCloseTaskCommand(args: String): Command {
         return if (args.isEmpty()) {
             Command.CloseTask(null)
         } else {
@@ -408,7 +434,7 @@ object CommandParser {
      * Парсит команду отмены задачи: `:cancel <id>` или `:cancel`.
      * Если аргумент пустой, это контекстная команда (id=null).
      */
-    internal fun parseCancelTaskCommand(args: String, raw: String): Command {
+    internal fun parseCancelTaskCommand(args: String): Command {
         return if (args.isEmpty()) {
             Command.CancelTask(null)
         } else {
@@ -492,7 +518,7 @@ object CommandParser {
      * - `:plan` (без аргументов) → FSM-команда `Command.Plan` для текущей открытой задачи
      * - `:plan <title> [description]` → legacy-команда `Command.PlanSteps`
      */
-    internal fun parsePlanCommand(args: String, raw: String): Command {
+    internal fun parsePlanCommand(args: String): Command {
         if (args.isEmpty()) {
             // FSM-команда для текущей открытой задачи
             return Command.Plan
@@ -503,21 +529,7 @@ object CommandParser {
         val description = parts.getOrElse(1) { "" }.trim().ifEmpty { null }
         return Command.PlanSteps(title, description)
     }
-    
-    /**
-     * Парсит команду планирования шагов: `:plan <title> [description]`.
-     * Весь текст после `:plan ` считается заголовком и опциональным описанием,
-     * разделёнными пробелом.
-     *
-     * @deprecated Используйте [parsePlanCommand] вместо этого метода
-     */
-    internal fun parsePlanStepsCommand(args: String, raw: String): Command {
-        if (args.isEmpty()) return Command.Unknown(raw)
-        val parts = args.split(" ", limit = 2)
-        val title = parts[0].trim()
-        val description = parts.getOrElse(1) { "" }.trim().ifEmpty { null }
-        return Command.PlanSteps(title, description)
-    }
+
 
     // ═══════════════════════════════════════════════════════════════
     // Парсинг команд управления профилями пользователя (PM)
@@ -575,7 +587,7 @@ object CommandParser {
      * Парсит команду просмотра профиля: `:profile-show [name]`.
      * Название опционально (без названия — показать активный профиль).
      */
-    internal fun parseProfileShowCommand(args: String, raw: String): Command {
+    internal fun parseProfileShowCommand(args: String): Command {
         return if (args.isEmpty()) {
             Command.ProfileShow(null)
         } else {
@@ -649,7 +661,7 @@ object CommandParser {
      * Без аргументов — Goto (показать карту состояний).
      * С аргументом — GotoState (явный переход).
      */
-    internal fun parseGotoCommand(args: String, raw: String): Command {
+    internal fun parseGotoCommand(args: String): Command {
         return if (args.isEmpty()) {
             Command.Goto
         } else {

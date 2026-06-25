@@ -7,8 +7,8 @@ import io.averkhogliad.ai.challenge.week2.application.DialogService
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.application.cache.CachingInvariantService
 import io.averkhogliad.ai.challenge.week2.application.executor.*
-import io.averkhogliad.ai.challenge.week2.cli.CliApplication
-import io.averkhogliad.ai.challenge.week2.cli.ConsoleCliRenderer
+import io.averkhogliad.ai.challenge.week2.cli.*
+import io.averkhogliad.ai.challenge.week2.cli.handlers.*
 import io.averkhogliad.ai.challenge.week2.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week2.domain.config.LlmConfig
 import io.averkhogliad.ai.challenge.week2.domain.service.ConfigPort
@@ -97,24 +97,18 @@ object ApplicationBootstrap {
             null  // LLM не настроен — DialogService работает в режиме offline
         }
 
-        // 2. Infrastructure: репозиторий задач (SQLite persistence)
-        val dbPath = config.getOrNull("app.database.path") ?: SqliteTaskRepository.defaultDbPath()
-        val taskRepository = SqliteTaskRepository(dbPath)
+        // 2. Infrastructure: единый владелец SQLite-соединения
+        val dbPath = config.getOrNull("app.database.path") ?: SqliteDatabase.defaultDbPath()
+        val database = SqliteDatabase(dbPath)
 
-        // 3. Infrastructure: репозиторий сессий диалога (SQLite persistence)
-        val dialogSessionRepository = SqliteDialogSessionRepository(dbPath)
+        // 3. Infrastructure: репозитории SQLite используют общее соединение
+        val taskRepository = SqliteTaskRepository(database)
+        val dialogSessionRepository = SqliteDialogSessionRepository(database)
+        val taskStepRepository = SqliteTaskStepRepository(database)
+        val factRepository = SqliteFactRepository(database)
+        val profileRepository = SqliteProfileRepository(database)
+        val invariantRepository = SqliteInvariantRepository(database)
 
-        // 4. Infrastructure: репозиторий шагов задач (SQLite persistence)
-        val taskStepRepository = SqliteTaskStepRepository(dbPath)
-
-        // 5. Infrastructure: репозиторий фактов LTM (SQLite persistence with FTS5)
-        val factRepository = SqliteFactRepository(dbPath)
-
-        // 6. Infrastructure: репозиторий профилей (SQLite persistence)
-        val profileRepository = SqliteProfileRepository(dbPath)
-
-        // 7. Infrastructure: репозиторий инвариантов (SQLite persistence)
-        val invariantRepository = SqliteInvariantRepository(dbPath)
 
         // 8. Application: TodoTaskService (CRUD операции с задачами)
         val todoTaskService = io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService(taskRepository)
@@ -136,6 +130,13 @@ object ApplicationBootstrap {
         // 12. Application: ProfileService (управление профилями)
         val profileService = ProfileService(profileRepository)
 
+        // 12a. Application: LTM and task-step use cases
+        val ltmService = io.averkhogliad.ai.challenge.week2.application.service.LtmService(factRepository)
+        val taskStepService = io.averkhogliad.ai.challenge.week2.application.service.TaskStepService(
+            taskStepRepository = taskStepRepository,
+            memoryService = memoryService
+        )
+
         // 13. Application: DialogService (интеграция с LLM)
         val dialogService = DialogService(
             llmPort = llmPort,
@@ -147,10 +148,12 @@ object ApplicationBootstrap {
 
         // 14. Application: Task executors (CLI-ассистенты)
         val task1Executor = Task1Executor(dialogService, memoryService)
-        val task2Executor = Task2Executor(dialogService, memoryService, profileService)
-        val task3Executor = Task3Executor(dialogService, memoryService, profileService)
-        val task4Executor = Task4Executor(dialogService, memoryService, profileService)
-        val task5Executor = Task5Executor(dialogService, memoryService, profileService)
+        val task2Executor = Task2Executor(dialogService)
+
+        val task3Executor = Task3Executor(dialogService)
+        val task4Executor = Task4Executor(dialogService)
+        val task5Executor = Task5Executor(dialogService)
+
 
         // 15. Application: planner components (выделены из PlanCommandHandler)
         val keywordExtractor = io.averkhogliad.ai.challenge.week2.application.planner.KeywordExtractor()
@@ -186,36 +189,109 @@ object ApplicationBootstrap {
         // 7. CLI: renderer + facade
         val renderer = ConsoleCliRenderer()
 
-        // 7a. Shutdown hook: закрытие SQLite соединений при завершении JVM
+        // 7a. Shutdown hook: закрытие единого SQLite-соединения при завершении JVM
         Runtime.getRuntime().addShutdownHook(Thread {
             try {
-                invariantRepository.close()
+                database.close()
             } catch (_: Exception) {
                 // silently ignore close errors during shutdown
             }
         })
 
-        return CliApplication(
+
+        val executors = mapOf(
+            task1Executor.taskId to task1Executor,
+            task2Executor.taskId to task2Executor,
+            task3Executor.taskId to task3Executor,
+            task4Executor.taskId to task4Executor,
+            task5Executor.taskId to task5Executor,
+        )
+        val input = ConsoleCliInput()
+        val commandHandler = CommandHandler(executors)
+        val taskStepHandler = TaskStepCommandHandler(
+            taskStepService = taskStepService,
+            renderer = renderer
+        )
+        val memoryHandler = MemoryCommandHandler(
+            memoryService = memoryService,
+            profileRepository = profileRepository,
+            debugCommandHandler = debugCommandHandler,
             commandEngine = commandEngine,
-            executors = mapOf(
-                task1Executor.taskId to task1Executor,
-                task2Executor.taskId to task2Executor,
-                task3Executor.taskId to task3Executor,
-                task4Executor.taskId to task4Executor,
-                task5Executor.taskId to task5Executor,
-            ),
+            invariantService = cachingInvariantService,
+            renderer = renderer
+        )
+        val ltmHandler = LtmCommandHandler(
+            ltmService = ltmService,
+            renderer = renderer
+        )
+        val fsmHandler = FsmCommandHandler(
+            commandEngine = commandEngine,
             renderer = renderer,
+            readInput = input::readLine
+        )
+
+        val invariantHandler = InvariantCommandHandler(
+            invariantService = cachingInvariantService,
+            renderer = renderer,
+            readInput = input::readLine
+        )
+        val profileHandler = ProfileCommandHandler(
+            profileService = profileService,
+            renderer = renderer,
+            readLine = input::readLine,
+            readMultiline = input::readMultiline
+        )
+
+        val todoTaskHandler = TodoTaskCommandHandler(
             todoTaskService = todoTaskService,
             memoryService = memoryService,
-            taskStepRepository = taskStepRepository,
-            factRepository = factRepository,
-            dialogService = dialogService,
-            profileRepository = profileRepository,
-            planCommandHandler = planCommandHandler,
-            debugCommandHandler = debugCommandHandler,
-            invariantService = cachingInvariantService,
-            invariantRepository = invariantRepository,
+            renderer = renderer,
+            readMultiline = input::readMultiline
         )
+
+        val handlers = CliCommandHandlers(
+            command = commandHandler,
+            debug = debugCommandHandler,
+            todoTask = todoTaskHandler,
+
+            taskStep = taskStepHandler,
+            memory = memoryHandler,
+            ltm = ltmHandler,
+            fsm = fsmHandler,
+            invariant = invariantHandler,
+            profile = profileHandler,
+        )
+
+        val userInputFlowHandler = UserInputFlowHandler(
+            renderer = renderer,
+            dialogService = dialogService,
+            planCommandHandler = planCommandHandler,
+            commandEngine = commandEngine,
+            commandHandler = commandHandler
+        )
+        val planFlowHandler = PlanFlowHandler(
+            renderer = renderer,
+            dialogService = dialogService,
+            planCommandHandler = planCommandHandler
+        )
+        val dispatcher = CliCommandDispatcher(
+            renderer = renderer,
+            handlers = handlers,
+            userInputFlowHandler = userInputFlowHandler,
+            planFlowHandler = planFlowHandler
+        )
+
+        return CliApplication(
+            renderer = renderer,
+            input = input,
+            dispatcher = dispatcher,
+            commandHandler = commandHandler,
+            applicationResources = database,
+        )
+
+
+
+
     }
 
     /**

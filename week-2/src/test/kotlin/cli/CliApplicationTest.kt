@@ -2,6 +2,8 @@ package io.averkhogliad.ai.challenge.week2.cli
 
 import io.averkhogliad.ai.challenge.week2.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week2.application.handler.DebugCommandHandler
+import io.averkhogliad.ai.challenge.week2.cli.commands.Command
+import io.averkhogliad.ai.challenge.week2.cli.handlers.*
 import io.averkhogliad.ai.challenge.week2.domain.Prompt
 import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
@@ -51,10 +53,28 @@ class CliApplicationTest {
         }
     }
 
+    private class FakeCliInput(
+        private val lines: ArrayDeque<String> = ArrayDeque(),
+        private val multilineInputs: ArrayDeque<String> = ArrayDeque(),
+    ) : CliInput {
+        var readMultilineCalls: Int = 0
+            private set
+
+        override fun readLine(): String? = lines.removeFirstOrNull()
+
+        override fun readMultiline(): String {
+            readMultilineCalls += 1
+            return multilineInputs.removeFirstOrNull() ?: ""
+        }
+    }
+
+
+
     /**
      * Mock CliRenderer для тестирования
      */
     private class MockCliRenderer : CliRenderer {
+
         val renderedMessages = mutableListOf<String>()
 
         override fun renderWelcome() {
@@ -97,8 +117,8 @@ class CliApplicationTest {
             renderedMessages.add("taskHeader:${metadata.title}")
         }
 
-        override fun renderRequestInfo(text: String, config: TaskExecutionConfig) {
-            renderedMessages.add("request:$text")
+        override fun renderRequestInfo(prompt: String, config: TaskExecutionConfig) {
+            renderedMessages.add("request:$prompt")
         }
 
         override fun renderLoadingStart(message: String) {
@@ -121,23 +141,23 @@ class CliApplicationTest {
             renderedMessages.add("taskDetail:${task.id.value}")
         }
 
-        override fun renderTaskCreated(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {
+        override fun renderTaskCreated(taskId: TaskId) {
             renderedMessages.add("taskCreated:${taskId.value}")
         }
 
-        override fun renderTaskUpdated(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {
+        override fun renderTaskUpdated(taskId: TaskId) {
             renderedMessages.add("taskUpdated:${taskId.value}")
         }
 
-        override fun renderTaskDeleted(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {
+        override fun renderTaskDeleted(taskId: TaskId) {
             renderedMessages.add("taskDeleted:${taskId.value}")
         }
 
-        override fun renderTaskClosed(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {
+        override fun renderTaskClosed(taskId: TaskId) {
             renderedMessages.add("taskClosed:${taskId.value}")
         }
 
-        override fun renderTaskCancelled(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {
+        override fun renderTaskCancelled(taskId: TaskId) {
             renderedMessages.add("taskCancelled:${taskId.value}")
         }
 
@@ -371,19 +391,19 @@ class CliApplicationTest {
 
     private val stubTaskRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository {
         override suspend fun save(task: io.averkhogliad.ai.challenge.week2.domain.model.Task) {}
-        override suspend fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): io.averkhogliad.ai.challenge.week2.domain.model.Task? =
+        override suspend fun findById(id: TaskId): io.averkhogliad.ai.challenge.week2.domain.model.Task? =
             null
 
         override suspend fun findAll(): List<io.averkhogliad.ai.challenge.week2.domain.model.Task> = emptyList()
-        override suspend fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.TaskId) {}
-        override suspend fun exists(id: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): Boolean = false
+        override suspend fun delete(id: TaskId) {}
+        override suspend fun exists(id: TaskId): Boolean = false
         override suspend fun saveSteps(
-            taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId,
+            taskId: TaskId,
             steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>
         ) {
         }
 
-        override suspend fun findStepsByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
+        override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
             emptyList()
     }
 
@@ -398,7 +418,7 @@ class CliApplicationTest {
             override fun save(session: io.averkhogliad.ai.challenge.week2.domain.model.DialogSession): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession =
                 session
 
-            override fun findByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? =
+            override fun findByTaskId(taskId: TaskId): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? =
                 null
 
             override fun findActiveSession(): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession? = null
@@ -415,12 +435,12 @@ class CliApplicationTest {
         override fun findById(stepId: io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId): io.averkhogliad.ai.challenge.week2.domain.model.TaskStep? =
             null
 
-        override fun findByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
+        override fun findByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> =
             emptyList()
 
         override fun delete(stepId: io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId): Boolean = true
-        override fun deleteByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): Int = 0
-        override fun countByTaskId(taskId: io.averkhogliad.ai.challenge.week2.domain.model.TaskId): Int = 0
+        override fun deleteByTaskId(taskId: TaskId): Int = 0
+        override fun countByTaskId(taskId: TaskId): Int = 0
     }
 
     private val stubFactRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.FactRepository {
@@ -498,7 +518,97 @@ class CliApplicationTest {
         invariantService = stubInvariantService
     )
 
+    private fun createApp(
+        executors: Map<TaskId, TaskExecutor>,
+        renderer: CliRenderer,
+        input: CliInput = object : CliInput {
+            override fun readLine(): String? = null
+            override fun readMultiline(): String = ""
+        },
+        profileRepository: io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository = stubProfileRepository,
+    ): CliApplication {
+
+        val commandHandler = CommandHandler(executors)
+        val handlers = CliCommandHandlers(
+            command = commandHandler,
+            debug = stubDebugCommandHandler,
+            todoTask = TodoTaskCommandHandler(
+
+                todoTaskService = stubTodoTaskService,
+                memoryService = stubMemoryService,
+                renderer = renderer,
+                readMultiline = input::readMultiline
+            ),
+            taskStep = TaskStepCommandHandler(
+                taskStepService = io.averkhogliad.ai.challenge.week2.application.service.TaskStepService(
+                    taskStepRepository = stubTaskStepRepository,
+                    memoryService = stubMemoryService
+                ),
+                renderer = renderer
+            ),
+            memory = MemoryCommandHandler(
+                memoryService = stubMemoryService,
+                profileRepository = profileRepository,
+                debugCommandHandler = stubDebugCommandHandler,
+
+                commandEngine = stubCommandEngine,
+                invariantService = stubInvariantService,
+                renderer = renderer
+            ),
+            ltm = LtmCommandHandler(
+                ltmService = io.averkhogliad.ai.challenge.week2.application.service.LtmService(stubFactRepository),
+                renderer = renderer
+            ),
+            fsm = FsmCommandHandler(
+                commandEngine = stubCommandEngine,
+                renderer = renderer,
+                readInput = input::readLine
+            ),
+
+            invariant = InvariantCommandHandler(
+                invariantService = stubInvariantService,
+                renderer = renderer,
+                readInput = input::readLine
+            ),
+            profile = ProfileCommandHandler(
+                profileService = io.averkhogliad.ai.challenge.week2.application.ProfileService(profileRepository),
+
+                renderer = renderer,
+                readLine = input::readLine,
+                readMultiline = input::readMultiline
+            ),
+        )
+        val userInputFlowHandler = UserInputFlowHandler(
+            renderer = renderer,
+            dialogService = stubDialogService,
+            planCommandHandler = stubPlanCommandHandler,
+            commandEngine = stubCommandEngine,
+            commandHandler = commandHandler
+        )
+        val planFlowHandler = PlanFlowHandler(
+            renderer = renderer,
+            dialogService = stubDialogService,
+            planCommandHandler = stubPlanCommandHandler
+        )
+        val dispatcher = CliCommandDispatcher(
+            renderer = renderer,
+            handlers = handlers,
+            userInputFlowHandler = userInputFlowHandler,
+            planFlowHandler = planFlowHandler
+        )
+        return CliApplication(
+            renderer = renderer,
+            input = input,
+            dispatcher = dispatcher,
+            commandHandler = commandHandler,
+            applicationResources = { }
+        )
+
+    }
+
+
     // ═══════════════════════════════════════════════════════════════
+
     // Command handling
     // ═══════════════════════════════════════════════════════════════
 
@@ -512,21 +622,11 @@ class CliApplicationTest {
             val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
 
-            val app = CliApplication(
+            val app = createApp(
                 executors = mapOf(TaskId("1") to executor),
-                renderer = renderer,
-                todoTaskService = stubTodoTaskService,
-                memoryService = stubMemoryService,
-                taskStepRepository = stubTaskStepRepository,
-                factRepository = stubFactRepository,
-                dialogService = stubDialogService,
-                profileRepository = stubProfileRepository,
-                planCommandHandler = stubPlanCommandHandler,
-                commandEngine = stubCommandEngine,
-                debugCommandHandler = stubDebugCommandHandler,
-                invariantService = stubInvariantService,
-                invariantRepository = stubInvariantRepository
+                renderer = renderer
             )
+
 
             assertNotNull(app)
         }
@@ -536,25 +636,16 @@ class CliApplicationTest {
         fun `handles Help command`() = runBlocking {
             val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
-            val app = CliApplication(
+            val app = createApp(
                 executors = mapOf(TaskId("1") to executor),
-                renderer = renderer,
-                todoTaskService = stubTodoTaskService,
-                memoryService = stubMemoryService,
-                taskStepRepository = stubTaskStepRepository,
-                factRepository = stubFactRepository,
-                dialogService = stubDialogService,
-                profileRepository = stubProfileRepository,
-                planCommandHandler = stubPlanCommandHandler,
-                commandEngine = stubCommandEngine,
-                debugCommandHandler = stubDebugCommandHandler,
-                invariantService = stubInvariantService,
-                invariantRepository = stubInvariantRepository
+                renderer = renderer
             )
+
 
             // Проверяем, что приложение создано корректно
             // (REPL не запускаем, так как это side-effect)
             assertNotNull(app)
+            Unit
         }
 
         @Test
@@ -563,23 +654,14 @@ class CliApplicationTest {
             val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
 
-            val app = CliApplication(
+            val app = createApp(
                 executors = mapOf(TaskId("1") to executor),
-                renderer = renderer,
-                todoTaskService = stubTodoTaskService,
-                memoryService = stubMemoryService,
-                taskStepRepository = stubTaskStepRepository,
-                factRepository = stubFactRepository,
-                dialogService = stubDialogService,
-                profileRepository = stubProfileRepository,
-                planCommandHandler = stubPlanCommandHandler,
-                commandEngine = stubCommandEngine,
-                debugCommandHandler = stubDebugCommandHandler,
-                invariantService = stubInvariantService,
-                invariantRepository = stubInvariantRepository
+                renderer = renderer
             )
 
+
             assertNotNull(app)
+            Unit
         }
 
         @Test
@@ -588,25 +670,275 @@ class CliApplicationTest {
             val executor = MockTaskExecutor(TaskId("1"))
             val renderer = MockCliRenderer()
 
-            val app = CliApplication(
+            val app = createApp(
                 executors = mapOf(TaskId("1") to executor),
-                renderer = renderer,
-                todoTaskService = stubTodoTaskService,
-                memoryService = stubMemoryService,
-                taskStepRepository = stubTaskStepRepository,
-                factRepository = stubFactRepository,
-                dialogService = stubDialogService,
-                profileRepository = stubProfileRepository,
-                planCommandHandler = stubPlanCommandHandler,
-                commandEngine = stubCommandEngine,
-                debugCommandHandler = stubDebugCommandHandler,
-                invariantService = stubInvariantService,
-                invariantRepository = stubInvariantRepository
+                renderer = renderer
             )
 
+
             assertNotNull(app)
+            Unit
         }
+
+        @Test
+        @DisplayName("run uses shared fake input and real handler wiring")
+        fun `run uses shared fake input and real handler wiring`() {
+            val executor = MockTaskExecutor(TaskId("1"))
+            val renderer = MockCliRenderer()
+            val input = FakeCliInput(lines = ArrayDeque(listOf("1", "q")))
+
+            val app = createApp(
+                executors = mapOf(TaskId("1") to executor),
+                renderer = renderer,
+                input = input
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("welcome"))
+            assertTrue(renderer.renderedMessages.contains("menu:1"))
+            assertTrue(renderer.renderedMessages.contains("taskHeader:Mock Task 1"))
+            assertTrue(renderer.renderedMessages.contains("goodbye"))
+        }
+
+        @Test
+        @DisplayName("debug command routes through DebugCommandHandler")
+        fun `debug command routes through DebugCommandHandler`() {
+            val renderer = MockCliRenderer()
+            val app = createApp(
+                executors = emptyMap(),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf(":debug on", ":debug off", "q")))
+            )
+
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("info:Debug mode enabled"))
+            assertTrue(renderer.renderedMessages.contains("info:Debug mode disabled"))
+        }
+
+        @Test
+        @DisplayName("state renders active FSM state and no active command")
+        fun `state renders active FSM state and no active command`() {
+            val renderer = MockCliRenderer()
+            stubCommandEngine.startCommand("test")
+            val app = createApp(
+                executors = emptyMap(),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf(":state", ":abort", "yes", ":state", "q")))
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("fsmStateInfo:test"))
+            assertTrue(renderer.renderedMessages.contains("abortSuccess"))
+            assertTrue(renderer.renderedMessages.contains("noActiveCommand"))
+        }
+
+        @Test
+        @DisplayName("abort cancel path uses injected input confirmation")
+        fun `abort cancel path uses injected input confirmation`() {
+            val renderer = MockCliRenderer()
+            stubCommandEngine.startCommand("test")
+            val app = createApp(
+                executors = emptyMap(),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf(":abort", "no", ":state", ":abort", "yes", "q")))
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("abortConfirmation"))
+            assertTrue(renderer.renderedMessages.contains("abortCancelled"))
+            assertTrue(renderer.renderedMessages.contains("fsmStateInfo:test"))
+            assertTrue(renderer.renderedMessages.contains("abortSuccess"))
+        }
+
+        @Test
+        @DisplayName("goto command routes through parser context and dispatcher")
+        fun `goto command routes through parser context and dispatcher`() {
+            val renderer = MockCliRenderer()
+            val app = createApp(
+                executors = mapOf(TaskId("1") to MockTaskExecutor(TaskId("1"))),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf("1", ":goto", "q")))
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("gotoNoActiveCommand"))
+        }
+
+        @Test
+        @DisplayName("invariant command routes through parser context and dispatcher")
+        fun `invariant command routes through parser context and dispatcher`() {
+            val renderer = MockCliRenderer()
+            val app = createApp(
+                executors = mapOf(TaskId("1") to MockTaskExecutor(TaskId("1"))),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf("1", ":invariant list", "q")))
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("invariantList:0"))
+        }
+
+        @Test
+        @DisplayName("legacy dialog command routes to unsupported message")
+        fun `legacy dialog command routes to unsupported message`() {
+            val renderer = MockCliRenderer()
+            val app = createApp(
+                executors = mapOf(TaskId("1") to MockTaskExecutor(TaskId("1"))),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf("1", ":new old", ":history", "q")))
+            )
+
+            app.run()
+
+            assertEquals(2, renderer.renderedMessages.count { it == "info:Команды диалогов больше не поддерживаются" })
+        }
+
+        @Test
+        @DisplayName("profile command routes through parser context and dispatcher")
+        fun `profile command routes through parser context and dispatcher`() {
+
+            val renderer = MockCliRenderer()
+            val app = createApp(
+                executors = mapOf(TaskId("1") to MockTaskExecutor(TaskId("1"))),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf("1", ":profile-list", ":profile-use Missing", "q")))
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("profileList:0"))
+            assertTrue(renderer.renderedMessages.contains("profileNotFoundByName:Missing"))
+        }
+
+        @Test
+        @DisplayName("status command routes through parser and dispatcher with active profile")
+        fun `status command routes through parser and dispatcher with active profile`() = runBlocking {
+            val renderer = MockCliRenderer()
+            val profileRepository =
+                io.averkhogliad.ai.challenge.week2.infrastructure.persistence.InMemoryProfileRepository()
+            val profileService = io.averkhogliad.ai.challenge.week2.application.ProfileService(profileRepository)
+            val profile = profileService.handleCreateProfile("Active", "content", "")
+            profileService.handleActivateProfile(profile.id)
+            val app = createApp(
+                executors = mapOf(TaskId("1") to MockTaskExecutor(TaskId("1"))),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf("1", ":status", "q"))),
+                profileRepository = profileRepository
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("statusProfile:Active"))
+        }
+
+        @Test
+        @DisplayName("status command routes through parser and dispatcher without active profile")
+        fun `status command routes through parser and dispatcher without active profile`() {
+            val renderer = MockCliRenderer()
+            val app = createApp(
+                executors = mapOf(TaskId("1") to MockTaskExecutor(TaskId("1"))),
+                renderer = renderer,
+                input = FakeCliInput(lines = ArrayDeque(listOf("1", ":status", "q"))),
+                profileRepository = io.averkhogliad.ai.challenge.week2.infrastructure.persistence.InMemoryProfileRepository()
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.contains("statusProfile:null"))
+        }
+
+        @Test
+        @DisplayName("todo detail user input uses dialog service task detail context before executor")
+        fun `todo detail user input uses dialog service task detail context before executor`() = runBlocking {
+            val renderer = MockCliRenderer()
+            val llmPort = object : io.averkhogliad.ai.challenge.week2.domain.service.LlmPort {
+                override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult =
+                    TaskResult.Success("unused")
+
+                override suspend fun chatWithMessages(
+                    messages: List<io.averkhogliad.ai.challenge.week2.domain.service.ChatMessage>,
+                    config: TaskExecutionConfig
+                ): TaskResult = TaskResult.Success("detail response")
+
+                override suspend fun listModels(): List<io.averkhogliad.ai.challenge.week2.domain.ModelId> = emptyList()
+            }
+            val sessions = mutableMapOf<String, io.averkhogliad.ai.challenge.week2.domain.model.DialogSession>()
+            val sessionRepository = object : io.averkhogliad.ai.challenge.week2.domain.service.DialogSessionRepository {
+                override fun findById(id: io.averkhogliad.ai.challenge.week2.domain.model.SessionId) =
+                    sessions[id.value]
+
+                override fun save(session: io.averkhogliad.ai.challenge.week2.domain.model.DialogSession): io.averkhogliad.ai.challenge.week2.domain.model.DialogSession {
+                    sessions[session.id.value] = session
+                    return session
+                }
+
+                override fun findByTaskId(taskId: TaskId) = sessions.values.firstOrNull { it.taskId == taskId }
+                override fun findActiveSession() = sessions.values.firstOrNull()
+                override fun delete(id: io.averkhogliad.ai.challenge.week2.domain.model.SessionId) {
+                    sessions.remove(id.value)
+                }
+            }
+            val memoryService = io.averkhogliad.ai.challenge.week2.domain.service.MemoryService(sessionRepository)
+            val dialogService = io.averkhogliad.ai.challenge.week2.application.DialogService(
+                llmPort = llmPort,
+                memoryService = memoryService,
+                promptBuilder = stubPromptBuilder,
+                profileRepository = stubProfileRepository,
+                invariantService = stubInvariantService
+            )
+            val executor = MockTaskExecutor(TaskId("2"))
+            val flow = UserInputFlowHandler(
+                renderer = renderer,
+                dialogService = dialogService,
+                planCommandHandler = stubPlanCommandHandler,
+                commandEngine = stubCommandEngine,
+                commandHandler = CommandHandler(mapOf(TaskId("2") to executor))
+            )
+
+            flow.handle(Command.UserInput("hello"), CliState(currentTaskId = 2, currentTodoTaskId = "42"))
+
+            assertNull(executor.lastPrompt)
+            val detailSession = sessions["session_task_42"]
+            assertNotNull(detailSession)
+            assertEquals(io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel.TASK_DETAIL, detailSession.level)
+            assertEquals(TaskId("42"), detailSession.taskId)
+            assertTrue(renderer.renderedMessages.contains("result:Success"))
+        }
+
+        @Test
+        @DisplayName("run uses shared fake multiline input for todo add")
+        fun `run uses shared fake multiline input for todo add`() {
+
+
+            val renderer = MockCliRenderer()
+            val input = FakeCliInput(
+                lines = ArrayDeque(listOf("1", ":add Test task", "q")),
+
+                multilineInputs = ArrayDeque(listOf("Shared multiline description"))
+            )
+            val app = createApp(
+                executors = emptyMap(),
+                renderer = renderer,
+                input = input
+            )
+
+            app.run()
+
+            assertTrue(renderer.renderedMessages.any { it.startsWith("taskCreated:") })
+            assertTrue(renderer.renderedMessages.contains("info:Введите описание задачи (Enter — пропустить, пустая строка — завершить):"))
+            assertEquals(1, input.readMultilineCalls)
+
+        }
+
     }
+
 
     // ═══════════════════════════════════════════════════════════════
     // State management
@@ -668,24 +1000,14 @@ class CliApplicationTest {
             val executor2 = MockTaskExecutor(TaskId("2"))
             val renderer = MockCliRenderer()
 
-            val app = CliApplication(
+            val app = createApp(
                 executors = mapOf(
                     TaskId("1") to executor1,
                     TaskId("2") to executor2
                 ),
-                renderer = renderer,
-                todoTaskService = stubTodoTaskService,
-                memoryService = stubMemoryService,
-                taskStepRepository = stubTaskStepRepository,
-                factRepository = stubFactRepository,
-                dialogService = stubDialogService,
-                profileRepository = stubProfileRepository,
-                planCommandHandler = stubPlanCommandHandler,
-                commandEngine = stubCommandEngine,
-                debugCommandHandler = stubDebugCommandHandler,
-                invariantService = stubInvariantService,
-                invariantRepository = stubInvariantRepository
+                renderer = renderer
             )
+
 
             assertNotNull(app)
         }
@@ -695,21 +1017,11 @@ class CliApplicationTest {
         fun `creates application with empty executors`() {
             val renderer = MockCliRenderer()
 
-            val app = CliApplication(
+            val app = createApp(
                 executors = emptyMap(),
-                renderer = renderer,
-                todoTaskService = stubTodoTaskService,
-                memoryService = stubMemoryService,
-                taskStepRepository = stubTaskStepRepository,
-                factRepository = stubFactRepository,
-                dialogService = stubDialogService,
-                profileRepository = stubProfileRepository,
-                planCommandHandler = stubPlanCommandHandler,
-                commandEngine = stubCommandEngine,
-                debugCommandHandler = stubDebugCommandHandler,
-                invariantService = stubInvariantService,
-                invariantRepository = stubInvariantRepository
+                renderer = renderer
             )
+
 
             assertNotNull(app)
         }

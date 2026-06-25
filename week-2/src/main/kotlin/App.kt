@@ -51,5 +51,5 @@ fun main(args: Array<String>) {
     val app: CliApplication = ApplicationBootstrap.createApplication(config)
 
     // Запуск приложения с автоматическим освобождением ресурсов
-    app.use { it.run(args) }
+    app.use { it.run() }
 }

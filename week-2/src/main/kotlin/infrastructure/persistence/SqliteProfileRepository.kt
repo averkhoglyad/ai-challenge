@@ -3,8 +3,6 @@ package io.averkhogliad.ai.challenge.week2.infrastructure.persistence
 import io.averkhogliad.ai.challenge.week2.domain.model.Profile
 import io.averkhogliad.ai.challenge.week2.domain.model.ProfileId
 import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
-import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.ResultSet
 import java.time.Instant
 
@@ -23,25 +21,14 @@ import java.time.Instant
  * - Файл БД задаётся через конструктор (общий с другими репозиториями)
  * - Поддержка транзакций для атомарности операций
  *
- * @param dbPath путь к файлу базы данных
+ * @param database единый владелец SQLite JDBC-соединения
  */
 class SqliteProfileRepository(
-    private val dbPath: String
+    private val database: SqliteDatabase
 ) : ProfileRepository {
 
-    private val connection: Connection by lazy {
-        val parentDir = java.io.File(dbPath).parentFile
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs()
-        }
+    private val connection get() = database.connection
 
-        DriverManager.getConnection("jdbc:sqlite:$dbPath").apply {
-            createStatement().use { stmt ->
-                stmt.execute("PRAGMA journal_mode=WAL")
-                stmt.execute("PRAGMA synchronous=NORMAL")
-            }
-        }
-    }
 
     init {
         initializeSchema()
@@ -88,7 +75,7 @@ class SqliteProfileRepository(
                 }
                 columns.contains("description") && columns.contains("instructions")
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Таблица не существует или другая ошибка
             false
         }
@@ -243,12 +230,5 @@ class SqliteProfileRepository(
         )
     }
 
-    /**
-     * Закрывает соединение с БД.
-     */
-    fun close() {
-        if (!connection.isClosed) {
-            connection.close()
-        }
-    }
+
 }

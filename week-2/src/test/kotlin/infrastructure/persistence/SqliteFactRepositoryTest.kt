@@ -16,18 +16,21 @@ import kotlin.test.*
 class SqliteFactRepositoryTest {
 
     private lateinit var tempDbFile: File
+    private lateinit var database: SqliteDatabase
     private lateinit var repository: SqliteFactRepository
 
     @BeforeEach
     fun setUp() {
         tempDbFile = Files.createTempFile("test-fact-", ".db").toFile()
-        repository = SqliteFactRepository(tempDbFile.absolutePath)
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        repository = SqliteFactRepository(database)
     }
 
     @AfterEach
     fun tearDown() {
-        repository.close()
+        database.close()
         tempDbFile.delete()
+
         File(tempDbFile.absolutePath + "-wal").delete()
         File(tempDbFile.absolutePath + "-shm").delete()
     }
@@ -86,9 +89,12 @@ class SqliteFactRepositoryTest {
         }
 
         @Test
-        fun `no-op on missing`() = runBlocking {
-            repository.delete(FactId("no"))
+        fun `no-op on missing`() {
+            runBlocking {
+                repository.delete(FactId("no"))
+            }
         }
+
     }
 
     @Nested

@@ -7,58 +7,18 @@ import io.averkhogliad.ai.challenge.week2.domain.Prompt
 import io.averkhogliad.ai.challenge.week2.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
-import io.averkhogliad.ai.challenge.week2.domain.model.*
-import io.averkhogliad.ai.challenge.week2.domain.service.*
+import io.averkhogliad.ai.challenge.week2.domain.model.Task
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
+import io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId
+import io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository
+import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.*
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import kotlin.test.*
-
-/**
- * In-memory реализация FactRepository для тестирования.
- */
-private class InMemoryFactRepository : FactRepository {
-    private val facts = mutableMapOf<FactId, Fact>()
-
-    override suspend fun save(fact: Fact): Fact {
-        facts[fact.id] = fact
-        return fact
-    }
-
-    override suspend fun findById(id: FactId): Fact? = facts[id]
-
-    override suspend fun findAll(): List<Fact> = facts.values.toList()
-
-    override suspend fun search(query: String): List<Fact> = emptyList()
-
-    override suspend fun searchBatch(queries: List<String>): List<Fact> = emptyList()
-
-    override suspend fun delete(id: FactId): Boolean = facts.remove(id) != null
-
-    override suspend fun count(): Int = facts.size
-}
-
-/**
- * In-memory реализация DialogSessionRepository для тестирования.
- */
-private class InMemoryDialogSessionRepository : DialogSessionRepository {
-    private val sessions = mutableMapOf<String, DialogSession>()
-
-    override fun findById(id: SessionId): DialogSession? = sessions[id.value]
-    override fun save(session: DialogSession): DialogSession {
-        sessions[session.id.value] = session
-        return session
-    }
-
-    override fun findByTaskId(taskId: TaskId): DialogSession? =
-        sessions.values.firstOrNull { it.taskId == taskId }
-
-    override fun findActiveSession(): DialogSession? = sessions.values.firstOrNull()
-
-    override fun delete(id: SessionId) {
-        sessions.remove(id.value)
-    }
-}
 
 /**
  * In-memory реализация TaskRepository для тестирования.
@@ -128,19 +88,8 @@ class CommandHandlerTest {
         }
     }
 
-    private val defaultTodoTaskService = TodoTaskService(InMemoryTaskRepository())
-    private val defaultMemoryService = MemoryService(InMemoryDialogSessionRepository())
-    private val defaultTaskStepRepository = InMemoryTaskStepRepository()
-    private val defaultFactRepository = InMemoryFactRepository()
-
     private fun createHandler(executors: Map<TaskId, TaskExecutor>): CommandHandler =
-        CommandHandler(
-            executors,
-            defaultTodoTaskService,
-            defaultMemoryService,
-            defaultTaskStepRepository,
-            defaultFactRepository
-        )
+        CommandHandler(executors)
 
     // ═══════════════════════════════════════════════════════════════
     // Глобальные команды
@@ -168,34 +117,18 @@ class CommandHandlerTest {
         }
 
         @Test
-        @DisplayName("Back resets currentTaskId and taskListMode")
-        fun `Back resets currentTaskId`() = runBlocking {
+        @DisplayName("Back is delegated outside CommandHandler")
+        fun `Back is no-op in CommandHandler`() = runBlocking {
             val handler = createHandler(emptyMap())
-            val state = CliState(currentTaskId = 1)
-            val newState = handler.handle(Command.Back, state)
-            assertNull(newState.currentTaskId)
-            assertEquals(false, newState.taskListMode)
-        }
+            val states = listOf(
+                CliState(currentTaskId = 1),
+                CliState(currentTodoTaskId = "some-uuid"),
+                CliState(taskListMode = true)
+            )
 
-        @Test
-        @DisplayName("Back from task detail sets taskListMode")
-        fun `Back from task detail sets taskListMode`() = runBlocking {
-            val handler = createHandler(emptyMap())
-            val state = CliState(currentTodoTaskId = "some-uuid")
-            val newState = handler.handle(Command.Back, state)
-            assertNull(newState.currentTodoTaskId)
-            assertEquals(true, newState.taskListMode)
-        }
-
-        @Test
-        @DisplayName("Back from taskListMode clears everything")
-        fun `Back from taskListMode clears everything`() = runBlocking {
-            val handler = createHandler(emptyMap())
-            val state = CliState(taskListMode = true)
-            val newState = handler.handle(Command.Back, state)
-            assertNull(newState.currentTaskId)
-            assertNull(newState.currentTodoTaskId)
-            assertEquals(false, newState.taskListMode)
+            states.forEach { state ->
+                assertEquals(state, handler.handle(Command.Back, state))
+            }
         }
 
         @Test
@@ -529,7 +462,7 @@ class CommandHandlerTest {
             val executor = MockTaskExecutor(TaskId("1"))
             val handler = createHandler(mapOf(TaskId("1") to executor))
             val state = CliState(currentTaskId = null)
-            val (newState, result) = handler.executeUserInput(Command.UserInput("test"), state)
+            val (newState, _) = handler.executeUserInput(Command.UserInput("test"), state)
             // При одном executor'е taskId автоматически устанавливается
             assertEquals(1, newState.currentTaskId)
             assertNotNull(executor.lastPrompt)
@@ -546,7 +479,7 @@ class CommandHandlerTest {
             assertEquals(state, newState)
             assertNotNull(result)
             assertIs<TaskResult.Success>(result)
-            assertEquals("mock result", (result as TaskResult.Success).content)
+            assertEquals("mock result", result.content)
         }
 
         @Test
@@ -559,7 +492,7 @@ class CommandHandlerTest {
             assertEquals(state, newState)
             assertNotNull(result)
             assertIs<TaskResult.Success>(result)
-            assertEquals("mock result", (result as TaskResult.Success).content)
+            assertEquals("mock result", result.content)
         }
 
         @Test
@@ -614,147 +547,19 @@ class CommandHandlerTest {
     @DisplayName("Task management commands")
     inner class TaskManagementCommands {
 
-        private lateinit var repository: InMemoryTaskRepository
-        private lateinit var executor: TodoTaskService
-        private lateinit var handler: CommandHandler
-
-        @BeforeEach
-        fun setUp() {
-            repository = InMemoryTaskRepository()
-            executor = TodoTaskService(repository)
-            handler = CommandHandler(
-                emptyMap(),
-                executor,
-                defaultMemoryService,
-                defaultTaskStepRepository,
-                defaultFactRepository
-            )
-        }
-
         @Test
-        @DisplayName("AddTask creates new task")
-        fun `AddTask creates new task`() = runBlocking {
+        @DisplayName("Todo commands are delegated outside CommandHandler")
+        fun `todo commands are no-op in CommandHandler`() = runBlocking {
+            val handler = createHandler(emptyMap())
             val state = CliState()
 
-            handler.handle(Command.AddTask("Test Task"), state)
-
-            val tasks = executor.listTasks()
-            assertEquals(1, tasks.size)
-            assertEquals("Test Task", tasks[0].title)
-        }
-
-        @Test
-        @DisplayName("ListTasks returns all tasks")
-        fun `ListTasks returns all tasks`() = runBlocking {
-            val state = CliState()
-
-            executor.addTask("Task 1")
-            executor.addTask("Task 2")
-
-            handler.handle(Command.ListTasks, state)
-
-            val tasks = executor.listTasks()
-            assertEquals(2, tasks.size)
-        }
-
-        @Test
-        @DisplayName("OpenTask sets currentTodoTaskId in state")
-        fun `OpenTask sets currentTodoTaskId`() = runBlocking {
-            val state = CliState()
-
-            val task = executor.addTask("Task to open")
-            val newState = handler.handle(Command.OpenTask(task.id), state)
-
-            assertEquals(task.id.value, newState.currentTodoTaskId)
-            assertEquals(task.id, executor.currentTaskId)
-        }
-
-        @Test
-        @DisplayName("edit without id uses currentTaskId")
-        fun `edit without id uses currentTaskId`() = runBlocking {
-            var state = CliState()
-
-            // Создать и открыть задачу
-            val task = executor.addTask("Original Title")
-            state = handler.handle(Command.OpenTask(task.id), state)
-
-            // Редактировать без ID (контекстная команда)
-            handler.handle(Command.EditTask(null, "Updated Title"), state)
-
-            // Проверить что задача обновлена
-            val updated = executor.listTasks().find { it.id == task.id }
-            assertNotNull(updated)
-            assertEquals("Updated Title", updated.title)
-        }
-
-        @Test
-        @DisplayName("drop without id uses currentTaskId")
-        fun `drop without id uses currentTaskId`() = runBlocking {
-            var state = CliState()
-
-            // Создать и открыть задачу
-            val task = executor.addTask("Task to drop")
-            state = handler.handle(Command.OpenTask(task.id), state)
-
-            // Удалить без ID (контекстная команда)
-            handler.handle(Command.DropTask(null), state)
-
-            // Проверить что задача удалена
-            val tasks = executor.listTasks()
-            assertTrue(tasks.isEmpty())
-            assertNull(executor.currentTaskId)
-        }
-
-        @Test
-        @DisplayName("close without id uses currentTaskId")
-        fun `close without id uses currentTaskId`() = runBlocking {
-            var state = CliState()
-
-            // Создать и открыть задачу
-            val task = executor.addTask("Task to close")
-            state = handler.handle(Command.OpenTask(task.id), state)
-
-            // Закрыть без ID (контекстная команда)
-            state = handler.handle(Command.CloseTask(null), state)
-
-            // Проверить что задача закрыта
-            val closed = executor.listTasks().find { it.id == task.id }
-            assertNotNull(closed)
-            assertEquals(TaskStatus.CLOSED, closed.status)
-            assertNull(executor.currentTaskId)
-            assertNull(state.currentTodoTaskId)
-        }
-
-        @Test
-        @DisplayName("cancel without id uses currentTaskId")
-        fun `cancel without id uses currentTaskId`() = runBlocking {
-            var state = CliState()
-
-            // Создать и открыть задачу
-            val task = executor.addTask("Task to cancel")
-            state = handler.handle(Command.OpenTask(task.id), state)
-
-            // Отменить без ID (контекстная команда)
-            handler.handle(Command.CancelTask(null), state)
-
-            // Проверить что задача отменена
-            val cancelled = executor.listTasks().find { it.id == task.id }
-            assertNotNull(cancelled)
-            assertEquals(TaskStatus.CANCELLED, cancelled.status)
-            assertNull(executor.currentTaskId)
-        }
-
-        @Test
-        @DisplayName("Back clears currentTodoTaskId")
-        fun `Back clears currentTodoTaskId`() = runBlocking {
-            var state = CliState()
-
-            val task = executor.addTask("Task")
-            state = handler.handle(Command.OpenTask(task.id), state)
-            assertEquals(task.id.value, state.currentTodoTaskId)
-
-            val newState = handler.handle(Command.Back, state)
-            assertNull(newState.currentTodoTaskId)
+            assertEquals(state, handler.handle(Command.AddTask("Test Task"), state))
+            assertEquals(state, handler.handle(Command.ListTasks, state))
+            assertEquals(state, handler.handle(Command.EditTask(null, "Updated Title"), state))
+            assertEquals(state, handler.handle(Command.DropTask(null), state))
+            assertEquals(state, handler.handle(Command.OpenTask(TaskId("task-1")), state))
+            assertEquals(state, handler.handle(Command.CloseTask(null), state))
+            assertEquals(state, handler.handle(Command.CancelTask(null), state))
         }
     }
 
@@ -778,103 +583,25 @@ class CommandHandlerTest {
             executor = TodoTaskService(repository)
             stepRepository = InMemoryTaskStepRepository()
             handler = CommandHandler(
-                executors = emptyMap(),
-                todoTaskService = executor,
-                memoryService = defaultMemoryService,
-                taskStepRepository = stepRepository,
-                factRepository = defaultFactRepository
+                executors = emptyMap()
             )
         }
 
         private suspend fun openTask(): CliState {
             createdTask = executor.addTask("Test Task")
-            return handler.handle(Command.OpenTask(createdTask.id), CliState())
+            executor.openTask(createdTask.id)
+            return CliState(currentTodoTaskId = createdTask.id.value)
         }
 
         @Test
-        @DisplayName("AddStep creates step with open task")
-        fun `AddStep creates step with open task`() = runBlocking {
+        @DisplayName("Step commands are delegated outside CommandHandler")
+        fun `step commands are no-op in CommandHandler`() = runBlocking {
             val state = openTask()
 
-            handler.handle(Command.AddStep("Do something"), state)
-
-            val steps = stepRepository.findByTaskId(createdTask.id)
-            assertEquals(1, steps.size)
-            assertEquals("Do something", steps[0].text)
-            assertEquals(false, steps[0].isCompleted)
-            assertEquals(0, steps[0].order)
-            assertEquals(createdTask.id, steps[0].taskId)
-        }
-
-        @Test
-        @DisplayName("AddStep increments order for multiple steps")
-        fun `AddStep increments order for multiple steps`() = runBlocking {
-            val state = openTask()
-
-            handler.handle(Command.AddStep("Step 1"), state)
-            handler.handle(Command.AddStep("Step 2"), state)
-            handler.handle(Command.AddStep("Step 3"), state)
-
-            val steps = stepRepository.findByTaskId(createdTask.id)
-            assertEquals(3, steps.size)
-            assertEquals(0, steps[0].order)
-            assertEquals(1, steps[1].order)
-            assertEquals(2, steps[2].order)
-        }
-
-        @Test
-        @DisplayName("ListSteps does not throw with open task")
-        fun `ListSteps does not throw with open task`() = runBlocking {
-            val state = openTask()
-
-            val newState = handler.handle(Command.ListSteps, state)
-
-            assertEquals(state, newState)
-        }
-
-        @Test
-        @DisplayName("CompleteStep marks step as completed")
-        fun `CompleteStep marks step as completed`() = runBlocking {
-            val state = openTask()
-            handler.handle(Command.AddStep("To complete"), state)
-            val steps = stepRepository.findByTaskId(createdTask.id)
-            val stepId = steps[0].id.value
-
-            handler.handle(Command.CompleteStep(stepId), state)
-
-            val updatedStep = stepRepository.findById(TaskStepId(stepId))
-            assertNotNull(updatedStep)
-            assertEquals(true, updatedStep.isCompleted)
-        }
-
-        @Test
-        @DisplayName("AddStep without open task throws IllegalArgumentException")
-        fun `AddStep without open task throws exception`() {
-            val state = CliState(currentTodoTaskId = null)
-
-            assertThrows<IllegalArgumentException> {
-                runBlocking { handler.handle(Command.AddStep("test"), state) }
-            }
-        }
-
-        @Test
-        @DisplayName("ListSteps without open task throws IllegalArgumentException")
-        fun `ListSteps without open task throws exception`() {
-            val state = CliState(currentTodoTaskId = null)
-
-            assertThrows<IllegalArgumentException> {
-                runBlocking { handler.handle(Command.ListSteps, state) }
-            }
-        }
-
-        @Test
-        @DisplayName("CompleteStep without open task throws IllegalArgumentException")
-        fun `CompleteStep without open task throws exception`() {
-            val state = CliState(currentTodoTaskId = null)
-
-            assertThrows<IllegalArgumentException> {
-                runBlocking { handler.handle(Command.CompleteStep("step-1"), state) }
-            }
+            assertEquals(state, handler.handle(Command.AddStep("Do something"), state))
+            assertEquals(state, handler.handle(Command.ListSteps, state))
+            assertEquals(state, handler.handle(Command.CompleteStep("step-1"), state))
+            assertTrue(stepRepository.findByTaskId(createdTask.id).isEmpty())
         }
     }
 }

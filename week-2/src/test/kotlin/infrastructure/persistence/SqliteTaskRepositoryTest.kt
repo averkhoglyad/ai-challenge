@@ -19,19 +19,22 @@ class SqliteTaskRepositoryTest {
     @TempDir
     lateinit var tempDir: Path
 
+    private lateinit var database: SqliteDatabase
     private lateinit var repository: SqliteTaskRepository
     private lateinit var dbPath: String
 
     @BeforeEach
     fun setUp() {
         dbPath = tempDir.resolve("test-tasks.db").toString()
-        repository = SqliteTaskRepository(dbPath)
+        database = SqliteDatabase(dbPath)
+        repository = SqliteTaskRepository(database)
     }
 
     @AfterEach
     fun tearDown() {
-        repository.close()
+        database.close()
     }
+
 
     @Test
     fun `should save and find task by id`() = runBlocking {

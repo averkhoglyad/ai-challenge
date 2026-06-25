@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.cli.commands
 
-import io.averkhogliad.ai.challenge.week2.cli.commands.Command.DebugAction
+import io.averkhogliad.ai.challenge.week2.application.handler.DebugAction
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test

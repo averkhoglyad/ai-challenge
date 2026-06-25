@@ -2,8 +2,6 @@ package io.averkhogliad.ai.challenge.week2.infrastructure.persistence
 
 import io.averkhogliad.ai.challenge.week2.domain.model.*
 import io.averkhogliad.ai.challenge.week2.domain.service.DialogSessionRepository
-import java.sql.Connection
-import java.sql.DriverManager
 import java.sql.ResultSet
 import java.time.Instant
 
@@ -24,27 +22,14 @@ import java.time.Instant
  * - Поддержка транзакций для атомарности операций (save, delete)
  * - Автоматическое создание директории, если она не существует
  *
- * @param dbPath путь к файлу базы данных (по умолчанию ~/.ai-challenge/week2.db)
+ * @param database единый владелец SQLite JDBC-соединения
  */
 class SqliteDialogSessionRepository(
-    private val dbPath: String
+    private val database: SqliteDatabase
 ) : DialogSessionRepository {
 
-    private val connection: Connection by lazy {
-        // Создаём директорию, если она не существует
-        val parentDir = java.io.File(dbPath).parentFile
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs()
-        }
+    private val connection get() = database.connection
 
-        DriverManager.getConnection("jdbc:sqlite:$dbPath").apply {
-            // Включаем режим WAL для лучшей производительности
-            createStatement().use { stmt ->
-                stmt.execute("PRAGMA journal_mode=WAL")
-                stmt.execute("PRAGMA synchronous=NORMAL")
-            }
-        }
-    }
 
     init {
         initializeSchema()
@@ -310,12 +295,5 @@ class SqliteDialogSessionRepository(
         )
     }
 
-    /**
-     * Закрывает соединение с БД.
-     */
-    fun close() {
-        if (!connection.isClosed) {
-            connection.close()
-        }
-    }
+
 }

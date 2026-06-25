@@ -14,18 +14,21 @@ import kotlin.test.*
 class SqliteProfileRepositoryTest {
 
     private lateinit var tempDbFile: File
+    private lateinit var database: SqliteDatabase
     private lateinit var repository: SqliteProfileRepository
 
     @BeforeEach
     fun setUp() {
         tempDbFile = Files.createTempFile("test-profile-", ".db").toFile()
-        repository = SqliteProfileRepository(tempDbFile.absolutePath)
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        repository = SqliteProfileRepository(database)
     }
 
     @AfterEach
     fun tearDown() {
-        repository.close()
+        database.close()
         tempDbFile.delete()
+
         File(tempDbFile.absolutePath + "-wal").delete()
         File(tempDbFile.absolutePath + "-shm").delete()
     }

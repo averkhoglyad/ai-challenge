@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.cli.commands
 
+import io.averkhogliad.ai.challenge.week2.application.handler.DebugAction
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 
 /**
@@ -294,20 +295,6 @@ sealed interface Command {
      * @param targetStage целевое состояние, введённое пользователем (строка)
      */
     data class GotoState(val targetStage: String) : Command
-
-    /**
-     * Действие для команды debug.
-     */
-    enum class DebugAction {
-        /** Переключить режим (toggle) */
-        TOGGLE,
-
-        /** Включить debug-режим */
-        ON,
-
-        /** Выключить debug-режим */
-        OFF
-    }
 
     // ═══════════════════════════════════════════════════════════════
     // Команды управления профилями пользователя (PM)

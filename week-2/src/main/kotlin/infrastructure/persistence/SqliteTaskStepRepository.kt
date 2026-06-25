@@ -5,7 +5,7 @@ import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId
 import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
 import java.sql.Connection
-import java.sql.DriverManager
+
 import java.sql.ResultSet
 import java.time.Instant
 
@@ -26,27 +26,14 @@ import java.time.Instant
  * - Поддержка транзакций для атомарности операций (save, delete, deleteByTaskId)
  * - Автоматическое создание директории, если она не существует
  *
- * @param dbPath путь к файлу базы данных
+ * @param database единый владелец SQLite JDBC-соединения
  */
 class SqliteTaskStepRepository(
-    private val dbPath: String
+    private val database: SqliteDatabase
 ) : TaskStepRepository {
 
-    private val connection: Connection by lazy {
-        // Создаём директорию, если она не существует
-        val parentDir = java.io.File(dbPath).parentFile
-        if (parentDir != null && !parentDir.exists()) {
-            parentDir.mkdirs()
-        }
+    private val connection get() = database.connection
 
-        DriverManager.getConnection("jdbc:sqlite:$dbPath").apply {
-            // Включаем режим WAL для лучшей производительности
-            createStatement().use { stmt ->
-                stmt.execute("PRAGMA journal_mode=WAL")
-                stmt.execute("PRAGMA synchronous=NORMAL")
-            }
-        }
-    }
 
     init {
         createTable(connection)
@@ -218,12 +205,5 @@ class SqliteTaskStepRepository(
         )
     }
 
-    /**
-     * Закрывает соединение с БД.
-     */
-    fun close() {
-        if (!connection.isClosed) {
-            connection.close()
-        }
-    }
+
 }

@@ -28,8 +28,9 @@ class ProfileService(
 
     suspend fun handleCreateProfile(name: String, description: String, instructions: String): Profile {
         // Проверка, что хотя бы одно из полей заполнено
-        if (description.isBlank() && instructions.isBlank()) throw ProfileOperationError.EmptyContent
+        if (description.isBlank() && instructions.isBlank()) throw ProfileOperationError.EmptyContent()
         val totalLength = description.length + instructions.length
+
         if (totalLength > MAX_PROFILE_CONTENT_LENGTH) throw ProfileOperationError.ContentTooLong(totalLength)
         if (profileRepository.existsByName(name)) {
             throw ProfileOperationError.AlreadyExists(name)
@@ -105,8 +106,9 @@ class ProfileService(
         val profile = profileRepository.findByName(name)
             ?: throw ProfileOperationError.NotFoundByName(name)
         if (profile.isActive) {
-            throw ProfileOperationError.CannotDeleteActiveProfile
+            throw ProfileOperationError.CannotDeleteActiveProfile()
         }
+
         profileRepository.delete(profile.id)
     }
 

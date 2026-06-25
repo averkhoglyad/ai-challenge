@@ -5,7 +5,9 @@ import io.averkhogliad.ai.challenge.week2.domain.model.MessageRole
 import io.averkhogliad.ai.challenge.week2.domain.model.SessionLevel
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteDatabase
 import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteDialogSessionRepository
+
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -31,20 +33,23 @@ import kotlin.test.assertTrue
 class MemoryIntegrationTest {
 
     private lateinit var tempDbFile: File
+    private lateinit var database: SqliteDatabase
     private lateinit var repository: SqliteDialogSessionRepository
     private lateinit var memoryService: MemoryService
 
     @BeforeEach
     fun setUp() {
         tempDbFile = Files.createTempFile("test-memory-integration-", ".db").toFile()
-        repository = SqliteDialogSessionRepository(tempDbFile.absolutePath)
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        repository = SqliteDialogSessionRepository(database)
         memoryService = MemoryService(repository)
     }
 
     @AfterEach
     fun tearDown() {
-        repository.close()
+        database.close()
         tempDbFile.delete()
+
         File(tempDbFile.absolutePath + "-wal").delete()
         File(tempDbFile.absolutePath + "-shm").delete()
     }

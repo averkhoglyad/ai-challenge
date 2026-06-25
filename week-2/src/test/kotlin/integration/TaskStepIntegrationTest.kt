@@ -7,7 +7,9 @@ import io.averkhogliad.ai.challenge.week2.domain.model.TaskStep
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskStepId
 import io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository
 import io.averkhogliad.ai.challenge.week2.domain.service.TaskStepRepository
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteDatabase
 import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteTaskStepRepository
+
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -33,6 +35,7 @@ import kotlin.test.assertTrue
 class TaskStepIntegrationTest {
 
     private lateinit var tempDbFile: File
+    private lateinit var database: SqliteDatabase
     private lateinit var taskRepository: TaskRepository
     private lateinit var taskStepRepository: TaskStepRepository
     private lateinit var TodoTaskService: TodoTaskService
@@ -40,8 +43,10 @@ class TaskStepIntegrationTest {
     @BeforeEach
     fun setUp() {
         tempDbFile = Files.createTempFile("test-taskstep-integration-", ".db").toFile()
-        taskStepRepository = SqliteTaskStepRepository(tempDbFile.absolutePath)
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        taskStepRepository = SqliteTaskStepRepository(database)
         taskRepository = object : TaskRepository {
+
             private val tasks = mutableMapOf<TaskId, Task>()
 
             override suspend fun save(task: Task) {
@@ -69,8 +74,9 @@ class TaskStepIntegrationTest {
 
     @AfterEach
     fun tearDown() {
-        (taskStepRepository as SqliteTaskStepRepository).close()
+        database.close()
         tempDbFile.delete()
+
         File(tempDbFile.absolutePath + "-wal").delete()
         File(tempDbFile.absolutePath + "-shm").delete()
     }
@@ -130,7 +136,7 @@ class TaskStepIntegrationTest {
 
     @Test
     @DisplayName("steps require an open task")
-    fun `steps require an open task`() = runBlocking {
+    fun `steps require an open task`(): Unit = runBlocking {
         val taskId = TaskId(UUID.randomUUID().toString())
 
         // Попытка добавить шаг без открытой задачи должна требовать валидации
