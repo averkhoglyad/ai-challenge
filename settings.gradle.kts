@@ -19,9 +19,13 @@ plugins {
 // Include subprojects in the build.
 // If there are changes in only one of the projects, Gradle will rebuild only the one that has changed.
 // Learn more about structuring projects with Gradle - https://docs.gradle.org/8.7/userguide/multi_project_builds.html
-include(":utils")
+include(":common-core")
+include(":common-test")
 include(":week-0")
 include(":week-1")
 include(":week-2")
+include(":week-3:cli")
+include(":week-3:events-server")
+include(":week-3:weather-server")
 
 rootProject.name = "ai-challenge"

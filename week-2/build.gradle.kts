@@ -17,15 +17,15 @@ dependencies {
     implementation(libs.mordant)
 
     // Shared utilities and config component.
-    implementation(project(":utils"))
+    implementation(project(":common-core"))
 
     // SQLite JDBC driver for dialog persistence.
-    implementation("org.xerial:sqlite-jdbc:3.45.1.0")
+    implementation(libs.sqliteJdbc)
 
     // Testing
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(testFixtures(project(":utils")))
+    testImplementation(testFixtures(project(":common-core")))
 }
 
 application {

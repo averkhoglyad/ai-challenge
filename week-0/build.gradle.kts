@@ -17,11 +17,11 @@ dependencies {
     implementation(libs.mordant)
 
     // Shared utilities and config component.
-    implementation(project(":utils"))
+    implementation(project(":common-core"))
     
     // Testing
     testImplementation(kotlin("test"))
-    testImplementation(testFixtures(project(":utils")))
+    testImplementation(testFixtures(project(":common-core")))
 }
 
 application {
