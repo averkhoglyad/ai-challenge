@@ -20,12 +20,15 @@ import org.jetbrains.exposed.sql.deleteAll
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.*
+import java.nio.file.Path
+import kotlin.io.path.deleteIfExists
 import kotlin.test.assertEquals
 
 
@@ -51,12 +54,16 @@ class WeatherControllerIT : FreeSpec() {
     @Autowired
     lateinit var json: Json
 
-    override suspend fun beforeSpec(spec: io.kotest.core.spec.Spec) {
+    @Value("\${weather.database.url}")
+    lateinit var databaseUrl: String
+
+    override suspend fun beforeTest(testCase: io.kotest.core.test.TestCase) {
         cleanupState()
     }
 
     override suspend fun afterSpec(spec: io.kotest.core.spec.Spec) {
         cleanupState()
+        deleteDatabaseFile()
     }
 
     init {
@@ -252,6 +259,13 @@ class WeatherControllerIT : FreeSpec() {
         cachedAt = 0L,
         stale = false
     )
+
+    private fun deleteDatabaseFile() {
+        val path = databaseUrl.removePrefix("jdbc:sqlite:")
+        if (path.isNotBlank()) {
+            Path.of(path).deleteIfExists()
+        }
+    }
 
     @TestConfiguration
     class TestConfig {

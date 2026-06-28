@@ -8,17 +8,22 @@ import io.averkhogliad.ai.challenge.week3.cli.application.ProfileService
 import io.averkhogliad.ai.challenge.week3.cli.application.cache.CachingInvariantService
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task1Executor
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task3Executor
+import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task4Executor
 import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
 import io.averkhogliad.ai.challenge.week3.cli.application.usecase.CreateEventForTaskUseCase
 import io.averkhogliad.ai.challenge.week3.cli.application.usecase.ListNotesUseCase
 import io.averkhogliad.ai.challenge.week3.cli.cli.*
 import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.*
 import io.averkhogliad.ai.challenge.week3.cli.cli.renderers.MCPRenderer
+import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.LlmConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.ServicesConfig
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTransport
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.ConfigPort
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.LlmPort
+import io.averkhogliad.ai.challenge.week3.cli.domain.service.MCPConnectionManager
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.MemoryService
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.PromptBuilder
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.client.RestEventsClient
@@ -31,6 +36,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
@@ -189,6 +195,9 @@ object ApplicationBootstrap {
         // 12c. Application: MCPService (управление MCP-серверами)
         val mcpService = MCPService(mcpServerRepository, mcpConnectionManager)
 
+        // 12d. Подключаем системные MCP-сервера (не сохраняются в БД, не видны в :mcp list)
+        connectSystemMcpServers(mcpConnectionManager, config)
+
         // 12a. Application: LTM and task-step use cases
         val ltmService = io.averkhogliad.ai.challenge.week3.cli.application.service.LtmService(factRepository)
         val taskStepService = io.averkhogliad.ai.challenge.week3.cli.application.service.TaskStepService(
@@ -211,6 +220,9 @@ object ApplicationBootstrap {
 
         // 14b. Application: Task3 executor (Календарь событий и уведомления)
         val task3Executor = Task3Executor(dialogService)
+
+        // 14c. Application: Task4 executor (Календарь событий и уведомления)
+        val task4Executor = Task4Executor(dialogService)
 
 
         // 15. Application: planner components (выделены из PlanCommandHandler)
@@ -260,6 +272,7 @@ object ApplicationBootstrap {
         val executors = mapOf(
             task1Executor.taskId to task1Executor,
             task3Executor.taskId to task3Executor,
+            task4Executor.taskId to task4Executor,
         )
         val input = ConsoleCliInput()
         val commandHandler = CommandHandler(executors)
@@ -374,6 +387,54 @@ object ApplicationBootstrap {
         )
 
 
+    }
+
+    /**
+     * Подключает системные MCP-сервера (weather, events, notifications).
+     *
+     * Сервера регистрируются через [MCPConnectionManager.connectSystem] —
+     * в обход [MCPServerRepository], не сохраняются в БД, не видны в `:mcp list`.
+     * Ошибки подключения игнорируются — сервер может быть не запущен.
+     */
+    private fun connectSystemMcpServers(
+        connectionManager: MCPConnectionManager,
+        config: Config
+    ) {
+        val systemServers = listOf(
+            ModelId("system-weather") to deriveMcpUrl(config, "services.weather.base-url"),
+            ModelId("system-events") to deriveMcpUrl(config, "services.events.base-url"),
+            ModelId("system-notifications") to deriveMcpUrl(config, "services.notifications.base-url")
+        )
+
+        runBlocking {
+            for ((id, url) in systemServers) {
+                if (url.isNullOrBlank()) continue
+                val state = connectionManager.connectSystem(
+                    id = id,
+                    name = id.value,
+                    transport = MCPTransport.StreamableHttp(url)
+                )
+                when (state) {
+                    is MCPConnectionState.Connected ->
+                        System.err.println("  \u001b[32m✓\u001b[0m Системный MCP-сервер \"${id.value}\" подключён")
+
+                    is MCPConnectionState.Failed ->
+                        System.err.println("  \u001b[33m⚠\u001b[0m Системный MCP-сервер \"${id.value}\" не подключён: ${state.error}")
+
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    /**
+     * Извлекает URL сервиса из конфигурации и добавляет к нему путь `/mcp`.
+     * Возвращает null, если базовый URL не задан.
+     */
+    private fun deriveMcpUrl(config: Config, key: String): String? {
+        val baseUrl = config.getOrNull(key) ?: return null
+        val trimmed = baseUrl.trimEnd('/')
+        return "$trimmed/mcp"
     }
 
     /**

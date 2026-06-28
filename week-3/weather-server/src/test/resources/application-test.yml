@@ -1,6 +1,6 @@
 weather:
   database:
-    url: "jdbc:sqlite:file::memory:?cache=shared"
+    url: "jdbc:sqlite:${java.io.tmpdir}/weather-it-${random.uuid}.sqlite"
 spring:
   main:
     allow-bean-definition-overriding: true

@@ -4,10 +4,7 @@ import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
 import io.averkhogliad.ai.challenge.week3.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.TaskExecutionConfig
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTool
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.SessionLevel
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskId
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.*
 import kotlinx.serialization.json.*
 import kotlin.coroutines.cancellation.CancellationException
@@ -22,6 +19,21 @@ class DialogService(
     private val mcpService: MCPService  // доступ к MCP-инструментам для передачи в LLM
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+
+    companion object {
+        /** Максимальное количество итераций tool calls в одном диалоге */
+        const val MAX_TOOL_CALL_ITERATIONS = 10
+
+        // Префиксы ошибок от executeMcpTool
+        private const val MCP_TOOL_ERROR_PREFIX = "Ошибка выполнения"
+        private const val MCP_TOOL_NOT_FOUND_PREFIX = "Инструмент"
+
+        // ANSI-коды для визуализации прогресса tool calls
+        private const val ANSI_YELLOW = "\u001b[33m"
+        private const val ANSI_GREEN = "\u001b[32m"
+        private const val ANSI_RED = "\u001b[31m"
+        private const val ANSI_RESET = "\u001b[0m"
+    }
 
     suspend fun chat(
         userInput: String,
@@ -38,28 +50,40 @@ class DialogService(
                 userQuery = userInput,
                 factSearchLimit = 5
             )
-            // NEW: получаем активный профиль для встраивания в промпт
+            // Получаем активный профиль для встраивания в промпт
             val activeProfile = profileRepository.findActive()
-            // NEW: получаем активные инварианты для встраивания в промпт
+            // Получаем активные инварианты для встраивания в промпт
             val invariants = invariantService.list()
+            // Получаем доступные MCP-сценарии (prompts) со всех серверов
+            val mcpPrompts = collectMcpPrompts()
             val chatMessages = promptBuilder.buildChatMessages(
                 workingMemory = memoryContext.workingMemory,
                 relevantFacts = memoryContext.relevantFacts,
                 recentMessages = memoryContext.recentMessages,
                 userInput = userInput,
-                profile = activeProfile,  // NEW: передача активного профиля
-                invariants = invariants  // NEW: передача инвариантов
+                profile = activeProfile,
+                invariants = invariants,
+                mcpPrompts = mcpPrompts  // передача MCP-сценариев
             ).toMutableList()
-            // NEW: получаем инструменты от подключенных MCP-серверов
+            // Получаем инструменты от подключенных MCP-серверов
             val mcpTools = collectMcpTools()
             memoryService.saveUserMessage(level, taskId, userInput)
             var result = llmPort.chatWithMessages(chatMessages, taskExecutionConfig, mcpTools)
 
             // Цикл обработки tool_calls
-            var maxIterations = 5
+            var remainingIterations = MAX_TOOL_CALL_ITERATIONS
             while (result is TaskResult.Success) {
                 val toolCalls = result.toolCalls
-                if (toolCalls.isNullOrEmpty() || maxIterations-- <= 0) break
+                if (toolCalls.isNullOrEmpty() || remainingIterations <= 0) {
+                    if (remainingIterations <= 0) {
+                        System.err.println("\n${ANSI_YELLOW}[WARN]${ANSI_RESET} Достигнут лимит итераций tool calls ($MAX_TOOL_CALL_ITERATIONS). Возвращаю частичный результат.")
+                    }
+                    break
+                }
+                remainingIterations--
+
+                val iteration = MAX_TOOL_CALL_ITERATIONS - remainingIterations
+                System.err.println("\n${ANSI_YELLOW}🔄 Итерация $iteration/$MAX_TOOL_CALL_ITERATIONS: вызываю ${toolCalls.size} инструментов...${ANSI_RESET}")
 
                 // Добавить ответ ассистента с tool_calls в историю
                 chatMessages.add(ChatMessage.assistantWithToolCalls(result.content, toolCalls))
@@ -68,12 +92,30 @@ class DialogService(
                 }
 
                 // Выполнить каждый tool_call
-                for (toolCall in toolCalls) {
+                for ((index, toolCall) in toolCalls.withIndex()) {
                     if (toolCall.id.isBlank()) {
-                        System.err.println("[WARN] Skipping tool call with empty id: ${toolCall.function.name}")
+                        System.err.println("\n  ${ANSI_RED}[WARN]${ANSI_RESET} Пропуск tool call с пустым id: ${toolCall.function.name}")
                         continue
                     }
-                    val toolResult = executeMcpTool(toolCall.function.name, toolCall.function.arguments)
+                    val toolName = toolCall.function.name
+                    val argsPreview = toolCall.function.arguments.let {
+                        if (it.length > 60) it.take(60) + "..." else it
+                    }
+                    System.err.println("\n  [${index + 1}/${toolCalls.size}] $toolName($argsPreview)...")
+
+                    val toolResult = executeMcpTool(toolName, toolCall.function.arguments)
+
+                    val isError =
+                        toolResult.startsWith(MCP_TOOL_ERROR_PREFIX) || toolResult.startsWith(MCP_TOOL_NOT_FOUND_PREFIX)
+                    if (!isError) {
+                        val resultPreview = toolResult.let {
+                            if (it.length > 80) it.take(80) + "..." else it
+                        }.replace("\n", " ")
+                        System.err.println("\n    ${ANSI_GREEN}✓${ANSI_RESET} $toolName завершён → $resultPreview")
+                    } else {
+                        System.err.println("\n    ${ANSI_RED}❌${ANSI_RESET} $toolName: $toolResult")
+                    }
+
                     chatMessages.add(ChatMessage.tool(toolCall.id, toolResult))
                 }
 
@@ -135,18 +177,69 @@ class DialogService(
      * Ошибки получения инструментов с отдельных серверов игнорируются.
      */
     private suspend fun collectMcpTools(): List<MCPTool>? {
-        val servers = mcpService.listServers()
+        val servers = mcpService.getAllServersForLlm()
         if (servers.isEmpty()) return null
 
         val allTools = mutableListOf<MCPTool>()
         for (server in servers) {
-            if (server.status is MCPConnectionState.Connected) {
-                mcpService.getTools(server.config.id).onSuccess { tools ->
+            if (server.isConnected) {
+                mcpService.getTools(server.id).onSuccess { tools ->
                     allTools.addAll(tools)
                 }
             }
         }
         return allTools.ifEmpty { null }
+    }
+
+    /**
+     * Собирает MCP-сценарии (prompts) со всех подключённых серверов.
+     *
+     * Для каждого prompt получает его содержимое с параметрами по умолчанию.
+     * Возвращает список [McpPromptInfo], готовый для встраивания в системный промпт.
+     */
+    private suspend fun collectMcpPrompts(): List<McpPromptInfo> {
+        val servers = mcpService.getAllServersForLlm()
+        if (servers.isEmpty()) return emptyList()
+
+        val result = mutableListOf<McpPromptInfo>()
+        for (server in servers) {
+            if (!server.isConnected) continue
+
+            val prompts = mcpService.getPrompts(server.id).getOrElse { emptyList() }
+            for (prompt in prompts) {
+                val defaultArgs = prompt.arguments
+                    .filter { it.required }
+                    .associate { it.name to "{${it.name}}" }
+
+                val messages = if (defaultArgs.isNotEmpty()) {
+                    mcpService.getPrompt(server.id, prompt.name, defaultArgs).getOrElse { emptyList() }
+                } else {
+                    mcpService.getPrompt(server.id, prompt.name).getOrElse { emptyList() }
+                }
+
+                val content = messages
+                    .filter { it.role == MessageRole.USER }
+                    .joinToString("\n") { msg ->
+                        when (msg.content) {
+                            is McpPromptContent.Text -> msg.content.text
+                            else -> ""
+                        }
+                    }
+
+                if (content.isNotBlank()) {
+                    result.add(
+                        McpPromptInfo(
+                            serverId = server.id.value,
+                            serverName = server.name,
+                            promptName = prompt.name,
+                            description = prompt.description,
+                            content = content
+                        )
+                    )
+                }
+            }
+        }
+        return result
     }
 
     /**
@@ -166,10 +259,10 @@ class DialogService(
             } else {
                 emptyMap<String, Any?>()
             }
-            val servers = mcpService.listServers()
+            val servers = mcpService.getAllServersForLlm()
             for (server in servers) {
-                if (server.status is MCPConnectionState.Connected) {
-                    val result = mcpService.callTool(server.config.id, name, args)
+                if (server.isConnected) {
+                    val result = mcpService.callTool(server.id, name, args)
                     if (result.isSuccess) return result.getOrThrow()
                 }
             }

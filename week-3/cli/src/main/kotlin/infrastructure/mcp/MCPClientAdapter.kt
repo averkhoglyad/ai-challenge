@@ -1,9 +1,7 @@
 package io.averkhogliad.ai.challenge.week3.cli.infrastructure.mcp
 
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPServerConfig
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTool
-import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTransport
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.PromptArgument
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.MCPClient
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -140,9 +138,91 @@ class MCPClientAdapter : MCPClient {
         return client.callTool(name = name, arguments = arguments)
     }
 
+    override suspend fun listPrompts(): List<McpPrompt> {
+        val client = sdkClient ?: return emptyList()
+        return try {
+            val result = client.listPrompts(request = ListPromptsRequest())
+            result.prompts.map { sdkPrompt -> mapPrompt(sdkPrompt) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            currentState = MCPConnectionState.Failed(
+                error = "listPrompts failed: ${e.message}",
+                since = Instant.now()
+            )
+            emptyList()
+        }
+    }
+
+    override suspend fun getPrompt(
+        name: String,
+        arguments: Map<String, String>
+    ): List<McpPromptMessage> {
+        val client = sdkClient ?: return emptyList()
+        return try {
+            val params = GetPromptRequestParams(name = name, arguments = arguments)
+            val request = GetPromptRequest(params = params)
+            val result = client.getPrompt(request = request)
+            result.messages.map { sdkMessage -> mapPromptMessage(sdkMessage) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            currentState = MCPConnectionState.Failed(
+                error = "getPrompt failed: ${e.message}",
+                since = Instant.now()
+            )
+            emptyList()
+        }
+    }
+
     override fun isConnected(): Boolean = currentState.isConnected()
 
     override fun getStatus(): MCPConnectionState = currentState
+
+    // ──── Private helpers ────
+
+    /**
+     * Maps SDK [io.modelcontextprotocol.kotlin.sdk.types.Prompt] to domain [McpPrompt].
+     * Pure function — no I/O, no side effects.
+     */
+    private fun mapPrompt(sdkPrompt: io.modelcontextprotocol.kotlin.sdk.types.Prompt): McpPrompt {
+        return McpPrompt(
+            name = sdkPrompt.name,
+            description = sdkPrompt.description,
+            arguments = sdkPrompt.arguments?.map { sdkArg ->
+                PromptArgument(
+                    name = sdkArg.name,
+                    description = sdkArg.description,
+                    required = sdkArg.required ?: false
+                )
+            } ?: emptyList()
+        )
+    }
+
+    /**
+     * Maps SDK [io.modelcontextprotocol.kotlin.sdk.types.PromptMessage] to domain [McpPromptMessage].
+     * Pure function — no I/O, no side effects.
+     */
+    private fun mapPromptMessage(sdkMessage: io.modelcontextprotocol.kotlin.sdk.types.PromptMessage): McpPromptMessage {
+        val role = when (sdkMessage.role) {
+            io.modelcontextprotocol.kotlin.sdk.types.Role.User -> MessageRole.USER
+            io.modelcontextprotocol.kotlin.sdk.types.Role.Assistant -> MessageRole.ASSISTANT
+        }
+        val content = mapContent(sdkMessage.content)
+        return McpPromptMessage(role = role, content = content)
+    }
+
+    /**
+     * Maps SDK [io.modelcontextprotocol.kotlin.sdk.types.ContentBlock] to domain [McpPromptContent].
+     * Supports [io.modelcontextprotocol.kotlin.sdk.types.TextContent];
+     * all other content types are mapped to [McpPromptContent.Unsupported].
+     */
+    private fun mapContent(sdkContent: io.modelcontextprotocol.kotlin.sdk.types.ContentBlock): McpPromptContent {
+        return when (sdkContent) {
+            is TextContent -> McpPromptContent.Text(sdkContent.text)
+            else -> McpPromptContent.Unsupported
+        }
+    }
 
     // ──── Private helpers ────
 

@@ -81,6 +81,7 @@ class MCPService(
 
     /**
      * Получить список всех серверов с их текущим статусом подключения.
+     * Возвращает ТОЛЬКО пользовательские сервера (из репозитория).
      *
      * @return Список [ServerWithStatus]
      */
@@ -90,6 +91,18 @@ class MCPService(
             val status = connectionManager.getStatus(config.id)
             ServerWithStatus(config = config, status = status)
         }
+    }
+
+    /**
+     * Получить список ВСЕХ серверов (пользовательские + системные) для передачи в LLM.
+     */
+    suspend fun getAllServersForLlm(): List<McpServerRef> {
+        val userServers = listServers().map { McpServerRef(it.config.id, it.config.name, it.status) }
+        val systemIds = connectionManager.getSystemServerIds()
+        val systemServers = systemIds.map { id ->
+            McpServerRef(id, id.value, connectionManager.getStatus(id))
+        }
+        return userServers + systemServers
     }
 
     /**
@@ -152,6 +165,48 @@ class MCPService(
             val result = connectionManager.callTool(serverId, name, arguments)
             val textContent = result.content.filterIsInstance<TextContent>().joinToString { it.text }
             Result.success(textContent)
+        } catch (e: Exception) {
+            Result.failure(MCPOperationError.ConnectionFailed(e.message ?: "Unknown error"))
+        }
+    }
+
+    /**
+     * Получить список prompts с MCP-сервера.
+     *
+     * @param serverId Идентификатор сервера
+     * @return [Result] со списком [McpPrompt] или [MCPOperationError]
+     */
+    suspend fun getPrompts(serverId: ModelId): Result<List<McpPrompt>> {
+        if (!connectionManager.isConnected(serverId))
+            return Result.failure(MCPOperationError.NotConnected(serverId.value))
+
+        return try {
+            val prompts = connectionManager.getPrompts(serverId)
+            Result.success(prompts)
+        } catch (e: Exception) {
+            Result.failure(MCPOperationError.ConnectionFailed(e.message ?: "Unknown error"))
+        }
+    }
+
+    /**
+     * Получить содержимое prompt с подставленными аргументами.
+     *
+     * @param serverId Идентификатор сервера
+     * @param name Имя prompt
+     * @param arguments Аргументы для подстановки в шаблон
+     * @return [Result] со списком [McpPromptMessage] или [MCPOperationError]
+     */
+    suspend fun getPrompt(
+        serverId: ModelId,
+        name: String,
+        arguments: Map<String, String> = emptyMap()
+    ): Result<List<McpPromptMessage>> {
+        if (!connectionManager.isConnected(serverId))
+            return Result.failure(MCPOperationError.NotConnected(serverId.value))
+
+        return try {
+            val messages = connectionManager.getPrompt(serverId, name, arguments)
+            Result.success(messages)
         } catch (e: Exception) {
             Result.failure(MCPOperationError.ConnectionFailed(e.message ?: "Unknown error"))
         }

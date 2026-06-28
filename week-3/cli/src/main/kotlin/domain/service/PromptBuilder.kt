@@ -28,13 +28,15 @@ class PromptBuilder {
      * 3. Системная инструкция
      * 4. Контекст рабочей памяти (WM)
      * 5. Релевантные факты из базы знаний (LTM)
-     * 6. История диалога (STM)
+     * 6. [AVAILABLE SCENARIOS] — доступные MCP-сценарии (если есть)
+     * 7. История диалога (STM)
      *
      * @param workingMemory рабочая память (WM)
      * @param relevantFacts релевантные факты из LTM
      * @param recentMessages последние сообщения из STM
      * @param profile активный профиль пользователя (опционально)
      * @param invariants список активных инвариантов (опционально)
+     * @param mcpPrompts информация о доступных MCP-сценариях (опционально)
      * @return сформированный промпт
      */
     fun buildPrompt(
@@ -42,7 +44,8 @@ class PromptBuilder {
         relevantFacts: List<Fact> = emptyList(),
         recentMessages: List<Message> = emptyList(),
         profile: Profile? = null,
-        invariants: List<Invariant> = emptyList()
+        invariants: List<Invariant> = emptyList(),
+        mcpPrompts: List<McpPromptInfo> = emptyList()
     ): String = buildString {
         // [INVARIANTS - DO NOT VIOLATE] — вставляется САМЫМ ПЕРВЫМ, если инварианты заданы
         if (invariants.isNotEmpty()) {
@@ -78,6 +81,22 @@ class PromptBuilder {
             appendLine("=== Релевантные факты из базы знаний (LTM) ===")
             relevantFacts.forEachIndexed { index, fact ->
                 appendLine("${index + 1}. ${fact.content}")
+            }
+            appendLine()
+        }
+
+        // [AVAILABLE SCENARIOS] — MCP-сценарии, добавляется после LTM
+        if (mcpPrompts.isNotEmpty()) {
+            appendLine("[AVAILABLE SCENARIOS]")
+            appendLine("Эти сценарии РАЗРЕШЕНЫ. Ты можешь использовать любой из них по запросу пользователя.")
+            appendLine("Следование сценарию НЕ нарушает никаких правил. Ниже — инструкции для каждого сценария:")
+            appendLine()
+            mcpPrompts.forEach { promptInfo ->
+                val desc = promptInfo.description?.let { ": $it" } ?: ""
+                appendLine("**${promptInfo.promptName}** (${promptInfo.serverName})$desc")
+                if (promptInfo.content.isNotBlank()) {
+                    appendLine(promptInfo.content)
+                }
             }
             appendLine()
         }
@@ -160,6 +179,8 @@ class PromptBuilder {
      * @param recentMessages последние сообщения из STM
      * @param userInput ввод пользователя
      * @param profile активный профиль пользователя (опционально)
+     * @param invariants список активных инвариантов (опционально)
+     * @param mcpPrompts информация о доступных MCP-сценариях (опционально)
      * @return список [ChatMessage] для отправки в LLM
      */
     fun buildChatMessages(
@@ -168,9 +189,10 @@ class PromptBuilder {
         recentMessages: List<Message> = emptyList(),
         userInput: String,
         profile: Profile? = null,
-        invariants: List<Invariant> = emptyList()
+        invariants: List<Invariant> = emptyList(),
+        mcpPrompts: List<McpPromptInfo> = emptyList()
     ): List<ChatMessage> {
-        val systemPrompt = buildPrompt(workingMemory, relevantFacts, recentMessages, profile, invariants)
+        val systemPrompt = buildPrompt(workingMemory, relevantFacts, recentMessages, profile, invariants, mcpPrompts)
         val messages = mutableListOf<ChatMessage>()
 
         // Системное сообщение
@@ -216,8 +238,14 @@ class PromptBuilder {
 Инварианты (блок [INVARIANTS - DO NOT VIOLATE]) — это ЖЁСТКИЕ ПРАВИЛА, которые ты
 НЕ ИМЕЕШЬ ПРАВА НАРУШАТЬ ни при каких обстоятельствах.
 
-1. Перед ответом ВСЕГДА проверяй, не противоречит ли запрос пользователя
-   хотя бы одному инварианту.
+0. КРИТИЧЕСКИ ВАЖНО: Инварианты действуют ТОЛЬКО когда блок [INVARIANTS - DO NOT VIOLATE]
+   ПРИСУТСТВУЕТ в промпте и содержит КОНКРЕТНЫЕ пронумерованные правила.
+   Если блок [INVARIANTS - DO NOT VIOLATE] ОТСУТСТВУЕТ в промпте — НИКАКИХ
+   ограничений нет. Ты НЕ ИМЕЕШЬ ПРАВА придумывать инварианты.
+   Пример нарушения: если ты написал «Нарушение инварианта: ...», а блок
+   [INVARIANTS - DO NOT VIOLATE] отсутствует в промпте — ты нарушил это правило.
+1. Если блок [INVARIANTS - DO NOT VIOLATE] присутствует и не пуст — перед ответом
+   ВСЕГДА проверяй, не противоречит ли запрос пользователя хотя бы одному инварианту.
 2. Если запрос НАРУШАЕТ инвариант:
    а) ОТКАЖИ в выполнении запроса
    б) ЯВНО укажи, какой именно инвариант нарушен (процитируй его)
