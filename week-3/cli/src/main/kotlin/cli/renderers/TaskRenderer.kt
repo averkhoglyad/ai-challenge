@@ -29,7 +29,8 @@ class TaskRenderer {
                     TaskStatus.CLOSED -> "${GREEN}✓${RESET}"
                     TaskStatus.CANCELLED -> "${RED}✗${RESET}"
                 }
-                println("  $statusIcon [${task.id.value}] ${task.title}")
+                val eventMarker = if (task.hasEvent()) " 📅 ${task.dueDate}" else ""
+                println("  $statusIcon [${task.id.value}] ${task.title}$eventMarker")
             }
         }
         println()
@@ -42,6 +43,11 @@ class TaskRenderer {
         println("  ${CYAN}Статус:${RESET} ${task.status}")
         println("  ${CYAN}Создана:${RESET} ${task.createdAt}")
         println("  ${CYAN}Обновлена:${RESET} ${task.updatedAt}")
+        if (task.hasEvent()) {
+            println()
+            println("  ${CYAN}📅 Запланировано на:${RESET} ${task.dueDate}")
+            println("     Event ID: ${task.eventId}")
+        }
         println()
         println("  ${CYAN}Описание:${RESET}")
         if (task.hasDescription()) {

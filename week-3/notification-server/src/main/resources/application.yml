@@ -1,0 +1,32 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:sqlite:${app.db.path:notifications.db}
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+  ai:
+    mcp:
+      server:
+        protocol: STREAMABLE
+        annotation-scanner:
+          enabled: true
+  kotlinx:
+    serialization:
+      json:
+        encode-defaults: true
+
+
+logging:
+  level:
+    root: INFO
+    io.averkhogliad.ai.challenge.week3.notification: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
+
+app:
+  db:
+    path: notifications.db  # default: in working directory

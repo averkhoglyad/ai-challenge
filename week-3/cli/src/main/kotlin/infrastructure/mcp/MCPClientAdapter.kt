@@ -11,10 +11,7 @@ import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.ClientOptions
 import io.modelcontextprotocol.kotlin.sdk.client.StdioClientTransport
 import io.modelcontextprotocol.kotlin.sdk.client.StreamableHttpClientTransport
-import io.modelcontextprotocol.kotlin.sdk.types.Implementation
-import io.modelcontextprotocol.kotlin.sdk.types.JSONRPCMessage
-import io.modelcontextprotocol.kotlin.sdk.types.ListToolsRequest
-import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
+import io.modelcontextprotocol.kotlin.sdk.types.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -136,6 +133,11 @@ class MCPClientAdapter : MCPClient {
             )
             emptyList()
         }
+    }
+
+    override suspend fun callTool(name: String, arguments: Map<String, Any?>): CallToolResult {
+        val client = sdkClient ?: throw IllegalStateException("MCP client not connected")
+        return client.callTool(name = name, arguments = arguments)
     }
 
     override fun isConnected(): Boolean = currentState.isConnected()

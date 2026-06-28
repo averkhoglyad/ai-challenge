@@ -1,9 +1,11 @@
-package io.averkhogliad.ai.challenge.week3.cli.application
+package io.averkhogliad.ai.challenge.week3.cli.application.service
 
 import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.MCPConnectionManager
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.MCPServerRepository
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
+import java.net.URI
 
 /**
  * Сервис для управления MCP-серверами.
@@ -134,6 +136,27 @@ class MCPService(
         return Result.success(tools)
     }
 
+    /**
+     * Выполнить инструмент на MCP-сервере.
+     *
+     * @param serverId Идентификатор сервера
+     * @param name Имя инструмента
+     * @param arguments Аргументы инструмента
+     * @return [Result] с текстовым результатом выполнения или [MCPOperationError]
+     */
+    suspend fun callTool(serverId: ModelId, name: String, arguments: Map<String, Any?>): Result<String> {
+        if (!connectionManager.isConnected(serverId))
+            return Result.failure(MCPOperationError.NotConnected(serverId.value))
+
+        return try {
+            val result = connectionManager.callTool(serverId, name, arguments)
+            val textContent = result.content.filterIsInstance<TextContent>().joinToString { it.text }
+            Result.success(textContent)
+        } catch (e: Exception) {
+            Result.failure(MCPOperationError.ConnectionFailed(e.message ?: "Unknown error"))
+        }
+    }
+
     // ──── Private helpers ────
 
     /**
@@ -141,7 +164,7 @@ class MCPService(
      */
     private fun isValidUrl(url: String): Boolean {
         return try {
-            val uri = java.net.URI(url)
+            val uri = URI(url)
             val scheme = uri.scheme
             scheme == "http" || scheme == "https"
         } catch (_: Exception) {

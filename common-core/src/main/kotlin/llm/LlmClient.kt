@@ -1,5 +1,7 @@
 package io.averkhogliad.ai.challenge.utils.llm
 
+import kotlinx.serialization.json.JsonObject
+
 /**
  * Интерфейс клиента для взаимодействия с OpenAI-совместимым LLM API.
  *
@@ -35,7 +37,8 @@ interface LlmClient : AutoCloseable {
         prompt: String,
         systemPrompt: String? = null,
         parameters: ChatParameters = ChatParameters.DEFAULT,
-        model: String? = null
+        model: String? = null,
+        tools: List<JsonObject>? = null
     ): ChatResponse
 
     /**
@@ -52,7 +55,8 @@ interface LlmClient : AutoCloseable {
     suspend fun chatWithMessages(
         messages: List<ChatMessage>,
         parameters: ChatParameters = ChatParameters.DEFAULT,
-        model: String? = null
+        model: String? = null,
+        tools: List<JsonObject>? = null
     ): ChatResponse
 }
 

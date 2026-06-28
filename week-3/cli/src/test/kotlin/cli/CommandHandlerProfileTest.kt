@@ -3,6 +3,7 @@
 import io.averkhogliad.ai.challenge.week3.cli.application.ProfileService
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.Command
+import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.CommandHandler
 import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.ProfileCommandHandler
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult

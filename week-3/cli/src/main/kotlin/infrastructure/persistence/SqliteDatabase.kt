@@ -42,11 +42,11 @@ class SqliteDatabase(
 
     companion object {
         /**
-         * Возвращает путь к БД по умолчанию: ~/.ai-challenge/week2.db
+         * Возвращает путь к БД по умолчанию: ~/.ai-challenge/week3.db
          */
         fun defaultDbPath(): String {
             val home = System.getProperty("user.home")
-            return "$home/.ai-challenge/week2.db"
+            return "$home/.ai-challenge/week3.db"
         }
     }
 }

@@ -81,4 +81,22 @@ interface TaskRepository {
      * @return список шагов задачи, отсортированный по порядку выполнения
      */
     suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep>
+
+    /**
+     * Привязывает событие к задаче.
+     *
+     * @param taskId идентификатор задачи
+     * @param eventId идентификатор события
+     * @param dueDate дата выполнения
+     * @return Result.success если обновление прошло успешно, Result.failure при ошибке
+     */
+    suspend fun updateEvent(taskId: TaskId, eventId: java.util.UUID, dueDate: java.time.LocalDate): Result<Unit>
+
+    /**
+     * Отвязывает событие от задачи.
+     *
+     * @param taskId идентификатор задачи
+     * @return Result.success если обновление прошло успешно, Result.failure при ошибке
+     */
+    suspend fun clearEvent(taskId: TaskId): Result<Unit>
 }

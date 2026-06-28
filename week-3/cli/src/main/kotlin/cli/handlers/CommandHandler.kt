@@ -1,6 +1,7 @@
-﻿package io.averkhogliad.ai.challenge.week3.cli.cli
+﻿package io.averkhogliad.ai.challenge.week3.cli.cli.handlers
 
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.TaskExecutor
+import io.averkhogliad.ai.challenge.week3.cli.cli.CliState
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.Command
 import io.averkhogliad.ai.challenge.week3.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult

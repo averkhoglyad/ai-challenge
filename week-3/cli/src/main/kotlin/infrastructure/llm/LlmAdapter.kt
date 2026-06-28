@@ -5,7 +5,12 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.DomainFunctionCall
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.DomainToolCall
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTool
+import io.averkhogliad.ai.challenge.week3.cli.domain.service.ChatRole
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.LlmPort
+import kotlinx.serialization.json.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.ChatMessage as DomainChatMessage
 
 /**
@@ -41,31 +46,28 @@ class LlmAdapter(
     private val availableModels: List<ModelId> = listOf(defaultModelId)
 ) : LlmPort {
 
-    override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
-        return executeLlmCall {
-            val params = mapToChatParameters(config)
-            val model = resolveModelId(config.modelId)
-            llmClient.chat(
-                prompt = prompt.value,
-                systemPrompt = null,
-                parameters = params,
-                model = model
-            )
-        }
+    override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>?): TaskResult {
+        val messages = listOf(
+            DomainChatMessage.user(prompt.value)
+        )
+        return chatWithMessages(messages, config, tools)
     }
 
     override suspend fun chatWithMessages(
         messages: List<DomainChatMessage>,
-        config: TaskExecutionConfig
+        config: TaskExecutionConfig,
+        tools: List<MCPTool>?
     ): TaskResult {
         return executeLlmCall {
             val params = mapToChatParameters(config)
             val model = resolveModelId(config.modelId)
             val infraMessages = mapToInfrastructureChatMessages(messages)
+            val jsonTools = tools?.let { convertTools(it) }
             llmClient.chatWithMessages(
                 messages = infraMessages,
                 parameters = params,
-                model = model
+                model = model,
+                tools = jsonTools,
             )
         }
     }
@@ -112,7 +114,71 @@ class LlmAdapter(
     private fun mapToInfrastructureChatMessages(
         domainMessages: List<DomainChatMessage>
     ): List<ChatMessage> {
-        return domainMessages.map { ChatMessage(role = it.role.roleName, content = it.content) }
+        return domainMessages.mapNotNull { dm ->
+            when {
+                dm.role == ChatRole.TOOL -> {
+                    val callId = dm.toolCallId
+                    if (callId.isNullOrBlank()) {
+                        System.err.println(
+                            "[WARN] Skipping tool message with empty tool_call_id, content: ${
+                                dm.content.take(
+                                    50
+                                )
+                            }"
+                        )
+                        null
+                    } else {
+                        ChatMessage.tool(toolCallId = callId, content = dm.content)
+                    }
+                }
+
+                dm.toolCalls != null -> {
+                    ChatMessage.assistantWithToolCalls(
+                        content = dm.content,
+                        toolCalls = mapDomainToolCalls(dm.toolCalls) ?: emptyList()
+                    )
+                }
+
+                else -> ChatMessage(role = dm.role.roleName, content = dm.content)
+            }
+        }
+    }
+
+    // ──── MCP Tools conversion ────
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * Конвертирует список [MCPTool] в OpenAI-совместимый формат tools.
+     *
+     * Каждый MCPTool преобразуется в JsonObject вида:
+     * ```json
+     * {
+     *   "type": "function",
+     *   "function": {
+     *     "name": "...",
+     *     "description": "...",
+     *     "parameters": { "type": "object", "properties": {...}, "required": [...] }
+     *   }
+     * }
+     * ```
+     */
+    private fun convertTools(tools: List<MCPTool>): List<JsonObject> {
+        return tools.map { tool ->
+            val schema = json.parseToJsonElement(tool.parametersSchema).jsonObject
+            buildJsonObject {
+                put("type", "function")
+                put("function", buildJsonObject {
+                    put("name", tool.name)
+                    tool.description?.let { put("description", it) }
+                    put("parameters", buildJsonObject {
+                        put("type", schema["type"] ?: JsonPrimitive("object"))
+                        schema["properties"]?.let { put("properties", it) }
+                        schema["required"]?.let { put("required", it) }
+                    })
+                })
+            }
+        }
     }
 
     /** Маппинг infrastructure [ChatResponse] → domain [TaskResult]. */
@@ -128,8 +194,26 @@ class LlmAdapter(
 
         return when {
             response.isFiltered() -> TaskResult.Error("Response was blocked by content filter")
-            response.isTruncated() -> TaskResult.Partial(content = response.content, progress = 1.0)
-            else -> TaskResult.Success(content = response.content, metadata = metadata)
+            response.isTruncated() -> TaskResult.Partial(content = response.content ?: "", progress = 1.0)
+            else -> TaskResult.Success(
+                content = response.content ?: "",
+                metadata = metadata,
+                toolCalls = mapToolCalls(response.toolCalls)
+            )
         }
     }
+
+    /** Маппинг utils [ToolCall] → domain [DomainToolCall]. */
+    private fun mapToolCalls(utilsToolCalls: List<ToolCall>?): List<DomainToolCall>? =
+        utilsToolCalls?.map {
+            DomainToolCall(
+                it.id,
+                it.type,
+                DomainFunctionCall(it.function.name, it.function.arguments)
+            )
+        }
+
+    /** Маппинг domain [DomainToolCall] → utils [ToolCall]. */
+    private fun mapDomainToolCalls(domainToolCalls: List<DomainToolCall>?): List<ToolCall>? =
+        domainToolCalls?.map { ToolCall(it.id, it.type, FunctionCall(it.function.name, it.function.arguments)) }
 }

@@ -181,7 +181,8 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
         prompt: String,
         systemPrompt: String?,
         parameters: ChatParameters,
-        model: String?
+        model: String?,
+        tools: List<JsonObject>?
     ): ChatResponse {
         val effectiveModel = (model?.takeIf { it.isNotBlank() } ?: clientConfig.model)
         require(effectiveModel.isNotBlank()) { "Model ID cannot be blank" }
@@ -191,19 +192,20 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
             add(ChatMessage.user(prompt))
         }
 
-        val request = ChatRequest.create(effectiveModel, messages, parameters)
+        val request = ChatRequest.create(effectiveModel, messages, parameters, tools)
         return sendRequest(request)
     }
 
     override suspend fun chatWithMessages(
         messages: List<ChatMessage>,
         parameters: ChatParameters,
-        model: String?
+        model: String?,
+        tools: List<JsonObject>?
     ): ChatResponse {
         val effectiveModel = (model?.takeIf { it.isNotBlank() } ?: clientConfig.model)
         require(effectiveModel.isNotBlank()) { "Model ID cannot be blank" }
 
-        val request = ChatRequest.create(effectiveModel, messages, parameters)
+        val request = ChatRequest.create(effectiveModel, messages, parameters, tools)
         return sendRequest(request)
     }
 
@@ -211,7 +213,7 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
         applyRateLimit()  // Применяем rate-limit перед каждым запросом
 
         val requestBody = json.encodeToString(ChatRequest.serializer(), request)
-        5
+
         val httpRequest = HttpRequest.newBuilder()
             .uri(URI.create("${clientConfig.baseUrl}/v1/chat/completions"))
             .timeout(clientConfig.requestTimeout.toJavaDuration())
@@ -265,8 +267,7 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
         val message = firstChoice["message"]?.jsonObject
             ?: throw LlmException("API response missing 'message' field in first choice")
 
-        val content = message["content"]?.jsonPrimitive?.content
-            ?: throw LlmException("API response missing 'content' field in message")
+        val content = message["content"]?.jsonPrimitive?.contentOrNull
 
         val finishReason = firstChoice["finish_reason"]?.jsonPrimitive?.contentOrNull
 
@@ -278,10 +279,23 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
             )
         }
 
+        val toolCalls = message["tool_calls"]?.jsonArray?.map { toolCallJson ->
+            val obj = toolCallJson.jsonObject
+            ToolCall(
+                id = obj["id"]!!.jsonPrimitive.content,
+                type = obj["type"]?.jsonPrimitive?.content ?: "function",
+                function = FunctionCall(
+                    name = obj["function"]!!.jsonObject["name"]!!.jsonPrimitive.content,
+                    arguments = obj["function"]!!.jsonObject["arguments"]!!.jsonPrimitive.content
+                )
+            )
+        }
+
         return ChatResponse(
             content = content,
             finishReason = finishReason,
-            usage = usage
+            usage = usage,
+            toolCalls = toolCalls
         )
     }
 

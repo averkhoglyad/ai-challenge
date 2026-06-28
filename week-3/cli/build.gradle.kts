@@ -28,6 +28,10 @@ dependencies {
     // Ktor CIO engine (required by MCP SDK).
     implementation(libs.ktorClientCio)
 
+    // Ktor Content Negotiation + kotlinx.serialization JSON (REST clients for Task3).
+    implementation(libs.ktorClientContentNegotiation)
+    implementation(libs.ktorSerializationKotlinxJson)
+
     // Testing
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)

@@ -3,6 +3,8 @@
 import io.averkhogliad.ai.challenge.week3.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.DomainToolCall
+import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTool
 import java.time.Instant
 
 /**
@@ -24,7 +26,7 @@ interface LlmPort {
      * @param config конфигурация выполнения (temperature, maxTokens, modelId и др.)
      * @return результат выполнения: [TaskResult.Success], [TaskResult.Error] или [TaskResult.Partial]
      */
-    suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult
+    suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>? = null): TaskResult
 
     /**
      * Отправляет последовательность сообщений модели (chat history).
@@ -35,7 +37,11 @@ interface LlmPort {
      * @param config конфигурация выполнения
      * @return результат выполнения
      */
-    suspend fun chatWithMessages(messages: List<ChatMessage>, config: TaskExecutionConfig): TaskResult
+    suspend fun chatWithMessages(
+        messages: List<ChatMessage>,
+        config: TaskExecutionConfig,
+        tools: List<MCPTool>? = null
+    ): TaskResult
 
     /**
      * Возвращает список доступных моделей.
@@ -54,7 +60,8 @@ interface LlmPort {
 enum class ChatRole {
     SYSTEM,
     USER,
-    ASSISTANT;
+    ASSISTANT,
+    TOOL;
 
     /** Infrastructure-friendly строковое представление роли (lowercase). */
     val roleName: String get() = name.lowercase()
@@ -74,7 +81,9 @@ enum class ChatRole {
 data class ChatMessage(
     val role: ChatRole,
     val content: String,
-    val createdAt: Instant = Instant.now()
+    val createdAt: Instant = Instant.now(),
+    val toolCallId: String? = null,
+    val toolCalls: List<DomainToolCall>? = null
 ) {
     companion object {
         /** Создаёт системное сообщение для установки контекста и инструкций модели. */
@@ -85,5 +94,13 @@ data class ChatMessage(
 
         /** Создаёт сообщение от ассистента (используется в few-shot примерах). */
         fun assistant(content: String) = ChatMessage(ChatRole.ASSISTANT, content, Instant.now())
+
+        /** Создаёт сообщение от ассистента с вызовами инструментов. */
+        fun assistantWithToolCalls(content: String, toolCalls: List<DomainToolCall>) =
+            ChatMessage(ChatRole.ASSISTANT, content, Instant.now(), toolCalls = toolCalls)
+
+        /** Создаёт сообщение с результатом выполнения инструмента. */
+        fun tool(toolCallId: String, content: String) =
+            ChatMessage(ChatRole.TOOL, content, Instant.now(), toolCallId = toolCallId)
     }
 }

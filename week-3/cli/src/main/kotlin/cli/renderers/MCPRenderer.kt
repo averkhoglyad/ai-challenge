@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week3.cli.cli.renderers
 
-import io.averkhogliad.ai.challenge.week3.cli.application.ServerWithStatus
+import io.averkhogliad.ai.challenge.week3.cli.application.service.ServerWithStatus
 import io.averkhogliad.ai.challenge.week3.cli.cli.renderers.ConsoleColors.CYAN
 import io.averkhogliad.ai.challenge.week3.cli.cli.renderers.ConsoleColors.GREEN
 import io.averkhogliad.ai.challenge.week3.cli.cli.renderers.ConsoleColors.RED
@@ -27,15 +27,15 @@ class MCPRenderer {
         } else {
             println("${CYAN}\uD83D\uDD0C MCP-серверы:${RESET}")
             println("${CYAN}${hline}${RESET}")
-            println("  ${CYAN}ID                                 Имя               Транспорт      Статус${RESET}")
+            println("  ${CYAN}Имя                                     ID                              Транспорт      Статус${RESET}")
             println("${CYAN}${hline}${RESET}")
             servers.forEach { server ->
+                val name = server.config.name.padEnd(40)
                 val id = server.config.id.value.take(8)
-                val name = server.config.name.take(15).padEnd(15)
                 val transport = transportLabel(server.config)
                 val statusStr = statusText(server.status)
                 val color = statusColor(server.status)
-                println("  $id...  $name  ${transport.padEnd(14)}  ${color}$statusStr${RESET}")
+                println("  $name $id...  ${transport.padEnd(14)}  ${color}$statusStr${RESET}")
             }
             println("${CYAN}${hline}${RESET}")
         }

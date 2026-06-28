@@ -84,6 +84,16 @@ class DefaultMCPConnectionManager(
         return if (client.isConnected()) client.listTools() else emptyList()
     }
 
+    override suspend fun callTool(
+        serverId: ModelId,
+        name: String,
+        arguments: Map<String, Any?>
+    ): io.modelcontextprotocol.kotlin.sdk.types.CallToolResult {
+        val client = clients[serverId]
+            ?: throw IllegalStateException("MCP client for server $serverId not found")
+        return client.callTool(name, arguments)
+    }
+
     override fun isConnected(serverId: ModelId): Boolean {
         return clients[serverId]?.isConnected() == true
     }

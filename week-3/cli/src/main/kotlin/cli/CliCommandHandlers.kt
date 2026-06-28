@@ -15,4 +15,5 @@ data class CliCommandHandlers(
     val invariant: InvariantCommandHandler,
     val profile: ProfileCommandHandler,
     val mcp: MCPCommandHandler,
+    val events: EventsCommandHandler,
 )

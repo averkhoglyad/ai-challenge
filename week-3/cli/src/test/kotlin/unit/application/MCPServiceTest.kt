@@ -1,5 +1,7 @@
 package io.averkhogliad.ai.challenge.week3.cli.application
 
+import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPOperationError
+import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
 import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.MCPConnectionManager

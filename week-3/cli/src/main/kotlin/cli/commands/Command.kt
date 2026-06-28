@@ -1,7 +1,6 @@
 ﻿package io.averkhogliad.ai.challenge.week3.cli.cli.commands
 
 import io.averkhogliad.ai.challenge.week3.cli.application.handler.DebugAction
-import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTransport
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskId
 
@@ -330,23 +329,23 @@ sealed interface Command {
     /** Добавить MCP-сервер с указанным транспортом */
     data class McpAddServer(val name: String, val transport: MCPTransport) : Command
 
-    /** Запрос на удаление MCP-сервера: `:mcp-remove <id>` */
+    /** Запрос на удаление MCP-сервера: `:mcp-remove <name>` */
     data object McpRemoveServerRequest : Command
 
-    /** Удалить MCP-сервер по ID */
-    data class McpRemoveServer(val id: ModelId) : Command
+    /** Удалить MCP-сервер по имени */
+    data class McpRemoveServer(val serverName: String) : Command
 
     /** Список всех MCP-серверов: `:mcp-list` */
     data object McpListServers : Command
 
-    /** Подключиться к MCP-серверу: `:mcp-connect <id>` */
-    data class McpConnectServer(val id: ModelId) : Command
+    /** Подключиться к MCP-серверу: `:mcp-connect <name>` */
+    data class McpConnectServer(val serverName: String) : Command
 
-    /** Отключиться от MCP-сервера: `:mcp-disconnect <id>` */
-    data class McpDisconnectServer(val id: ModelId) : Command
+    /** Отключиться от MCP-сервера: `:mcp-disconnect <name>` */
+    data class McpDisconnectServer(val serverName: String) : Command
 
-    /** Показать инструменты MCP-сервера: `:mcp-tools <id>` */
-    data class McpToolsServer(val id: ModelId) : Command
+    /** Показать инструменты MCP-сервера: `:mcp-tools <name>` */
+    data class McpToolsServer(val serverName: String) : Command
 
     // ═══════════════════════════════════════════════════════════════
     // Команды управления инвариантами агента
@@ -373,6 +372,16 @@ sealed interface Command {
 
     /** Пользователь ввёл текст промпта */
     data class UserInput(val text: String) : Command
+
+    // ═══════════════════════════════════════════════════════════════
+    // Команды управления событиями и уведомлениями (Wave 4 / Task3)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Создать событие в календаре: `:create-event <date>` */
+    data class CreateEvent(val date: java.time.LocalDate) : Command
+
+    /** Показать уведомления: `:notes [limit]` */
+    data class ListNotes(val limit: Int?) : Command
 
     /** Неизвестная команда (начинается с ':' но не распознана) */
     data class Unknown(val raw: String) : Command

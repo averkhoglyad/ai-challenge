@@ -1,7 +1,7 @@
 package io.averkhogliad.ai.challenge.week3.cli.cli.handlers
 
-import io.averkhogliad.ai.challenge.week3.cli.application.MCPOperationError
-import io.averkhogliad.ai.challenge.week3.cli.application.MCPService
+import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPOperationError
+import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
 import io.averkhogliad.ai.challenge.week3.cli.cli.CliState
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.Command
 import io.averkhogliad.ai.challenge.week3.cli.cli.renderers.MCPRenderer
@@ -102,11 +102,11 @@ class MCPCommandHandler(
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // McpRemoveServerRequest — запрос ID для удаления
+    // McpRemoveServerRequest — запрос имени для удаления
     // ═══════════════════════════════════════════════════════════════
 
     suspend fun handleMcpRemoveServerRequest(state: CliState): CliState {
-        renderer.renderError("Укажите ID сервера для удаления: :mcp-remove <id>")
+        renderer.renderError("Укажите имя сервера для удаления: :mcp-remove <name>")
         return state
     }
 
@@ -115,7 +115,13 @@ class MCPCommandHandler(
     // ═══════════════════════════════════════════════════════════════
 
     suspend fun handleMcpRemoveServer(command: Command.McpRemoveServer, state: CliState): CliState {
-        val result = mcpService.removeServer(command.id)
+        val servers = mcpService.listServers()
+        val server = servers.find { it.config.name == command.serverName }
+        if (server == null) {
+            renderer.renderError("Сервер '${command.serverName}' не найден")
+            return state
+        }
+        val result = mcpService.removeServer(server.config.id)
         result.onSuccess { name -> renderer.renderServerRemoved(name) }
         result.onFailure { error ->
             renderer.renderError((error as? MCPOperationError)?.message ?: error.message ?: "Unknown error")
@@ -128,23 +134,25 @@ class MCPCommandHandler(
     // ═══════════════════════════════════════════════════════════════
 
     suspend fun handleMcpConnectServer(command: Command.McpConnectServer, state: CliState): CliState {
-        val result = mcpService.connect(command.id)
+        val servers = mcpService.listServers()
+        val server = servers.find { it.config.name == command.serverName }
+        if (server == null) {
+            renderer.renderError("Сервер '${command.serverName}' не найден")
+            return state
+        }
+        val result = mcpService.connect(server.config.id)
         result.onSuccess { connectionState ->
-            val servers = mcpService.listServers()
-            val server = servers.find { it.config.id == command.id }
-            if (server != null) {
-                when (connectionState) {
-                    is io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState.Connected ->
-                        renderer.renderConnectionSuccess(server.config)
+            when (connectionState) {
+                is io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState.Connected ->
+                    renderer.renderConnectionSuccess(server.config)
 
-                    is io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState.Connecting ->
-                        renderer.renderConnecting(server.config.name)
+                is io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState.Connecting ->
+                    renderer.renderConnecting(server.config.name)
 
-                    is io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState.Disconnected ->
-                        renderer.renderDisconnected(server.config.name)
+                is io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPConnectionState.Disconnected ->
+                    renderer.renderDisconnected(server.config.name)
 
-                    else -> {} // Failed handled in onFailure
-                }
+                else -> {} // Failed handled in onFailure
             }
         }
         result.onFailure { error ->
@@ -160,9 +168,13 @@ class MCPCommandHandler(
     suspend fun handleMcpDisconnectServer(command: Command.McpDisconnectServer, state: CliState): CliState {
         try {
             val servers = mcpService.listServers()
-            val name = servers.find { it.config.id == command.id }?.config?.name ?: command.id.value
-            mcpService.disconnect(command.id)
-            renderer.renderDisconnected(name)
+            val server = servers.find { it.config.name == command.serverName }
+            if (server == null) {
+                renderer.renderError("Сервер '${command.serverName}' не найден")
+                return state
+            }
+            mcpService.disconnect(server.config.id)
+            renderer.renderDisconnected(server.config.name)
         } catch (e: Exception) {
             renderer.renderError(e.message ?: "Unknown error")
         }
@@ -174,7 +186,13 @@ class MCPCommandHandler(
     // ═══════════════════════════════════════════════════════════════
 
     suspend fun handleMcpToolsServer(command: Command.McpToolsServer, state: CliState): CliState {
-        val result = mcpService.getTools(command.id)
+        val servers = mcpService.listServers()
+        val server = servers.find { it.config.name == command.serverName }
+        if (server == null) {
+            renderer.renderError("Сервер '${command.serverName}' не найден")
+            return state
+        }
+        val result = mcpService.getTools(server.config.id)
         result.onSuccess { tools -> renderer.renderToolsList(tools) }
         result.onFailure { error ->
             renderer.renderError((error as? MCPOperationError)?.message ?: error.message ?: "Unknown error")

@@ -1,7 +1,6 @@
 ﻿package io.averkhogliad.ai.challenge.week3.cli.cli.commands
 
 import io.averkhogliad.ai.challenge.week3.cli.application.handler.DebugAction
-import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTransport
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskId
 
@@ -26,7 +25,24 @@ data class CommandContext(
         )
 
         /** Глобальные команды, доступные всегда. */
-        val GLOBAL_COMMANDS = setOf("help", "h", "quit", "q", "back", "b", "debug", "state", "abort")
+        val GLOBAL_COMMANDS = setOf(
+            "help",
+            "h",
+            "quit",
+            "q",
+            "back",
+            "b",
+            "debug",
+            "state",
+            "abort",
+            "mcp-add",
+            "mcp-list",
+            "mcp-remove",
+            "mcp-connect",
+            "mcp-disconnect",
+            "mcp-tools",
+            "notes"
+        )
 
         /**
          * Command roots routed by CliCommandDispatcher in a normal active CLI context.
@@ -46,7 +62,8 @@ data class CommandContext(
             "mcp-add", "mcp-list", "mcp-remove", "mcp-connect", "mcp-disconnect", "mcp-tools",
             "invariant",
             "compression", "comp",
-            "strategy", "branch", "checkpoint", "facts"
+            "strategy", "branch", "checkpoint", "facts",
+            "create-event", "notes"
         )
 
         fun activeTaskContext(taskId: Int = 1): CommandContext = CommandContext(
@@ -241,6 +258,10 @@ object CommandParser {
 
             // Команды управления инвариантами агента
             "invariant" -> parseInvariantCommand(args, raw)
+
+            // Команды управления событиями и уведомлениями (Wave 4 / Task3)
+            "create-event" -> parseCreateEventCommand(args, raw)
+            "notes" -> parseListNotesCommand(args)
 
             else -> Command.Unknown(raw)
         }
@@ -723,51 +744,78 @@ object CommandParser {
     }
 
     /**
-     * Парсит команду удаления MCP-сервера: `:mcp-remove <id>`.
-     * ID обязателен.
+     * Парсит команду удаления MCP-сервера: `:mcp-remove <name>`.
+     * Имя обязательно.
      */
     internal fun parseMcpRemoveCommand(args: String, raw: String): Command {
         return if (args.isEmpty()) {
             Command.McpRemoveServerRequest
         } else {
-            Command.McpRemoveServer(ModelId(args))
+            Command.McpRemoveServer(args)
         }
     }
 
     /**
-     * Парсит команду подключения к MCP-серверу: `:mcp-connect <id>`.
-     * ID обязателен.
+     * Парсит команду подключения к MCP-серверу: `:mcp-connect <name>`.
+     * Имя обязательно.
      */
     internal fun parseMcpConnectCommand(args: String, raw: String): Command {
         return if (args.isEmpty()) {
             Command.Unknown(raw)
         } else {
-            Command.McpConnectServer(ModelId(args))
+            Command.McpConnectServer(args)
         }
     }
 
     /**
-     * Парсит команду отключения от MCP-сервера: `:mcp-disconnect <id>`.
-     * ID обязателен.
+     * Парсит команду отключения от MCP-сервера: `:mcp-disconnect <name>`.
+     * Имя обязательно.
      */
     internal fun parseMcpDisconnectCommand(args: String, raw: String): Command {
         return if (args.isEmpty()) {
             Command.Unknown(raw)
         } else {
-            Command.McpDisconnectServer(ModelId(args))
+            Command.McpDisconnectServer(args)
         }
     }
 
     /**
-     * Парсит команду получения инструментов MCP-сервера: `:mcp-tools <id>`.
-     * ID обязателен.
+     * Парсит команду получения инструментов MCP-сервера: `:mcp-tools <name>`.
+     * Имя обязательно.
      */
     internal fun parseMcpToolsCommand(args: String, raw: String): Command {
         return if (args.isEmpty()) {
             Command.Unknown(raw)
         } else {
-            Command.McpToolsServer(ModelId(args))
+            Command.McpToolsServer(args)
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Парсинг команд управления событиями и уведомлениями (Wave 4 / Task3)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Парсит команду создания события: `:create-event <date>`.
+     * Дата в формате YYYY-MM-DD обязательна.
+     */
+    internal fun parseCreateEventCommand(args: String, raw: String): Command {
+        if (args.isEmpty()) return Command.Unknown(raw)
+        return try {
+            val date = java.time.LocalDate.parse(args)
+            Command.CreateEvent(date)
+        } catch (e: Exception) {
+            Command.Unknown(raw)
+        }
+    }
+
+    /**
+     * Парсит команду просмотра уведомлений: `:notes [limit]`.
+     * limit опционален (дефолт 20).
+     */
+    internal fun parseListNotesCommand(args: String): Command {
+        val limit = if (args.isEmpty()) null else args.toIntOrNull()
+        return Command.ListNotes(limit)
     }
 
 }

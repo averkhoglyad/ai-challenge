@@ -3,6 +3,7 @@
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week3.cli.application.service.TodoTaskService
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.Command
+import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.CommandHandler
 import io.averkhogliad.ai.challenge.week3.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult
@@ -56,7 +57,7 @@ private class InMemoryTaskRepository : TaskRepository {
 }
 
 /**
- * Тесты для [CommandHandler] — обработчика команд CLI.
+ * Тесты для [io.averkhogliad.ai.challenge.week3.cli.cli.handlers.CommandHandler] — обработчика команд CLI.
  *
  * Проверяют:
  * - Корректную обработку всех типов команд

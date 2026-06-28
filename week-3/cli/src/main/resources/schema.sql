@@ -3,8 +3,13 @@ CREATE TABLE IF NOT EXISTS tasks (
     title TEXT NOT NULL,
     status TEXT NOT NULL CHECK(status IN ('OPEN', 'CLOSED', 'CANCELLED')),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    event_id TEXT,
+    due_date TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_tasks_event_id ON tasks(event_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 
 CREATE TABLE IF NOT EXISTS task_steps (
     id TEXT PRIMARY KEY,

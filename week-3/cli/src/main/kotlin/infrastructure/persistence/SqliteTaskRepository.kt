@@ -4,8 +4,9 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.TaskRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
 import java.time.Instant
+import java.time.LocalDate
+import java.util.*
 
 /**
  * Реализация [TaskRepository] на SQLite через JDBC.
@@ -20,7 +21,7 @@ import java.time.Instant
  *
  * ## Особенности
  * - Автоматическое создание схемы при инициализации
- * - Файл БД создаётся в директории ~/ai-challenge/week2.db
+ * - Файл БД создаётся в директории ~/ai-challenge/week3.db
  * - Поддержка транзакций для атомарности операций
  * - Автоматическое создание директории, если она не существует
  *
@@ -48,7 +49,9 @@ class SqliteTaskRepository(
                     title TEXT NOT NULL,
                     status TEXT NOT NULL CHECK(status IN ('OPEN', 'CLOSED', 'CANCELLED')),
                     created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
+                    updated_at TEXT NOT NULL,
+                    event_id TEXT,
+                    due_date TEXT
                 )
             """.trimIndent()
             )
@@ -71,8 +74,8 @@ class SqliteTaskRepository(
 
     override suspend fun save(task: Task): Unit = withContext(Dispatchers.IO) {
         val sql = """
-            INSERT OR REPLACE INTO tasks (id, title, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO tasks (id, title, status, created_at, updated_at, event_id, due_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         """.trimIndent()
 
         connection.prepareStatement(sql).use { stmt ->
@@ -81,12 +84,22 @@ class SqliteTaskRepository(
             stmt.setString(3, task.status.name)
             stmt.setString(4, task.createdAt.toString())
             stmt.setString(5, task.updatedAt.toString())
+            if (task.eventId != null) {
+                stmt.setString(6, task.eventId.toString())
+            } else {
+                stmt.setNull(6, java.sql.Types.VARCHAR)
+            }
+            if (task.dueDate != null) {
+                stmt.setString(7, task.dueDate.toString())
+            } else {
+                stmt.setNull(7, java.sql.Types.VARCHAR)
+            }
             stmt.executeUpdate()
         }
     }
 
     override suspend fun findById(id: TaskId): Task? = withContext(Dispatchers.IO) {
-        val sql = "SELECT id, title, status, created_at, updated_at FROM tasks WHERE id = ?"
+        val sql = "SELECT id, title, status, created_at, updated_at, event_id, due_date FROM tasks WHERE id = ?"
 
         connection.prepareStatement(sql).use { stmt ->
             stmt.setString(1, id.value)
@@ -101,7 +114,8 @@ class SqliteTaskRepository(
     }
 
     override suspend fun findAll(): List<Task> = withContext(Dispatchers.IO) {
-        val sql = "SELECT id, title, status, created_at, updated_at FROM tasks ORDER BY created_at DESC"
+        val sql =
+            "SELECT id, title, status, created_at, updated_at, event_id, due_date FROM tasks ORDER BY created_at DESC"
 
         connection.createStatement().use { stmt ->
             stmt.executeQuery(sql).use { rs ->
@@ -186,12 +200,16 @@ class SqliteTaskRepository(
      * Маппит строку ResultSet в доменную модель Task.
      */
     private fun mapRowToTask(rs: java.sql.ResultSet): Task {
+        val eventIdStr = rs.getString("event_id")
+        val dueDateStr = rs.getString("due_date")
         return Task(
             id = TaskId(rs.getString("id")),
             title = rs.getString("title"),
             status = TaskStatus.valueOf(rs.getString("status")),
             createdAt = Instant.parse(rs.getString("created_at")),
-            updatedAt = Instant.parse(rs.getString("updated_at"))
+            updatedAt = Instant.parse(rs.getString("updated_at")),
+            eventId = if (eventIdStr != null) UUID.fromString(eventIdStr) else null,
+            dueDate = if (dueDateStr != null) LocalDate.parse(dueDateStr) else null
         )
     }
 
@@ -209,5 +227,32 @@ class SqliteTaskRepository(
         )
     }
 
+    override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val sql = "UPDATE tasks SET event_id = ?, due_date = ?, updated_at = ? WHERE id = ?"
+                connection.prepareStatement(sql).use { stmt ->
+                    stmt.setString(1, eventId.toString())
+                    stmt.setString(2, dueDate.toString())
+                    stmt.setString(3, Instant.now().toString())
+                    stmt.setString(4, taskId.value)
+                    stmt.executeUpdate()
+                    Unit
+                }
+            }
+        }
+
+    override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val sql = "UPDATE tasks SET event_id = NULL, due_date = NULL, updated_at = ? WHERE id = ?"
+                connection.prepareStatement(sql).use { stmt ->
+                    stmt.setString(1, Instant.now().toString())
+                    stmt.setString(2, taskId.value)
+                    stmt.executeUpdate()
+                    Unit
+                }
+            }
+        }
 
 }

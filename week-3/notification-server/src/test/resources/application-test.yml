@@ -1,0 +1,25 @@
+server:
+  port: 0
+
+spring:
+  main:
+    banner-mode: off
+  datasource:
+    url: jdbc:sqlite:file::memory:?cache=shared
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+  ai:
+    mcp:
+      server:
+        annotation-scanner:
+          enabled: false
+  kotlinx:
+    serialization:
+      json:
+        encode-defaults: true
+
+logging:
+  level:
+    io.averkhogliad.ai.challenge.week3.notification: DEBUG

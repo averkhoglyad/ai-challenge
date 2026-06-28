@@ -2,6 +2,7 @@ package io.averkhogliad.ai.challenge.utils.llm
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Запрос к OpenAI-совместимому Chat Completion API.
@@ -22,7 +23,8 @@ internal data class ChatRequest(
     val maxTokens: Int? = null,
     val stop: List<String>? = null,
     @SerialName("response_format")
-    val responseFormat: ChatParameters.ResponseFormat? = null
+    val responseFormat: ChatParameters.ResponseFormat? = null,
+    val tools: List<JsonObject>? = null
 ) {
     companion object {
         /**
@@ -31,14 +33,16 @@ internal data class ChatRequest(
         fun create(
             model: String,
             messages: List<ChatMessage>,
-            parameters: ChatParameters = ChatParameters.DEFAULT
+            parameters: ChatParameters = ChatParameters.DEFAULT,
+            tools: List<JsonObject>? = null
         ): ChatRequest = ChatRequest(
             model = model,
             messages = messages,
             temperature = parameters.temperature,
             maxTokens = parameters.maxTokens,
             stop = parameters.stop,
-            responseFormat = parameters.responseFormat
+            responseFormat = parameters.responseFormat,
+            tools = tools
         )
     }
 }

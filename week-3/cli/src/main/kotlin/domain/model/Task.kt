@@ -1,6 +1,8 @@
 ﻿package io.averkhogliad.ai.challenge.week3.cli.domain.model
 
 import java.time.Instant
+import java.time.LocalDate
+import java.util.*
 
 /**
  * Доменная модель задачи в системе управления задачами.
@@ -17,12 +19,15 @@ import java.time.Instant
  * - [status] — текущий статус задачи
  * - [createdAt] — время создания задачи
  * - [updatedAt] — время последнего обновления задачи
+ * - [eventId] — идентификатор привязанного события (опционально)
+ * - [dueDate] — дата выполнения (опционально)
  *
  * ## Бизнес-логика
  * - [close()] — завершает задачу
  * - [cancel()] — отменяет задачу
  * - [updateTitle()] — обновляет название задачи
  * - [updateDescription()] — обновляет описание задачи
+ * - [hasEvent()] — проверяет, привязано ли событие
  */
 data class Task(
     val id: TaskId,
@@ -30,7 +35,9 @@ data class Task(
     val description: String? = null,
     val status: TaskStatus,
     val createdAt: Instant,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    val eventId: UUID? = null,
+    val dueDate: LocalDate? = null
 ) {
     init {
         require(title.isNotBlank()) { "Task title cannot be blank" }
@@ -94,4 +101,11 @@ data class Task(
      * Проверяет, есть ли у задачи описание.
      */
     fun hasDescription(): Boolean = description != null && description.isNotBlank()
+
+    /**
+     * Проверяет, привязано ли к задаче событие (event).
+     */
+    fun hasEvent(): Boolean = eventId != null
+
+
 }

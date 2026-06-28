@@ -1,0 +1,1 @@
+org.springframework.data.jdbc.core.dialect.DialectResolver$JdbcDialectProvider=io.averkhogliad.ai.challenge.week3.events.core.persistence.SqliteDialectProvider

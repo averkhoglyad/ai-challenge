@@ -140,6 +140,18 @@ class ConsoleCliRenderer : CliRenderer {
             println("${CYAN}📖 Доступные команды:${RESET}")
             println("  ${CYAN}:help, :h${RESET}     — эта справка")
             println("  ${CYAN}:quit, :q${RESET}     — выход из программы")
+            println("  ${CYAN}:notes [limit]${RESET} — показать уведомления (дефолт: 20)")
+            println()
+
+            println("${CYAN}🔌 MCP-серверы:${RESET}")
+            println("  ${CYAN}:mcp-add <name> <url> <type>${RESET} — добавить MCP-сервер")
+            println("  ${CYAN}:mcp-list${RESET}                    — список серверов")
+            println("  ${CYAN}:mcp-remove <name>${RESET}           — удалить сервер")
+            println("  ${CYAN}:mcp-connect <name>${RESET}          — подключиться")
+            println("  ${CYAN}:mcp-disconnect <name>${RESET}       — отключиться")
+            println("  ${CYAN}:mcp-tools <name>${RESET}            — инструменты сервера")
+            println()
+
             println("  ${CYAN}<номер>${RESET}       — выбрать задачу по номеру")
             println("  ${CYAN}0${RESET}             — выход из программы")
         } else {
@@ -179,6 +191,20 @@ class ConsoleCliRenderer : CliRenderer {
             println("  ${CYAN}:ctx-list${RESET}                 — показать все факты LTM")
             println("  ${CYAN}:ctx-forget <id>${RESET}          — удалить факт из LTM")
             println("  ${CYAN}:ctx-search <query>${RESET}       — поиск фактов в LTM")
+            println()
+
+            println("${CYAN}📅 События и уведомления:${RESET}")
+            println("  ${CYAN}:create-event <date>${RESET}    — привязать задачу к дате (YYYY-MM-DD)")
+            println("  ${CYAN}:notes [limit]${RESET}          — показать уведомления (дефолт: 20)")
+            println()
+
+            println("${CYAN}🔌 MCP-серверы:${RESET}")
+            println("  ${CYAN}:mcp-add <name> <url> <type>${RESET} — добавить MCP-сервер")
+            println("  ${CYAN}:mcp-list${RESET}                    — список серверов")
+            println("  ${CYAN}:mcp-remove <name>${RESET}           — удалить сервер по имени")
+            println("  ${CYAN}:mcp-connect <name>${RESET}          — подключиться к серверу по имени")
+            println("  ${CYAN}:mcp-disconnect <name>${RESET}       — отключиться от сервера по имени")
+            println("  ${CYAN}:mcp-tools <name>${RESET}            — показать инструменты сервера")
             println()
 
             println("${CYAN}⚙️  Команды управления параметрами LLM:${RESET}")

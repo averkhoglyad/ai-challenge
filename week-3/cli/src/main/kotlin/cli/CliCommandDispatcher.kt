@@ -1,6 +1,8 @@
 ﻿package io.averkhogliad.ai.challenge.week3.cli.cli
 
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.Command
+import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.PlanFlowHandler
+import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.UserInputFlowHandler
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskId
 
 class CliCommandDispatcher(
@@ -98,6 +100,9 @@ class CliCommandDispatcher(
         is Command.McpConnectServer -> handlers.mcp.handleMcpConnectServer(command, state)
         is Command.McpDisconnectServer -> handlers.mcp.handleMcpDisconnectServer(command, state)
         is Command.McpToolsServer -> handlers.mcp.handleMcpToolsServer(command, state)
+
+        is Command.CreateEvent -> handlers.events.handleCreateEvent(command, state)
+        is Command.ListNotes -> handlers.events.handleListNotes(command, state)
     }
 
     private fun handleSelectTask(command: Command.SelectTask, state: CliState): CliState {

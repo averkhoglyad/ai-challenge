@@ -2,6 +2,7 @@
 
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.CommandContext
 import io.averkhogliad.ai.challenge.week3.cli.cli.commands.CommandParser
+import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.CommandHandler
 import kotlinx.coroutines.runBlocking
 
 class CliApplication(

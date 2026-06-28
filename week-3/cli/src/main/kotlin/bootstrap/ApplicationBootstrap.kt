@@ -4,23 +4,44 @@ import io.averkhogliad.ai.challenge.utils.config.Config
 import io.averkhogliad.ai.challenge.utils.llm.DefaultLlmClient
 import io.averkhogliad.ai.challenge.utils.llm.LlmClientConfig
 import io.averkhogliad.ai.challenge.week3.cli.application.DialogService
-import io.averkhogliad.ai.challenge.week3.cli.application.MCPService
 import io.averkhogliad.ai.challenge.week3.cli.application.ProfileService
 import io.averkhogliad.ai.challenge.week3.cli.application.cache.CachingInvariantService
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task1Executor
+import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task3Executor
+import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
+import io.averkhogliad.ai.challenge.week3.cli.application.usecase.CreateEventForTaskUseCase
+import io.averkhogliad.ai.challenge.week3.cli.application.usecase.ListNotesUseCase
 import io.averkhogliad.ai.challenge.week3.cli.cli.*
 import io.averkhogliad.ai.challenge.week3.cli.cli.handlers.*
 import io.averkhogliad.ai.challenge.week3.cli.cli.renderers.MCPRenderer
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.LlmConfig
+import io.averkhogliad.ai.challenge.week3.cli.domain.config.ServicesConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.ConfigPort
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.MemoryService
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.PromptBuilder
+import io.averkhogliad.ai.challenge.week3.cli.infrastructure.client.RestEventsClient
+import io.averkhogliad.ai.challenge.week3.cli.infrastructure.client.RestNotificationsClient
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.mcp.DefaultMCPConnectionManager
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.persistence.*
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.contextual
+import java.time.Instant
+import java.time.LocalDate
+import java.util.*
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -63,6 +84,34 @@ import kotlin.time.Duration.Companion.seconds
  * высокоуровневым (CLI/application). Это гарантирует, что каждая зависимость
  * уже существует к моменту её внедрения.
  */
+// Contextual serializers for java.time.* and java.util.UUID
+// Required because DTOs use @Contextual annotation on these types.
+private object JavaTimeSerializers {
+    val module = SerializersModule {
+        contextual(LocalDateSerializer)
+        contextual(InstantSerializer)
+        contextual(UuidSerializer)
+    }
+}
+
+private object LocalDateSerializer : KSerializer<LocalDate> {
+    override val descriptor = PrimitiveSerialDescriptor("LocalDate", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: LocalDate) = encoder.encodeString(value.toString())
+    override fun deserialize(decoder: Decoder): LocalDate = LocalDate.parse(decoder.decodeString())
+}
+
+private object InstantSerializer : KSerializer<Instant> {
+    override val descriptor = PrimitiveSerialDescriptor("Instant", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: Instant) = encoder.encodeString(value.toString())
+    override fun deserialize(decoder: Decoder): Instant = Instant.parse(decoder.decodeString())
+}
+
+private object UuidSerializer : KSerializer<UUID> {
+    override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: UUID) = encoder.encodeString(value.toString())
+    override fun deserialize(decoder: Decoder): UUID = UUID.fromString(decoder.decodeString())
+}
+
 object ApplicationBootstrap {
 
     /**
@@ -153,11 +202,15 @@ object ApplicationBootstrap {
             memoryService = memoryService,
             promptBuilder = promptBuilder,
             profileRepository = profileRepository,  // передача репозитория профилей для встраивания активного профиля в промпт
-            invariantService = cachingInvariantService  // передача кэширующего сервиса инвариантов для встраивания в промпт
+            invariantService = cachingInvariantService,  // передача кэширующего сервиса инвариантов для встраивания в промпт
+            mcpService = mcpService  // передача MCP-сервиса для получения инструментов
         )
 
         // 14. Application: Task executor (CLI-ассистент с FSM)
         val task1Executor = Task1Executor(dialogService)
+
+        // 14b. Application: Task3 executor (Календарь событий и уведомления)
+        val task3Executor = Task3Executor(dialogService)
 
 
         // 15. Application: planner components (выделены из PlanCommandHandler)
@@ -206,6 +259,7 @@ object ApplicationBootstrap {
 
         val executors = mapOf(
             task1Executor.taskId to task1Executor,
+            task3Executor.taskId to task3Executor,
         )
         val input = ConsoleCliInput()
         val commandHandler = CommandHandler(executors)
@@ -257,6 +311,26 @@ object ApplicationBootstrap {
             readMultiline = input::readMultiline
         )
 
+        // Wave 4 / Task3: Events + Notifications clients and use cases
+        val servicesConfig = ServicesConfig(
+            eventsBaseUrl = config.getOrNull("services.events.base-url") ?: "http://localhost:8081",
+            notificationsBaseUrl = config.getOrNull("services.notifications.base-url") ?: "http://localhost:8083"
+        )
+        val httpClient = HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                    serializersModule = JavaTimeSerializers.module
+                })
+            }
+        }
+        val eventsClient = RestEventsClient(servicesConfig, httpClient)
+        val notificationsClient = RestNotificationsClient(servicesConfig, httpClient)
+        val createEventUseCase = CreateEventForTaskUseCase(taskRepository, eventsClient, commandEngine, memoryService)
+        val listNotesUseCase = ListNotesUseCase(notificationsClient)
+        val eventsHandler = EventsCommandHandler(createEventUseCase, listNotesUseCase, renderer)
+
         val handlers = CliCommandHandlers(
             command = commandHandler,
             debug = debugCommandHandler,
@@ -269,6 +343,7 @@ object ApplicationBootstrap {
             invariant = invariantHandler,
             profile = profileHandler,
             mcp = mcpHandler,
+            events = eventsHandler,
         )
 
         val userInputFlowHandler = UserInputFlowHandler(
