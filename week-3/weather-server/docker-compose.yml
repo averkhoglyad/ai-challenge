@@ -1,0 +1,11 @@
+services:
+  weather-server:
+    build:
+      context: ../..
+      dockerfile: week-3/weather-server/Dockerfile
+    ports:
+      - "8081:8081"
+    volumes:
+      - weather-data:/data
+volumes:
+  weather-data:

@@ -1,0 +1,29 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: weather-server
+  ai:
+    mcp:
+      server:
+        name: weather-server
+        protocol: STREAMABLE
+
+weather:
+  database:
+    path: weather.db  # default: in working directory
+    url: jdbc:sqlite:${weather.database.path:weather.db}
+  open-meteo:
+    base-url: https://api.open-meteo.com
+    geocoding-url: https://geocoding-api.open-meteo.com
+    connect-timeout: PT5S
+    read-timeout: PT30S
+  cache:
+    geo-ttl: P30D
+    current-ttl: PT15M
+    forecast-ttl: PT3H
+
+logging:
+  level:
+    io.averkhogliad.ai.challenge.week3.weather: DEBUG

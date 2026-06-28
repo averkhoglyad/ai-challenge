@@ -1,0 +1,30 @@
+# VCS & IDE
+.git/
+.gitignore
+.idea/
+.veai/
+.kotlin/
+.kilocode/
+
+# Gradle caches (rebuilt inside Docker)
+.gradle/
+buildSrc/.gradle/
+buildSrc/build/
+buildSrc/.kotlin/
+
+# Build outputs (rebuilt inside Docker)
+build/
+*/build/
+*/*/build/
+
+# Docs & misc
+docs/
+*.md
+LICENSE
+weather-cache.db
+
+# Other weeks (not needed for week-3 builds)
+week-0/
+week-1/
+week-2/
+week-3/cli/

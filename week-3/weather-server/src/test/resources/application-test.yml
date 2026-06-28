@@ -1,0 +1,9 @@
+weather:
+  database:
+    url: "jdbc:sqlite:file::memory:?cache=shared"
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  test:
+    context:
+      bootstrapper: org.springframework.boot.test.context.SpringBootTestContextBootstrapper
