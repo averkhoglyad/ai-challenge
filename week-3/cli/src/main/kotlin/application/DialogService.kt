@@ -199,26 +199,38 @@ class DialogService(
      */
     private suspend fun collectMcpPrompts(): List<McpPromptInfo> {
         val servers = mcpService.getAllServersForLlm()
-        if (servers.isEmpty()) return emptyList()
+        if (servers.isEmpty()) {
+            System.err.println("${ANSI_YELLOW}[MCP-PROMPTS]${ANSI_RESET} Нет доступных MCP-серверов")
+            return emptyList()
+        }
+
+        System.err.println("${ANSI_YELLOW}[MCP-PROMPTS]${ANSI_RESET} Проверяю ${servers.size} сервер(ов): ${servers.joinToString { "${it.name} (connected=${it.isConnected})" }}")
 
         val result = mutableListOf<McpPromptInfo>()
         for (server in servers) {
-            if (!server.isConnected) continue
+            if (!server.isConnected) {
+                System.err.println("  ${ANSI_YELLOW}[MCP-PROMPTS]${ANSI_RESET} Пропускаю ${server.name} — не подключён")
+                continue
+            }
 
             val prompts = mcpService.getPrompts(server.id).getOrElse { emptyList() }
+            System.err.println("  ${ANSI_YELLOW}[MCP-PROMPTS]${ANSI_RESET} Сервер ${server.name}: найдено ${prompts.size} prompt(ов)")
             for (prompt in prompts) {
+                val argsInfo = prompt.arguments.joinToString { "${it.name}(req=${it.required})" }
+                System.err.println("    prompt '${prompt.name}': args=[${argsInfo.ifEmpty { "нет" }}]")
                 val defaultArgs = prompt.arguments
                     .filter { it.required }
                     .associate { it.name to "{${it.name}}" }
 
                 val messages = if (defaultArgs.isNotEmpty()) {
+                    System.err.println("      вызов getPrompt с defaultArgs: $defaultArgs")
                     mcpService.getPrompt(server.id, prompt.name, defaultArgs).getOrElse { emptyList() }
                 } else {
+                    System.err.println("      вызов getPrompt без аргументов")
                     mcpService.getPrompt(server.id, prompt.name).getOrElse { emptyList() }
                 }
 
                 val content = messages
-                    .filter { it.role == MessageRole.USER }
                     .joinToString("\n") { msg ->
                         when (msg.content) {
                             is McpPromptContent.Text -> msg.content.text
@@ -227,6 +239,7 @@ class DialogService(
                     }
 
                 if (content.isNotBlank()) {
+                    System.err.println("      ${ANSI_GREEN}✓${ANSI_RESET} контент: ${content.take(80)}...")
                     result.add(
                         McpPromptInfo(
                             serverId = server.id.value,
@@ -236,9 +249,13 @@ class DialogService(
                             content = content
                         )
                     )
+                } else {
+                    val roleSummary = messages.groupBy { it.role }.map { "${it.key}: ${it.value.size}" }
+                    System.err.println("      ${ANSI_RED}✗${ANSI_RESET} пустой контент (сообщений: ${messages.size}, роли: $roleSummary), пропускаю")
                 }
             }
         }
+        System.err.println("${ANSI_GREEN}[MCP-PROMPTS]${ANSI_RESET} Итого собрано промптов: ${result.size}")
         return result
     }
 

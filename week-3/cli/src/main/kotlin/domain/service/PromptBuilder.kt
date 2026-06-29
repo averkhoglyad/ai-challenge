@@ -99,6 +99,9 @@ class PromptBuilder {
                 }
             }
             appendLine()
+            // Logging: фиксируем, что сценарии добавлены в промпт
+            val names = mcpPrompts.joinToString(", ") { "${it.promptName}@${it.serverName}" }
+            System.err.println("\u001b[32m[PROMPT-BUILDER]\u001b[0m [AVAILABLE SCENARIOS] добавлено в системный промпт: $names")
         }
 
         if (recentMessages.isNotEmpty()) {

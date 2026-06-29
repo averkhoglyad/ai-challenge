@@ -193,7 +193,7 @@ class MCPClientAdapter : MCPClient {
                 PromptArgument(
                     name = sdkArg.name,
                     description = sdkArg.description,
-                    required = sdkArg.required ?: false
+                    required = sdkArg.required ?: true  // MCP spec: absent required means required
                 )
             } ?: emptyList()
         )
