@@ -15,6 +15,8 @@ import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -172,6 +174,12 @@ class StatusWithProfileIntegrationTest {
 
         override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> =
             emptyList()
+
+        override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+            Result.success(Unit)
+
+        override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+            Result.success(Unit)
     }
 
     private val stubTodoTaskService =
@@ -244,7 +252,12 @@ class StatusWithProfileIntegrationTest {
             memoryService = stubMemoryService,
             promptBuilder = PromptBuilder(),
             profileRepository = profileRepository,
-            invariantService = stubInvariantService
+            invariantService = stubInvariantService,
+            mcpService = mockk(relaxed = true),
+            toolCallRouter = mockk(relaxed = true),
+            toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+            promptPresetAggregator = mockk(relaxed = true),
+            taskRepository = stubTaskRepository
         )
 
     private val stubCommandEngine = DefaultCommandEngine()
@@ -302,6 +315,7 @@ class StatusWithProfileIntegrationTest {
                 input::readMultiline
             ),
             mcp = mockk<MCPCommandHandler>(relaxed = true),
+            events = mockk<EventsCommandHandler>(relaxed = true),
         )
         val dialogService = createStubDialogService(profileRepository)
         val planCommandHandler = createStubPlanCommandHandler()

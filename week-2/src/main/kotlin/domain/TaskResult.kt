@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.domain
 
+import io.averkhogliad.ai.challenge.week2.domain.model.DomainToolCall
 import io.averkhogliad.ai.challenge.week2.domain.telemetry.TokenUsage
 
 /**
@@ -23,7 +24,8 @@ sealed interface TaskResult {
     data class Success(
         val content: String,
         val metadata: Map<String, Any> = emptyMap(),
-        val tokenUsage: TokenUsage? = TokenUsage.fromMetadata(metadata)
+        val tokenUsage: TokenUsage? = TokenUsage.fromMetadata(metadata),
+        val toolCalls: List<DomainToolCall>? = null
     ) : TaskResult
 
     /**

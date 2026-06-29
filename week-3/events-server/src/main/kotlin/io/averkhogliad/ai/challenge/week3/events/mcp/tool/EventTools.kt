@@ -27,14 +27,22 @@ class EventTools(
         description = "Создает новое событие в календаре с указанной датой, заголовком и опциональным описанием"
     )
     fun createEvent(
-        @McpToolParam(description = "Дата события в формате YYYY-MM-DD")
-        date: LocalDate,
+        @McpToolParam(description = "Дата события в формате YYYY-MM-DD (строка, например \"2026-07-15\")")
+        date: String,
         @McpToolParam(description = "Заголовок события (название встречи, задачи или напоминания)")
         title: String,
         @McpToolParam(description = "Необязательное описание события с дополнительными деталями")
         description: String?,
     ): String = try {
-        val result = eventService.createEvent(CreateEventRequest(date, title, description ?: ""))
+        val parsedDate = try {
+            LocalDate.parse(date)
+        } catch (e: Exception) {
+            return json.encodeToString(
+                ErrorResponse.serializer(),
+                ErrorResponse.invalidDateFormat("date", date)
+            )
+        }
+        val result = eventService.createEvent(CreateEventRequest(parsedDate, title, description ?: ""))
         json.encodeToString(Event.serializer(), result)
     } catch (e: Exception) {
         json.encodeToString(ErrorResponse.serializer(), ErrorResponse.internalError(e.message ?: "Unknown error"))
@@ -45,18 +53,34 @@ class EventTools(
         description = "Возвращает список событий с пагинацией и фильтрацией по диапазону дат"
     )
     fun listEvents(
-        @McpToolParam(description = "Начальная дата для фильтрации в формате YYYY-MM-DD. Если не указана, фильтрация по началу периода не применяется.")
-        fromDate: LocalDate?,
-        @McpToolParam(description = "Конечная дата для фильтрации в формате YYYY-MM-DD. Если не указана, фильтрация по концу периода не применяется.")
-        toDate: LocalDate?,
+        @McpToolParam(description = "Начальная дата для фильтрации в формате YYYY-MM-DD (строка, например \"2026-07-01\"). Если не указана, фильтрация по началу периода не применяется.")
+        fromDate: String?,
+        @McpToolParam(description = "Конечная дата для фильтрации в формате YYYY-MM-DD (строка, например \"2026-07-31\"). Если не указана, фильтрация по концу периода не применяется.")
+        toDate: String?,
         @McpToolParam(description = "Максимальное количество возвращаемых событий. По умолчанию 20.")
         limit: Int?,
         @McpToolParam(description = "Смещение для пагинации (сколько событий пропустить). По умолчанию 0.")
         offset: Int?,
     ): String = try {
+        val parsedFrom = try {
+            fromDate?.let { LocalDate.parse(it) }
+        } catch (e: Exception) {
+            return json.encodeToString(
+                ErrorResponse.serializer(),
+                ErrorResponse.invalidDateFormat("fromDate", fromDate!!)
+            )
+        }
+        val parsedTo = try {
+            toDate?.let { LocalDate.parse(it) }
+        } catch (e: Exception) {
+            return json.encodeToString(
+                ErrorResponse.serializer(),
+                ErrorResponse.invalidDateFormat("toDate", toDate!!)
+            )
+        }
         val result = eventService.listEvents(
-            fromDate = fromDate,
-            toDate = toDate,
+            fromDate = parsedFrom,
+            toDate = parsedTo,
             limit = limit ?: 20,
             offset = offset ?: 0,
         )
@@ -83,14 +107,22 @@ class EventTools(
     fun updateEvent(
         @McpToolParam(description = "UUID события, которое нужно изменить")
         id: UUID,
-        @McpToolParam(description = "Новая дата события в формате YYYY-MM-DD. Не передавай, если дата не меняется.")
-        date: LocalDate?,
+        @McpToolParam(description = "Новая дата события в формате YYYY-MM-DD (строка, например \"2026-07-15\"). Не передавай, если дата не меняется.")
+        date: String?,
         @McpToolParam(description = "Новый заголовок события. Не передавай, если заголовок не меняется.")
         title: String?,
         @McpToolParam(description = "Новое описание события. Не передавай, если описание не меняется.")
         description: String?,
     ): String = try {
-        val request = UpdateEventRequest(date = date, title = title, description = description)
+        val parsedDate: LocalDate? = try {
+            date?.let { LocalDate.parse(it) }
+        } catch (e: Exception) {
+            return json.encodeToString(
+                ErrorResponse.serializer(),
+                ErrorResponse.invalidDateFormat("date", date!!)
+            )
+        }
+        val request = UpdateEventRequest(date = parsedDate, title = title, description = description)
         val result = eventService.updateEvent(id, request)
         json.encodeToString(Event.serializer(), result)
     } catch (e: Exception) {

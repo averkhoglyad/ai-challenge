@@ -139,6 +139,41 @@ class DefaultLlmClientTest {
     }
 
     @Test
+    fun `parseResponse - tool calls without content is allowed`() {
+        val client = createClient()
+        val json = """
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_weather",
+                                        "arguments": "{\"city\": \"London\"}"
+                                    }
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls"
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val response = client.parseResponse(json)
+
+        assertNull(response.content)
+        assertEquals("tool_calls", response.finishReason)
+        assertNotNull(response.toolCalls)
+        assertEquals(1, response.toolCalls!!.size)
+        assertEquals("call_1", response.toolCalls!![0].id)
+        assertEquals("get_weather", response.toolCalls!![0].function.name)
+    }
+
+    @Test
     fun `parseResponse - invalid JSON throws`() {
         val client = createClient()
         val json = "this is not json"

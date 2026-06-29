@@ -17,6 +17,8 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -260,6 +262,12 @@ private class InMemoryTaskRepository : TaskRepository {
     override suspend fun saveSteps(taskId: TaskId, steps: List<TaskStep>) = Unit
 
     override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> = emptyList()
+
+    override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+        Result.success(Unit)
 }
 
 private class InMemoryDialogSessionRepository : DialogSessionRepository {

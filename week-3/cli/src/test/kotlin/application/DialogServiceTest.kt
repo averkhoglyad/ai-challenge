@@ -5,6 +5,7 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.*
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -35,7 +36,12 @@ class DialogServiceTest {
             memoryService,
             promptBuilder,
             profileRepository = StubProfileRepository(),
-            invariantService = stubInvariantService
+            invariantService = stubInvariantService,
+            mcpService = mockk(relaxed = true),
+            toolCallRouter = mockk(relaxed = true),
+            toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+            promptPresetAggregator = mockk(relaxed = true),
+            taskRepository = mockk(relaxed = true)
         )
     }
 
@@ -159,7 +165,12 @@ class DialogServiceTest {
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
                 profileRepository = profileRepo,
-                invariantService = stubInvariantService
+                invariantService = stubInvariantService,
+                mcpService = mockk(relaxed = true),
+                toolCallRouter = mockk(relaxed = true),
+                toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+                promptPresetAggregator = mockk(relaxed = true),
+                taskRepository = mockk(relaxed = true)
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
 
@@ -183,7 +194,12 @@ class DialogServiceTest {
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
                 profileRepository = profileRepo,
-                invariantService = stubInvariantService
+                invariantService = stubInvariantService,
+                mcpService = mockk(relaxed = true),
+                toolCallRouter = mockk(relaxed = true),
+                toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+                promptPresetAggregator = mockk(relaxed = true),
+                taskRepository = mockk(relaxed = true)
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
 
@@ -213,7 +229,12 @@ class DialogServiceTest {
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
                 profileRepository = profileRepo,
-                invariantService = stubInvariantService
+                invariantService = stubInvariantService,
+                mcpService = mockk(relaxed = true),
+                toolCallRouter = mockk(relaxed = true),
+                toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+                promptPresetAggregator = mockk(relaxed = true),
+                taskRepository = mockk(relaxed = true)
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
 
@@ -242,7 +263,12 @@ class DialogServiceTest {
                 memoryService = memoryService,
                 promptBuilder = promptBuilder,
                 profileRepository = StubProfileRepository(),
-                invariantService = stubInvariantService
+                invariantService = stubInvariantService,
+                mcpService = mockk(relaxed = true),
+                toolCallRouter = mockk(relaxed = true),
+                toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+                promptPresetAggregator = mockk(relaxed = true),
+                taskRepository = mockk(relaxed = true)
             )
             mockLlmPort.chatWithMessagesResult = TaskResult.Success("Ok")
             val result = service.chat("Test", SessionLevel.TASK_LIST)
@@ -289,12 +315,16 @@ class DialogServiceTest {
         var lastChatPrompt: Prompt = Prompt("x")
         var lastChatMessages: List<ChatMessage> = emptyList()
 
-        override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+        override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>?): TaskResult {
             lastChatPrompt = prompt
             return chatResult
         }
 
-        override suspend fun chatWithMessages(messages: List<ChatMessage>, config: TaskExecutionConfig): TaskResult {
+        override suspend fun chatWithMessages(
+            messages: List<ChatMessage>,
+            config: TaskExecutionConfig,
+            tools: List<MCPTool>?
+        ): TaskResult {
             lastChatMessages = messages
             return chatWithMessagesResult
         }

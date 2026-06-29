@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import java.time.LocalDate
 import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -68,6 +69,12 @@ class TaskStepIntegrationTest {
             }
 
             override suspend fun findStepsByTaskId(taskId: TaskId): List<TaskStep> = emptyList()
+
+            override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+                Result.success(Unit)
+
+            override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+                Result.success(Unit)
         }
         TodoTaskService = TodoTaskService(taskRepository)
     }

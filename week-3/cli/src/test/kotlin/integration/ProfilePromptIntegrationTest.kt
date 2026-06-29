@@ -9,6 +9,7 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.*
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.persistence.InMemoryProfileRepository
+import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.DisplayName
@@ -68,7 +69,12 @@ class ProfilePromptIntegrationTest {
             promptBuilder = promptBuilder,
             taskExecutionConfig = TaskExecutionConfig(),
             profileRepository = profileRepository,
-            invariantService = stubInvariantService
+            invariantService = stubInvariantService,
+            mcpService = mockk(relaxed = true),
+            toolCallRouter = mockk(relaxed = true),
+            toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+            promptPresetAggregator = mockk(relaxed = true),
+            taskRepository = mockk(relaxed = true)
         )
     }
 
@@ -276,14 +282,15 @@ class ProfilePromptIntegrationTest {
         var lastChatPrompt: Prompt = Prompt("x")
         var lastChatMessages: List<ChatMessage> = emptyList()
 
-        override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+        override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>?): TaskResult {
             lastChatPrompt = prompt
             return chatResult
         }
 
         override suspend fun chatWithMessages(
             messages: List<ChatMessage>,
-            config: TaskExecutionConfig
+            config: TaskExecutionConfig,
+            tools: List<MCPTool>?
         ): TaskResult {
             lastChatMessages = messages
             return chatWithMessagesResult

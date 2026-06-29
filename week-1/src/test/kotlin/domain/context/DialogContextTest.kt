@@ -5,6 +5,7 @@ import io.averkhogliad.ai.challenge.week1.domain.service.ChatRole
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DialogContextTest {
@@ -67,8 +68,9 @@ class DialogContextTest {
 
         assertEquals(3, result.size) // system + 2 messages
         assertEquals("system", result[0].role)
-        assertTrue(result[0].content.contains("You are a helpful assistant"))
-        assertTrue(result[0].content.contains("User greeted assistant"))
+        assertNotNull(result[0].content)
+        assertTrue(result[0].content!!.contains("You are a helpful assistant"))
+        assertTrue(result[0].content!!.contains("User greeted assistant"))
         assertEquals("user", result[1].role)
         assertEquals("Hello", result[1].content)
         assertEquals("assistant", result[2].role)
@@ -89,7 +91,8 @@ class DialogContextTest {
         assertEquals(2, result.size) // system + 1 message
         assertEquals("system", result[0].role)
         assertEquals("System prompt", result[0].content)
-        assertTrue(!result[0].content.contains("Context summary"))
+        assertNotNull(result[0].content)
+        assertTrue(!result[0].content!!.contains("Context summary"))
     }
 
     @Test
@@ -104,7 +107,8 @@ class DialogContextTest {
 
         assertEquals(1, result.size)
         assertEquals("system", result[0].role)
-        assertTrue(result[0].content.contains("Summary only"))
+        assertNotNull(result[0].content)
+        assertTrue(result[0].content!!.contains("Summary only"))
     }
 
     @Test

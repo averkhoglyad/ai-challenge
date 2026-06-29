@@ -162,6 +162,9 @@ class LlmAdapter(
      *   }
      * }
      * ```
+     *
+     * Имена инструментов санируются: `::` → `__`, т.к. OpenAI API
+     * разрешает в function.name только [a-zA-Z0-9_-].
      */
     private fun convertTools(tools: List<MCPTool>): List<JsonObject> {
         return tools.map { tool ->
@@ -169,7 +172,7 @@ class LlmAdapter(
             buildJsonObject {
                 put("type", "function")
                 put("function", buildJsonObject {
-                    put("name", tool.name)
+                    put("name", sanitizeToolNameForApi(tool.name))
                     tool.description?.let { put("description", it) }
                     put("parameters", buildJsonObject {
                         put("type", schema["type"] ?: JsonPrimitive("object"))
@@ -180,6 +183,12 @@ class LlmAdapter(
             }
         }
     }
+
+    /** Заменяет `::` → `__` для соответствия OpenAI function.name паттерну [a-zA-Z0-9_-]. */
+    private fun sanitizeToolNameForApi(name: String): String = name.replace("::", "__")
+
+    /** Обратная замена `__` → `::` при получении tool call от LLM. */
+    private fun desanitizeToolNameFromApi(name: String): String = name.replace("__", "::")
 
     /** Маппинг infrastructure [ChatResponse] → domain [TaskResult]. */
     private fun mapToDomain(response: ChatResponse): TaskResult {
@@ -209,11 +218,13 @@ class LlmAdapter(
             DomainToolCall(
                 it.id,
                 it.type,
-                DomainFunctionCall(it.function.name, it.function.arguments)
+                DomainFunctionCall(desanitizeToolNameFromApi(it.function.name), it.function.arguments)
             )
         }
 
     /** Маппинг domain [DomainToolCall] → utils [ToolCall]. */
     private fun mapDomainToolCalls(domainToolCalls: List<DomainToolCall>?): List<ToolCall>? =
-        domainToolCalls?.map { ToolCall(it.id, it.type, FunctionCall(it.function.name, it.function.arguments)) }
+        domainToolCalls?.map {
+            ToolCall(it.id, it.type, FunctionCall(sanitizeToolNameForApi(it.function.name), it.function.arguments))
+        }
 }

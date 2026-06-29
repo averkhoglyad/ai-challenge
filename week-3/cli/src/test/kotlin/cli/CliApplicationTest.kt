@@ -16,6 +16,21 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
+import java.util.UUID
+import kotlin.collections.ArrayDeque
+import kotlin.collections.List
+import kotlin.collections.Map
+import kotlin.collections.any
+import kotlin.collections.count
+import kotlin.collections.emptyList
+import kotlin.collections.emptyMap
+import kotlin.collections.firstOrNull
+import kotlin.collections.listOf
+import kotlin.collections.mapOf
+import kotlin.collections.mutableListOf
+import kotlin.collections.mutableMapOf
+import kotlin.collections.set
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -405,6 +420,12 @@ class CliApplicationTest {
 
         override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskStep> =
             emptyList()
+
+        override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+            Result.success(Unit)
+
+        override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+            Result.success(Unit)
     }
 
     private val stubTodoTaskService =
@@ -510,7 +531,12 @@ class CliApplicationTest {
         memoryService = stubMemoryService,
         promptBuilder = stubPromptBuilder,
         profileRepository = stubProfileRepository,
-        invariantService = stubInvariantService
+        invariantService = stubInvariantService,
+        mcpService = mockk(relaxed = true),
+        toolCallRouter = mockk(relaxed = true),
+        toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+        promptPresetAggregator = mockk(relaxed = true),
+        taskRepository = stubTaskRepository
     )
 
     private val stubCommandEngine = io.averkhogliad.ai.challenge.week3.cli.application.DefaultCommandEngine()
@@ -586,6 +612,7 @@ class CliApplicationTest {
                 readMultiline = input::readMultiline
             ),
             mcp = mockk<MCPCommandHandler>(relaxed = true),
+            events = mockk<EventsCommandHandler>(relaxed = true),
         )
         val userInputFlowHandler = UserInputFlowHandler(
             renderer = renderer,
@@ -868,12 +895,17 @@ class CliApplicationTest {
         fun `todo detail user input uses dialog service task detail context before executor`() = runBlocking {
             val renderer = MockCliRenderer()
             val llmPort = object : io.averkhogliad.ai.challenge.week3.cli.domain.service.LlmPort {
-                override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult =
+                override suspend fun chat(
+                    prompt: Prompt,
+                    config: TaskExecutionConfig,
+                    tools: List<io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTool>?
+                ): TaskResult =
                     TaskResult.Success("unused")
 
                 override suspend fun chatWithMessages(
                     messages: List<io.averkhogliad.ai.challenge.week3.cli.domain.service.ChatMessage>,
-                    config: TaskExecutionConfig
+                    config: TaskExecutionConfig,
+                    tools: List<io.averkhogliad.ai.challenge.week3.cli.domain.model.MCPTool>?
                 ): TaskResult = TaskResult.Success("detail response")
 
                 override suspend fun listModels(): List<io.averkhogliad.ai.challenge.week3.cli.domain.ModelId> =
@@ -902,7 +934,12 @@ class CliApplicationTest {
                 memoryService = memoryService,
                 promptBuilder = stubPromptBuilder,
                 profileRepository = stubProfileRepository,
-                invariantService = stubInvariantService
+                invariantService = stubInvariantService,
+                mcpService = mockk(relaxed = true),
+                toolCallRouter = mockk(relaxed = true),
+                toolRegistry = io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry(emptyList()),
+                promptPresetAggregator = mockk(relaxed = true),
+                taskRepository = stubTaskRepository
             )
             val executor = MockTaskExecutor(TaskId("2"))
             val flow = UserInputFlowHandler(

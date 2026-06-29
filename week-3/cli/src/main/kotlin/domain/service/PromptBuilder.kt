@@ -37,6 +37,8 @@ class PromptBuilder {
      * @param profile активный профиль пользователя (опционально)
      * @param invariants список активных инвариантов (опционально)
      * @param mcpPrompts информация о доступных MCP-сценариях (опционально)
+     * @param presets пресеты для автономного планирования (опционально)
+     * @param builtinToolContext контекст текущей задачи (опционально)
      * @return сформированный промпт
      */
     fun buildPrompt(
@@ -45,7 +47,9 @@ class PromptBuilder {
         recentMessages: List<Message> = emptyList(),
         profile: Profile? = null,
         invariants: List<Invariant> = emptyList(),
-        mcpPrompts: List<McpPromptInfo> = emptyList()
+        mcpPrompts: List<McpPromptInfo> = emptyList(),
+        presets: List<PromptPreset> = emptyList(),
+        builtinToolContext: BuiltinToolContext? = null
     ): String = buildString {
         // [INVARIANTS - DO NOT VIOLATE] — вставляется САМЫМ ПЕРВЫМ, если инварианты заданы
         if (invariants.isNotEmpty()) {
@@ -99,9 +103,48 @@ class PromptBuilder {
                 }
             }
             appendLine()
-            // Logging: фиксируем, что сценарии добавлены в промпт
-            val names = mcpPrompts.joinToString(", ") { "${it.promptName}@${it.serverName}" }
-            System.err.println("\u001b[32m[PROMPT-BUILDER]\u001b[0m [AVAILABLE SCENARIOS] добавлено в системный промпт: $names")
+        }
+
+        // [AVAILABLE PRESETS] — BUILTIN + MCP пресеты для автономного планирования
+        if (presets.isNotEmpty()) {
+            appendLine("[AVAILABLE PRESETS]")
+            appendLine("Это пресеты с инструкциями для автономного выполнения сложных сценариев.")
+            appendLine("Если запрос пользователя соответствует описанию пресета — используй его инструкцию.")
+            appendLine()
+            presets.forEach { preset ->
+                val sourceLabel = when (preset.source) {
+                    PromptSource.BUILTIN -> "BUILTIN"
+                    PromptSource.MCP -> "MCP"
+                }
+                appendLine("**${preset.name}** ($sourceLabel): ${preset.description}")
+                if (preset.instruction.isNotBlank()) {
+                    appendLine(preset.instruction)
+                    appendLine()
+                }
+            }
+        }
+
+        // [CURRENT CONTEXT] — информация о текущей задаче
+        if (builtinToolContext != null) {
+            appendLine("[CURRENT CONTEXT]")
+            if (builtinToolContext.hasOpenTask) {
+                val task = builtinToolContext.currentTask!!
+                appendLine("Открыта задача #${task.id}: \"${task.title}\"")
+                if (!task.description.isNullOrBlank()) {
+                    appendLine("Описание: ${task.description}")
+                }
+                appendLine("Статус: ${task.status}")
+                if (task.eventId != null) {
+                    appendLine("Событие: ${task.eventId}")
+                }
+                if (task.dueDate != null) {
+                    appendLine("Дата выполнения: ${task.dueDate}")
+                }
+            } else {
+                appendLine("Нет открытой задачи.")
+                appendLine("Можно создать новую через cli::create_task или использовать :open <id>")
+            }
+            appendLine()
         }
 
         if (recentMessages.isNotEmpty()) {
@@ -184,6 +227,8 @@ class PromptBuilder {
      * @param profile активный профиль пользователя (опционально)
      * @param invariants список активных инвариантов (опционально)
      * @param mcpPrompts информация о доступных MCP-сценариях (опционально)
+     * @param presets пресеты для автономного планирования (опционально)
+     * @param builtinToolContext контекст текущей задачи (опционально)
      * @return список [ChatMessage] для отправки в LLM
      */
     fun buildChatMessages(
@@ -193,9 +238,14 @@ class PromptBuilder {
         userInput: String,
         profile: Profile? = null,
         invariants: List<Invariant> = emptyList(),
-        mcpPrompts: List<McpPromptInfo> = emptyList()
+        mcpPrompts: List<McpPromptInfo> = emptyList(),
+        presets: List<PromptPreset> = emptyList(),
+        builtinToolContext: BuiltinToolContext? = null
     ): List<ChatMessage> {
-        val systemPrompt = buildPrompt(workingMemory, relevantFacts, recentMessages, profile, invariants, mcpPrompts)
+        val systemPrompt = buildPrompt(
+            workingMemory, relevantFacts, recentMessages, profile, invariants, mcpPrompts,
+            presets = presets, builtinToolContext = builtinToolContext
+        )
         val messages = mutableListOf<ChatMessage>()
 
         // Системное сообщение

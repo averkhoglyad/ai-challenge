@@ -49,7 +49,7 @@ class LlmAdapterTest {
     @Test
     fun `chat should return Error when LlmException is thrown`() = runBlocking {
         val mockClient = MockLlmClient(
-            onChat = { _, _, _, _ -> throw LlmException("API error") }
+            onChat = { _, _, _, _, _ -> throw LlmException("API error") }
         )
         val adapter = LlmAdapter(mockClient, defaultModelId)
 
@@ -64,7 +64,7 @@ class LlmAdapterTest {
     @Test
     fun `chat should return Error for unexpected exceptions`() = runBlocking {
         val mockClient = MockLlmClient(
-            onChat = { _, _, _, _ -> throw RuntimeException("Unexpected") }
+            onChat = { _, _, _, _, _ -> throw RuntimeException("Unexpected") }
         )
         val adapter = LlmAdapter(mockClient, defaultModelId)
 
@@ -83,7 +83,7 @@ class LlmAdapterTest {
     fun `chat should pass temperature from config to LLM client`() = runBlocking {
         var capturedParams: ChatParameters? = null
         val mockClient = MockLlmClient(
-            onChat = { _, _, params, _ ->
+            onChat = { _, _, params, _, _ ->
                 capturedParams = params
                 ChatResponse("ok", "stop", null)
             }
@@ -100,7 +100,7 @@ class LlmAdapterTest {
     fun `chat should pass maxTokens from config to LLM client`() = runBlocking {
         var capturedParams: ChatParameters? = null
         val mockClient = MockLlmClient(
-            onChat = { _, _, params, _ ->
+            onChat = { _, _, params, _, _ ->
                 capturedParams = params
                 ChatResponse("ok", "stop", null)
             }
@@ -117,7 +117,7 @@ class LlmAdapterTest {
     fun `chat should pass stopSequences from config to LLM client`() = runBlocking {
         var capturedParams: ChatParameters? = null
         val mockClient = MockLlmClient(
-            onChat = { _, _, params, _ ->
+            onChat = { _, _, params, _, _ ->
                 capturedParams = params
                 ChatResponse("ok", "stop", null)
             }
@@ -134,7 +134,7 @@ class LlmAdapterTest {
     fun `chat should pass null stop when stopSequences is empty`() = runBlocking {
         var capturedParams: ChatParameters? = null
         val mockClient = MockLlmClient(
-            onChat = { _, _, params, _ ->
+            onChat = { _, _, params, _, _ ->
                 capturedParams = params
                 ChatResponse("ok", "stop", null)
             }
@@ -155,7 +155,7 @@ class LlmAdapterTest {
     fun `chat should use config modelId when specified`() = runBlocking {
         var capturedModel: String? = null
         val mockClient = MockLlmClient(
-            onChat = { _, _, _, model ->
+            onChat = { _, _, _, model, _ ->
                 capturedModel = model
                 ChatResponse("ok", "stop", null)
             }
@@ -171,7 +171,7 @@ class LlmAdapterTest {
     fun `chat should fallback to defaultModelId when config modelId is null`() = runBlocking {
         var capturedModel: String? = null
         val mockClient = MockLlmClient(
-            onChat = { _, _, _, model ->
+            onChat = { _, _, _, model, _ ->
                 capturedModel = model
                 ChatResponse("ok", "stop", null)
             }
@@ -234,7 +234,7 @@ class LlmAdapterTest {
     fun `chatWithMessages should map domain messages to infra messages`() = runBlocking {
         var capturedMessages: List<ChatMessage>? = null
         val mockClient = MockLlmClient(
-            onChatWithMessages = { messages, _, _ ->
+            onChatWithMessages = { messages, _, _, _ ->
                 capturedMessages = messages
                 ChatResponse("response", "stop", null)
             }
@@ -266,7 +266,7 @@ class LlmAdapterTest {
         var capturedParams: ChatParameters? = null
         var capturedModel: String? = null
         val mockClient = MockLlmClient(
-            onChatWithMessages = { _, params, model ->
+            onChatWithMessages = { _, params, model, _ ->
                 capturedParams = params
                 capturedModel = model
                 ChatResponse("ok", "stop", null)
@@ -294,7 +294,7 @@ class LlmAdapterTest {
     @Test
     fun `chatWithMessages should return Error when LlmException is thrown`() = runBlocking {
         val mockClient = MockLlmClient(
-            onChatWithMessages = { _, _, _ -> throw LlmException("API failure") }
+            onChatWithMessages = { _, _, _, _ -> throw LlmException("API failure") }
         )
         val adapter = LlmAdapter(mockClient, defaultModelId)
 

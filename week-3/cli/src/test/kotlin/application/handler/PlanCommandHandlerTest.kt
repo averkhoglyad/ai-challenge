@@ -11,6 +11,8 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.model.*
 import io.averkhogliad.ai.challenge.week3.cli.domain.service.*
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
+import java.time.LocalDate
+import java.util.*
 import kotlin.test.*
 
 /**
@@ -49,6 +51,12 @@ private class PlanTestInMemoryTaskRepository : TaskRepository {
     override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskStep> {
         return emptyList()
     }
+
+    override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+        Result.success(Unit)
 }
 
 /**
@@ -420,7 +428,7 @@ class PlanCommandHandlerTest {
         var lastPrompt: Prompt? = null
         var lastConfig: TaskExecutionConfig? = null
 
-        override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult {
+        override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>?): TaskResult {
             lastPrompt = prompt
             lastConfig = config
             return response
@@ -428,7 +436,8 @@ class PlanCommandHandlerTest {
 
         override suspend fun chatWithMessages(
             messages: List<io.averkhogliad.ai.challenge.week3.cli.domain.service.ChatMessage>,
-            config: TaskExecutionConfig
+            config: TaskExecutionConfig,
+            tools: List<MCPTool>?
         ): TaskResult {
             return response
         }

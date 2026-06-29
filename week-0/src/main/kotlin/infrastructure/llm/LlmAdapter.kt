@@ -5,6 +5,8 @@ import io.averkhogliad.ai.challenge.week0.domain.ModelId
 import io.averkhogliad.ai.challenge.week0.domain.Prompt
 import io.averkhogliad.ai.challenge.week0.domain.TaskResult
 import io.averkhogliad.ai.challenge.week0.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week0.domain.model.DomainFunctionCall
+import io.averkhogliad.ai.challenge.week0.domain.model.DomainToolCall
 import io.averkhogliad.ai.challenge.week0.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week0.domain.service.ChatMessage as DomainChatMessage
 
@@ -128,8 +130,21 @@ class LlmAdapter(
 
         return when {
             response.isFiltered() -> TaskResult.Error("Response was blocked by content filter")
-            response.isTruncated() -> TaskResult.Partial(content = response.content, progress = 1.0)
-            else -> TaskResult.Success(content = response.content, metadata = metadata)
+            response.isTruncated() -> TaskResult.Partial(content = response.content ?: "", progress = 1.0)
+            else -> TaskResult.Success(
+                content = response.content ?: "",
+                metadata = metadata,
+                toolCalls = mapToolCalls(response.toolCalls)
+            )
         }
     }
+
+    private fun mapToolCalls(utilsToolCalls: List<ToolCall>?): List<DomainToolCall>? =
+        utilsToolCalls?.map {
+            DomainToolCall(
+                it.id,
+                it.type,
+                DomainFunctionCall(it.function.name, it.function.arguments)
+            )
+        }
 }

@@ -92,7 +92,7 @@ class CompressingConversationalAgent(
             val compressedMessages = compressedUtilsMessages.map { utilsMsg ->
                 ChatMessage(
                     role = ChatRole.valueOf(utilsMsg.role.uppercase()),
-                    content = utilsMsg.content
+                    content = utilsMsg.content ?: ""
                 )
             }
 

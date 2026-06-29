@@ -1,5 +1,7 @@
 package io.averkhogliad.ai.challenge.week0.domain
 
+import io.averkhogliad.ai.challenge.week0.domain.model.DomainToolCall
+
 /**
  * Результат выполнения задачи.
  *
@@ -19,7 +21,8 @@ sealed interface TaskResult {
      */
     data class Success(
         val content: String,
-        val metadata: Map<String, Any> = emptyMap()
+        val metadata: Map<String, Any> = emptyMap(),
+        val toolCalls: List<DomainToolCall>? = null
     ) : TaskResult
 
     /**

@@ -93,12 +93,15 @@ class EventControllerIT(
 
         "returns paginated list with items and meta" {
             // given — seed 3 events via raw SQL
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(UUID.randomUUID().toString()).param("2026-01-15").param("Event A").param("").update()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(UUID.randomUUID().toString()).param("2026-02-01").param("Event B").param("").update()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(UUID.randomUUID().toString()).param("2026-03-10").param("Event C").param("").update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(UUID.randomUUID().toString()).param("2026-01-15").param("Event A").param("")
+                .param(java.time.Instant.now().toString()).update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(UUID.randomUUID().toString()).param("2026-02-01").param("Event B").param("")
+                .param(java.time.Instant.now().toString()).update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(UUID.randomUUID().toString()).param("2026-03-10").param("Event C").param("")
+                .param(java.time.Instant.now().toString()).update()
 
             // when
             val response = mockMvc.perform(
@@ -121,12 +124,15 @@ class EventControllerIT(
 
         "filters by date range" {
             // given
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(UUID.randomUUID().toString()).param("2026-01-10").param("Old").param("").update()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(UUID.randomUUID().toString()).param("2026-06-15").param("Middle").param("").update()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(UUID.randomUUID().toString()).param("2026-12-20").param("New").param("").update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(UUID.randomUUID().toString()).param("2026-01-10").param("Old").param("")
+                .param(java.time.Instant.now().toString()).update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(UUID.randomUUID().toString()).param("2026-06-15").param("Middle").param("")
+                .param(java.time.Instant.now().toString()).update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(UUID.randomUUID().toString()).param("2026-12-20").param("New").param("")
+                .param(java.time.Instant.now().toString()).update()
 
             // when
             val response = mockMvc.perform(
@@ -163,8 +169,9 @@ class EventControllerIT(
         "returns 200 with event JSON when found" {
             // given
             val id = UUID.randomUUID()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(id.toString()).param("2026-05-10").param("My Event").param("Details").update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(id.toString()).param("2026-05-10").param("My Event").param("Details")
+                .param(java.time.Instant.now().toString()).update()
 
             // when
             val response = mockMvc.perform(get("/api/v1/events/$id"))
@@ -196,8 +203,9 @@ class EventControllerIT(
         "updates only provided fields and returns 200" {
             // given
             val id = UUID.randomUUID()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(id.toString()).param("2026-03-01").param("Original").param("Original desc").update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(id.toString()).param("2026-03-01").param("Original").param("Original desc")
+                .param(java.time.Instant.now().toString()).update()
 
             val updateRequest = UpdateEventRequest(
                 title = "Updated Title",
@@ -233,8 +241,9 @@ class EventControllerIT(
         "deletes event and returns 204" {
             // given
             val id = UUID.randomUUID()
-            jdbcClient.sql("INSERT INTO event (id, date, title, description) VALUES (?, ?, ?, ?)")
-                .param(id.toString()).param("2026-07-07").param("To Delete").param("").update()
+            jdbcClient.sql("INSERT INTO event (id, date, title, description, created_at) VALUES (?, ?, ?, ?, ?)")
+                .param(id.toString()).param("2026-07-07").param("To Delete").param("")
+                .param(java.time.Instant.now().toString()).update()
 
             // when
             val response = mockMvc.perform(delete("/api/v1/events/$id"))

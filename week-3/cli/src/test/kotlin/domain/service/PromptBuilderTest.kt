@@ -436,7 +436,7 @@ class PromptBuilderTest {
     fun `SYSTEM_INSTRUCTION contains refusal steps and format`() {
         val instruction = PromptBuilder.SYSTEM_INSTRUCTION
         assertTrue(
-            instruction.contains("Перед ответом ВСЕГДА проверяй"),
+            instruction.contains("ВСЕГДА проверяй"),
             "SYSTEM_INSTRUCTION должен требовать проверки перед каждым ответом"
         )
         assertTrue(

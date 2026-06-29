@@ -364,7 +364,7 @@ class Task4Executor(
             val compressedMessages = compressedUtilsMessages.map { utilsMsg ->
                 ChatMessage(
                     role = io.averkhogliad.ai.challenge.week1.domain.service.ChatRole.valueOf(utilsMsg.role.uppercase()),
-                    content = utilsMsg.content
+                    content = utilsMsg.content ?: ""
                 )
             }
 

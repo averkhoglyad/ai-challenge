@@ -153,7 +153,7 @@ class SlidingWindowStrategy(
             } catch (e: IllegalArgumentException) {
                 null // Пропускаем сообщения с неизвестными ролями
             }
-            role?.let { ChatMessage(role = it, content = utilsMsg.content) }
+            role?.let { ChatMessage(role = it, content = utilsMsg.content ?: "") }
         }
 
         return PreparedContext.fromMessages(

@@ -9,7 +9,11 @@ import io.averkhogliad.ai.challenge.week3.cli.application.cache.CachingInvariant
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task1Executor
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task3Executor
 import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task4Executor
+import io.averkhogliad.ai.challenge.week3.cli.application.executor.Task5Executor
+import io.averkhogliad.ai.challenge.week3.cli.application.preset.PromptPresetAggregator
 import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
+import io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolCallRouter
+import io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry
 import io.averkhogliad.ai.challenge.week3.cli.application.usecase.CreateEventForTaskUseCase
 import io.averkhogliad.ai.challenge.week3.cli.application.usecase.ListNotesUseCase
 import io.averkhogliad.ai.challenge.week3.cli.cli.*
@@ -32,6 +36,8 @@ import io.averkhogliad.ai.challenge.week3.cli.infrastructure.config.ConfigAdapte
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.mcp.DefaultMCPConnectionManager
 import io.averkhogliad.ai.challenge.week3.cli.infrastructure.persistence.*
+import io.averkhogliad.ai.challenge.week3.cli.infrastructure.preset.ResourcePromptPresetLoader
+import io.averkhogliad.ai.challenge.week3.cli.infrastructure.tool.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -205,14 +211,38 @@ object ApplicationBootstrap {
             memoryService = memoryService
         )
 
+        // 12e. Infrastructure: ResourcePromptPresetLoader (загрузка BUILTIN пресетов)
+        val resourcePromptPresetLoader = ResourcePromptPresetLoader()
+
+        // 12f. Application: PromptPresetAggregator (BUILTIN + MCP пресеты)
+        val promptPresetAggregator = PromptPresetAggregator(resourcePromptPresetLoader, mcpService)
+
+        // 12g. Infrastructure: 6 builtin tools
+        val builtinTools = listOf(
+            GetCurrentTaskTool(),
+            CreateTaskTool(todoTaskService, taskRepository),
+            UpdateTaskTool(todoTaskService, taskRepository),
+            AddTaskStepTool(taskStepService, taskRepository),
+            ListTaskStepsTool(taskStepService),
+            LinkTaskToEventTool(taskRepository)
+        )
+
+        // 12h. Application: ToolRegistry + ToolCallRouter
+        val toolRegistry = ToolRegistry(builtinTools)
+        val toolCallRouter = ToolCallRouter(toolRegistry, mcpService)
+
         // 13. Application: DialogService (интеграция с LLM)
         val dialogService = DialogService(
             llmPort = llmPort,
             memoryService = memoryService,
             promptBuilder = promptBuilder,
-            profileRepository = profileRepository,  // передача репозитория профилей для встраивания активного профиля в промпт
-            invariantService = cachingInvariantService,  // передача кэширующего сервиса инвариантов для встраивания в промпт
-            mcpService = mcpService  // передача MCP-сервиса для получения инструментов
+            profileRepository = profileRepository,
+            invariantService = cachingInvariantService,
+            mcpService = mcpService,
+            toolCallRouter = toolCallRouter,
+            toolRegistry = toolRegistry,
+            promptPresetAggregator = promptPresetAggregator,
+            taskRepository = taskRepository
         )
 
         // 14. Application: Task executor (CLI-ассистент с FSM)
@@ -223,6 +253,9 @@ object ApplicationBootstrap {
 
         // 14c. Application: Task4 executor (Календарь событий и уведомления)
         val task4Executor = Task4Executor(dialogService)
+
+        // 14d. Application: Task5 executor (Smart Task Planner)
+        val task5Executor = Task5Executor(dialogService)
 
 
         // 15. Application: planner components (выделены из PlanCommandHandler)
@@ -273,6 +306,7 @@ object ApplicationBootstrap {
             task1Executor.taskId to task1Executor,
             task3Executor.taskId to task3Executor,
             task4Executor.taskId to task4Executor,
+            task5Executor.taskId to task5Executor,
         )
         val input = ConsoleCliInput()
         val commandHandler = CommandHandler(executors)

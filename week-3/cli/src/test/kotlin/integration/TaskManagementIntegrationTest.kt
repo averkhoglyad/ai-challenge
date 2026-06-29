@@ -8,6 +8,8 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.service.TaskRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -341,4 +343,10 @@ class InMemoryTaskRepository : TaskRepository {
     override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week3.cli.domain.model.TaskStep> {
         return emptyList()
     }
+
+    override suspend fun updateEvent(taskId: TaskId, eventId: UUID, dueDate: LocalDate): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun clearEvent(taskId: TaskId): Result<Unit> =
+        Result.success(Unit)
 }

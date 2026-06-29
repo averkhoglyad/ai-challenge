@@ -269,6 +269,30 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
 
         val content = message["content"]?.jsonPrimitive?.contentOrNull
 
+        val toolCalls = message["tool_calls"]?.jsonArray?.map { toolCallJson ->
+            val obj = toolCallJson.jsonObject
+            val id = obj["id"]?.jsonPrimitive?.content
+                ?: throw LlmException("API response tool_call missing 'id' field")
+            val functionObj = obj["function"]?.jsonObject
+                ?: throw LlmException("API response tool_call missing 'function' field")
+            val functionName = functionObj["name"]?.jsonPrimitive?.content
+                ?: throw LlmException("API response tool_call function missing 'name' field")
+            val functionArgs = functionObj["arguments"]?.jsonPrimitive?.content
+                ?: throw LlmException("API response tool_call function missing 'arguments' field")
+            ToolCall(
+                id = id,
+                type = obj["type"]?.jsonPrimitive?.content ?: "function",
+                function = FunctionCall(
+                    name = functionName,
+                    arguments = functionArgs
+                )
+            )
+        }
+
+        if (content == null && toolCalls.isNullOrEmpty()) {
+            throw LlmException("API response missing 'content' field in message")
+        }
+
         val finishReason = firstChoice["finish_reason"]?.jsonPrimitive?.contentOrNull
 
         val usage = root["usage"]?.jsonObject?.let { usageObj ->
@@ -276,18 +300,6 @@ class DefaultLlmClient(private val clientConfig: LlmClientConfig) : LlmClient {
                 promptTokens = usageObj["prompt_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
                 completionTokens = usageObj["completion_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
                 totalTokens = usageObj["total_tokens"]?.jsonPrimitive?.intOrNull ?: 0
-            )
-        }
-
-        val toolCalls = message["tool_calls"]?.jsonArray?.map { toolCallJson ->
-            val obj = toolCallJson.jsonObject
-            ToolCall(
-                id = obj["id"]!!.jsonPrimitive.content,
-                type = obj["type"]?.jsonPrimitive?.content ?: "function",
-                function = FunctionCall(
-                    name = obj["function"]!!.jsonObject["name"]!!.jsonPrimitive.content,
-                    arguments = obj["function"]!!.jsonObject["arguments"]!!.jsonPrimitive.content
-                )
             )
         }
 

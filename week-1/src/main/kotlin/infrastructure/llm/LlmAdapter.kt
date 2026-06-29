@@ -5,6 +5,8 @@ import io.averkhogliad.ai.challenge.week1.domain.ModelId
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskResult
 import io.averkhogliad.ai.challenge.week1.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week1.domain.model.DomainFunctionCall
+import io.averkhogliad.ai.challenge.week1.domain.model.DomainToolCall
 import io.averkhogliad.ai.challenge.week1.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week1.domain.service.ChatMessage as DomainChatMessage
 
@@ -115,6 +117,15 @@ class LlmAdapter(
         return domainMessages.map { ChatMessage(role = it.role.roleName, content = it.content) }
     }
 
+    private fun mapToolCalls(utilsToolCalls: List<ToolCall>?): List<DomainToolCall>? =
+        utilsToolCalls?.map {
+            DomainToolCall(
+                it.id,
+                it.type,
+                DomainFunctionCall(it.function.name, it.function.arguments)
+            )
+        }
+
     /** Маппинг infrastructure [ChatResponse] → domain [TaskResult]. */
     private fun mapToDomain(response: ChatResponse): TaskResult {
         val metadata = mutableMapOf<String, Any>(
@@ -128,8 +139,12 @@ class LlmAdapter(
 
         return when {
             response.isFiltered() -> TaskResult.Error("Response was blocked by content filter")
-            response.isTruncated() -> TaskResult.Partial(content = response.content, progress = 1.0)
-            else -> TaskResult.Success(content = response.content, metadata = metadata)
+            response.isTruncated() -> TaskResult.Partial(content = response.content ?: "", progress = 1.0)
+            else -> TaskResult.Success(
+                content = response.content ?: "",
+                metadata = metadata,
+                toolCalls = mapToolCalls(response.toolCalls)
+            )
         }
     }
 }

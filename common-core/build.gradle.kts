@@ -13,4 +13,6 @@ dependencies {
     implementation(libs.bundles.kotlinxEcosystem)
     implementation(libs.kotlinx.coroutines.jdk8)
     testImplementation(kotlin("test"))
+    // kotlinx-serialization-json needed by testFixtures (MockLlmClient uses JsonObject)
+    testFixturesImplementation(libs.bundles.kotlinxEcosystem)
 }

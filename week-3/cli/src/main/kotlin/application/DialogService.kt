@@ -1,6 +1,9 @@
 ﻿package io.averkhogliad.ai.challenge.week3.cli.application
 
+import io.averkhogliad.ai.challenge.week3.cli.application.preset.PromptPresetAggregator
 import io.averkhogliad.ai.challenge.week3.cli.application.service.MCPService
+import io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolCallRouter
+import io.averkhogliad.ai.challenge.week3.cli.application.tool.ToolRegistry
 import io.averkhogliad.ai.challenge.week3.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week3.cli.domain.TaskResult
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.TaskExecutionConfig
@@ -14,19 +17,19 @@ class DialogService(
     private val memoryService: MemoryService,
     private val promptBuilder: PromptBuilder,
     private val taskExecutionConfig: TaskExecutionConfig = TaskExecutionConfig(),
-    private val profileRepository: ProfileRepository,  // доступ к активному профилю для встраивания в промпт
-    private val invariantService: InvariantService,  // доступ к инвариантам для встраивания в промпт (CachingInvariantService extends InvariantService)
-    private val mcpService: MCPService  // доступ к MCP-инструментам для передачи в LLM
+    private val profileRepository: ProfileRepository,
+    private val invariantService: InvariantService,
+    private val mcpService: MCPService,
+    private val toolCallRouter: ToolCallRouter,
+    private val toolRegistry: ToolRegistry,
+    private val promptPresetAggregator: PromptPresetAggregator,
+    private val taskRepository: TaskRepository
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
     companion object {
         /** Максимальное количество итераций tool calls в одном диалоге */
-        const val MAX_TOOL_CALL_ITERATIONS = 10
-
-        // Префиксы ошибок от executeMcpTool
-        private const val MCP_TOOL_ERROR_PREFIX = "Ошибка выполнения"
-        private const val MCP_TOOL_NOT_FOUND_PREFIX = "Инструмент"
+        const val MAX_TOOL_CALL_ITERATIONS = 20
 
         // ANSI-коды для визуализации прогресса tool calls
         private const val ANSI_YELLOW = "\u001b[33m"
@@ -56,6 +59,10 @@ class DialogService(
             val invariants = invariantService.list()
             // Получаем доступные MCP-сценарии (prompts) со всех серверов
             val mcpPrompts = collectMcpPrompts()
+            // Агрегируем пресеты (BUILTIN + MCP)
+            val presets = promptPresetAggregator.aggregate()
+            // Строим контекст текущей задачи
+            var builtinContext = buildContext(taskId)
             val chatMessages = promptBuilder.buildChatMessages(
                 workingMemory = memoryContext.workingMemory,
                 relevantFacts = memoryContext.relevantFacts,
@@ -63,10 +70,12 @@ class DialogService(
                 userInput = userInput,
                 profile = activeProfile,
                 invariants = invariants,
-                mcpPrompts = mcpPrompts  // передача MCP-сценариев
+                mcpPrompts = mcpPrompts,
+                presets = presets,
+                builtinToolContext = builtinContext
             ).toMutableList()
-            // Получаем инструменты от подключенных MCP-серверов
-            val mcpTools = collectMcpTools()
+            // Получаем инструменты: MCP + builtin
+            val mcpTools = collectAllTools()
             memoryService.saveUserMessage(level, taskId, userInput)
             var result = llmPort.chatWithMessages(chatMessages, taskExecutionConfig, mcpTools)
 
@@ -103,10 +112,16 @@ class DialogService(
                     }
                     System.err.println("\n  [${index + 1}/${toolCalls.size}] $toolName($argsPreview)...")
 
-                    val toolResult = executeMcpTool(toolName, toolCall.function.arguments)
+                    val args = parseArguments(toolCall.function.arguments)
+                    val callResult = toolCallRouter.route(toolName, args, builtinContext)
 
-                    val isError =
-                        toolResult.startsWith(MCP_TOOL_ERROR_PREFIX) || toolResult.startsWith(MCP_TOOL_NOT_FOUND_PREFIX)
+                    // Обновить контекст, если инструмент его изменил
+                    if (callResult.updatedContext != null) {
+                        builtinContext = callResult.updatedContext
+                    }
+
+                    val toolResult = callResult.text
+                    val isError = callResult.isError
                     if (!isError) {
                         val resultPreview = toolResult.let {
                             if (it.length > 80) it.take(80) + "..." else it
@@ -159,7 +174,7 @@ class DialogService(
                 relevantFacts = memoryContext.relevantFacts,
                 invariants = invariants  // NEW: передача инвариантов
             )
-            val mcpTools = collectMcpTools()
+            val mcpTools = collectMcpToolsRaw()
             llmPort.chat(Prompt(planPrompt), taskExecutionConfig, mcpTools)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -171,22 +186,135 @@ class DialogService(
     // ──── Private helpers ────
 
     /**
-     * Собирает инструменты со всех подключенных MCP-серверов.
-     *
-     * Если серверов нет или ни один не подключен — возвращает null.
-     * Ошибки получения инструментов с отдельных серверов игнорируются.
+     * Строит [BuiltinToolContext] из taskId.
      */
-    private suspend fun collectMcpTools(): List<MCPTool>? {
+    private suspend fun buildContext(taskId: TaskId?): BuiltinToolContext {
+        if (taskId == null) return BuiltinToolContext.EMPTY
+        val task = taskRepository.findById(taskId)
+        return if (task != null) BuiltinToolContext(currentTask = task) else BuiltinToolContext.EMPTY
+    }
+
+    /**
+     * Собирает все инструменты (MCP + builtin) и обновляет namespace→server мапу в router-е.
+     */
+    private suspend fun collectAllTools(): List<MCPTool>? {
+        val namespacedMcpTools = collectNamespacedMcpTools()
+        val builtinDefs = toolRegistry.getBuiltinDefinitions()
+        return if (namespacedMcpTools != null) namespacedMcpTools + builtinDefs else builtinDefs.ifEmpty { null }
+    }
+
+    /**
+     * Парсит JSON-строку аргументов в Map.
+     */
+    private fun parseArguments(argumentsJson: String): Map<String, Any?> {
+        return try {
+            val jsonElement = json.parseToJsonElement(argumentsJson)
+            if (jsonElement is JsonObject) {
+                jsonElement.mapValues { (_, value) -> parseJsonValue(value) }
+            } else {
+                emptyMap()
+            }
+        } catch (e: Exception) {
+            System.err.println("[DIALOG-SERVICE] Ошибка парсинга аргументов JSON: ${e.message}")
+            emptyMap()
+        }
+    }
+
+    /**
+     * Собирает MCP-инструменты с namespace-префиксом (weather::, events::, notifications::)
+     * и обновляет [ToolCallRouter.namespaceServerMap] для маршрутизации.
+     */
+    private suspend fun collectNamespacedMcpTools(): List<MCPTool>? {
         val servers = mcpService.getAllServersForLlm()
-        if (servers.isEmpty()) return null
+        if (servers.isEmpty()) {
+            System.err.println("${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Нет доступных MCP-серверов")
+            toolCallRouter.namespaceServerMap = emptyMap()
+            return null
+        }
+
+        System.err.println("${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Проверяю ${servers.size} сервер(ов): ${servers.joinToString { "${it.name} (connected=${it.isConnected})" }}")
+
+        val allTools = mutableListOf<MCPTool>()
+        val nsMap = mutableMapOf<String, io.averkhogliad.ai.challenge.week3.cli.domain.ModelId>()
+
+        for (server in servers) {
+            if (!server.isConnected) {
+                System.err.println("  ${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Пропускаю ${server.name} — не подключён")
+                continue
+            }
+            val namespace = deriveNamespace(server.name)
+            mcpService.getTools(server.id).onSuccess { tools ->
+                nsMap[namespace] = server.id
+                System.err.println("  ${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Сервер ${server.name}: найдено ${tools.size} инструмент(ов)")
+                for (tool in tools) {
+                    val prefixedName = "${namespace}::${tool.name}"
+                    val desc =
+                        tool.description?.let { d -> if (d.length > 60) d.take(60) + "..." else d } ?: "(нет описания)"
+                    System.err.println("    ${ANSI_GREEN}${prefixedName}${ANSI_RESET} — $desc")
+                    allTools.add(tool.copy(name = prefixedName))
+                }
+            }.onFailure { error ->
+                System.err.println("  ${ANSI_RED}[MCP-TOOLS]${ANSI_RESET} Ошибка получения инструментов с ${server.name}: ${error.message}")
+            }
+        }
+
+        toolCallRouter.namespaceServerMap = nsMap
+        val total = allTools.size
+        if (total > 0) {
+            System.err.println("${ANSI_GREEN}[MCP-TOOLS]${ANSI_RESET} Итого собрано инструментов: $total")
+        } else {
+            System.err.println("${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Инструменты не найдены ни на одном сервере")
+        }
+        return allTools.ifEmpty { null }
+    }
+
+    /**
+     * Извлекает namespace из имени системного сервера (напр. "system-weather" → "weather").
+     */
+    private fun deriveNamespace(serverName: String): String {
+        val prefixes = mapOf(
+            "system-weather" to "weather",
+            "system-events" to "events",
+            "system-notifications" to "notifications"
+        )
+        return prefixes[serverName] ?: serverName
+    }
+
+    /**
+     * Собирает MCP-инструменты без префиксов (для :plan FSM, backward compat).
+     */
+    private suspend fun collectMcpToolsRaw(): List<MCPTool>? {
+        val servers = mcpService.getAllServersForLlm()
+        if (servers.isEmpty()) {
+            System.err.println("${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Нет доступных MCP-серверов")
+            return null
+        }
+
+        System.err.println("${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Проверяю ${servers.size} сервер(ов) для :plan: ${servers.joinToString { "${it.name} (connected=${it.isConnected})" }}")
 
         val allTools = mutableListOf<MCPTool>()
         for (server in servers) {
-            if (server.isConnected) {
-                mcpService.getTools(server.id).onSuccess { tools ->
-                    allTools.addAll(tools)
-                }
+            if (!server.isConnected) {
+                System.err.println("  ${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Пропускаю ${server.name} — не подключён")
+                continue
             }
+            mcpService.getTools(server.id).onSuccess { tools ->
+                System.err.println("  ${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Сервер ${server.name}: найдено ${tools.size} инструмент(ов)")
+                for (tool in tools) {
+                    val desc =
+                        tool.description?.let { d -> if (d.length > 60) d.take(60) + "..." else d } ?: "(нет описания)"
+                    System.err.println("    ${ANSI_GREEN}${tool.name}${ANSI_RESET} — $desc")
+                }
+                allTools.addAll(tools)
+            }.onFailure { error ->
+                System.err.println("  ${ANSI_RED}[MCP-TOOLS]${ANSI_RESET} Ошибка получения инструментов с ${server.name}: ${error.message}")
+            }
+        }
+        val total = allTools.size
+        if (total > 0) {
+            System.err.println("${ANSI_GREEN}[MCP-TOOLS]${ANSI_RESET} Итого собрано инструментов для :plan: $total")
+        } else {
+            System.err.println("${ANSI_YELLOW}[MCP-TOOLS]${ANSI_RESET} Инструменты не найдены ни на одном сервере")
         }
         return allTools.ifEmpty { null }
     }
@@ -257,36 +385,6 @@ class DialogService(
         }
         System.err.println("${ANSI_GREEN}[MCP-PROMPTS]${ANSI_RESET} Итого собрано промптов: ${result.size}")
         return result
-    }
-
-    /**
-     * Выполняет MCP-инструмент и возвращает текстовый результат.
-     *
-     * Ищет инструмент на всех подключенных MCP-серверах.
-     *
-     * @param name имя инструмента
-     * @param argumentsJson аргументы в формате JSON-строки
-     * @return текстовый результат или сообщение об ошибке
-     */
-    private suspend fun executeMcpTool(name: String, argumentsJson: String): String {
-        return try {
-            val jsonElement = json.parseToJsonElement(argumentsJson)
-            val args = if (jsonElement is JsonObject) {
-                jsonElement.mapValues { (_, value) -> parseJsonValue(value) }
-            } else {
-                emptyMap<String, Any?>()
-            }
-            val servers = mcpService.getAllServersForLlm()
-            for (server in servers) {
-                if (server.isConnected) {
-                    val result = mcpService.callTool(server.id, name, args)
-                    if (result.isSuccess) return result.getOrThrow()
-                }
-            }
-            "Инструмент '$name' не найден на подключенных серверах"
-        } catch (e: Exception) {
-            "Ошибка выполнения '$name': ${e.message}"
-        }
     }
 
     /**
