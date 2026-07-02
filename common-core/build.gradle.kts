@@ -1,18 +1,19 @@
 plugins {
-    // Apply the shared build logic from a convention plugin.
-    // The shared code is located in `buildSrc/src/main/kotlin/kotlin-jvm.gradle.kts`.
+    // Общая JVM-конфигурация для Kotlin-модулей проекта.
     id("buildsrc.convention.kotlin-jvm")
-    // Apply Kotlin Serialization plugin from `gradle/libs.versions.toml`.
+    // Сериализация нужна для моделей LLM, конфига и тестовых фикстур.
     alias(libs.plugins.kotlinPluginSerialization)
-    // Enable test fixtures for sharing test utilities across modules.
+    // Экспортируем общие тестовые фикстуры для потребителей модуля.
     `java-test-fixtures`
 }
 
 dependencies {
-    // Apply the kotlinx bundle of dependencies from the version catalog (`gradle/libs.versions.toml`).
+    // Базовый стек: coroutines + kotlinx serialization.
     implementation(libs.bundles.kotlinxEcosystem)
     implementation(libs.kotlinx.coroutines.jdk8)
+
     testImplementation(kotlin("test"))
-    // kotlinx-serialization-json needed by testFixtures (MockLlmClient uses JsonObject)
+
+    // Нужен testFixtures: например, MockLlmClient использует JsonObject.
     testFixturesImplementation(libs.bundles.kotlinxEcosystem)
 }

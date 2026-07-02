@@ -3,19 +3,15 @@ plugins {
 }
 
 dependencies {
-    // Kotest
+    // Общий стек тестирования, который переиспользуют Spring/Kotlin модули week-3.
     api(libs.kotestRunnerJunit5)
     api(libs.kotestAssertionsCore)
     api(libs.kotestProperty)
     api(libs.kotestExtensionsSpring)
-
-    // MockK
     api(libs.mockk)
-
-    // Coroutines
     api(libs.kotlinx.coroutines.test)
 
-    // Spring Test (compileOnly — version managed by consumers via Spring Boot plugin)
+    // Зависимости нужны утилитам модуля, но версии задаются модулями-потребителями.
     compileOnly(libs.springBootStarterTest)
     compileOnly(libs.springJdbc)
 }

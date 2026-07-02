@@ -707,9 +707,11 @@ object CommandParser {
 
     /**
      * Парсит команду добавления MCP-сервера.
-     * - `:mcp-add` → McpAddServerRequest (запуск интерактивного потока)
-     * - `:mcp-add stdio <name> <command> [args...]` → McpAddServer с Stdio
-     * - `:mcp-add http <name> <url>` → McpAddServer с StreamableHttp
+     *
+     * Поддерживаемые варианты:
+     * - `:mcp-add` — интерактивный сценарий добавления;
+     * - `:mcp-add stdio <name> <command>` с дополнительными аргументами — сервер со stdio-транспортом;
+     * - `:mcp-add http <name> <url>` — сервер со streamable HTTP transport.
      */
     internal fun parseMcpAddCommand(args: String, raw: String): Command {
         if (args.isEmpty()) return Command.McpAddServerRequest
@@ -792,7 +794,7 @@ object CommandParser {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // Парсинг команд управления событиями и уведомлениями (Wave 4 / Task3)
+    // Парсинг команд событий и уведомлений week-3 CLI
     // ═══════════════════════════════════════════════════════════════
 
     /**

@@ -23,7 +23,7 @@ class CliApplication(
         try {
             applicationResources.close()
         } catch (e: Exception) {
-            System.err.println("Warning: Failed to close application resources: ${e.message}")
+            System.err.println("Предупреждение: не удалось освободить ресурсы приложения: ${e.message}")
         }
     }
 

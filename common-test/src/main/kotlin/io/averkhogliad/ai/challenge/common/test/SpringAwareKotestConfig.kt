@@ -5,17 +5,14 @@ import io.kotest.extensions.spring.SpringAutowireConstructorExtension
 import io.kotest.extensions.spring.SpringExtension
 
 /**
- * Kotest configuration with Spring extensions enabled.
- * 
- * This configuration allows Kotest to work seamlessly with Spring Boot:
- * - SpringExtension: manages Spring context lifecycle
- * - SpringAutowireConstructorExtension: enables constructor injection in test classes
- * 
- * Usage:
- * ```kotlin
- * @SpringBootTest
- * class MyTest(private val service: MyService) : FreeSpec({ ... })
- * ```
+ * Базовая конфигурация Kotest для Spring-модулей проекта.
+ *
+ * Подключает расширения, которые нужны тестам в `week-3` и другим Spring Boot
+ * модулям, использующим `common-test`:
+ * - [SpringExtension] управляет жизненным циклом Spring Context;
+ * - [SpringAutowireConstructorExtension] включает конструкторную инъекцию в тестах.
+ *
+ * Обычно класс указывается в `kotest.properties` как project config.
  */
 class SpringAwareKotestConfig : AbstractProjectConfig() {
     override fun extensions() = listOf(SpringExtension, SpringAutowireConstructorExtension)

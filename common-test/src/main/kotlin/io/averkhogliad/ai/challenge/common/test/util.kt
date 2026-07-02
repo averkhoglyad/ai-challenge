@@ -4,17 +4,14 @@ import java.sql.Timestamp
 import java.time.Instant
 
 /**
- * Utility functions for test data conversion.
+ * Вспомогательные функции для тестового кода.
  */
 
 /**
- * Converts a database column value to Instant.
- * Handles both Instant and Timestamp types returned by JDBC.
- * 
- * Usage:
- * ```kotlin
- * val timestamp: Instant = resultSet.getObject("created_at").asInstantColumn()
- * ```
+ * Преобразует значение JDBC-колонки времени в [Instant].
+ *
+ * Полезно в интеграционных тестах SQLite/H2, где драйвер может вернуть как
+ * [Instant], так и [Timestamp].
  */
 fun Any.asInstantColumn(): Instant {
     return when (this) {

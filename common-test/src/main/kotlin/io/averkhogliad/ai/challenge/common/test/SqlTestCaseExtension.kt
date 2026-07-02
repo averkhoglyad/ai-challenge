@@ -11,13 +11,10 @@ import org.springframework.util.ResourceUtils.CLASSPATH_URL_PREFIX
 import javax.sql.DataSource
 
 /**
- * Executes SQL scripts from classpath resources.
- * 
- * Usage:
- * ```kotlin
- * beforeEach { executeSql("/init.sql") }
- * afterEach { executeSql("/clear.sql") }
- * ```
+ * Выполняет SQL-скрипты из classpath в контексте текущего Spring-теста.
+ *
+ * Используется в интеграционных тестах модулей `week-3`, когда нужно быстро
+ * подготовить или очистить состояние БД без дублирования boilerplate-кода.
  */
 suspend fun executeSql(vararg scripts: String) {
     executeSql(listOf(*scripts))
@@ -32,16 +29,9 @@ suspend fun executeSql(scripts: Iterable<String>) {
 }
 
 /**
- * Creates a TestCaseExtension that executes SQL scripts before/after each test.
- * 
- * Usage:
- * ```kotlin
- * class MyTest : FreeSpec({
- *     extension(sql(before = listOf("/init.sql"), after = listOf("/clear.sql")))
- *     
- *     "test case" { ... }
- * })
- * ```
+ * Создаёт [TestCaseExtension], который выполняет SQL-скрипты до и после теста.
+ *
+ * Подходит для сценариев вида "поднять тестовые данные → выполнить кейс → очистить БД".
  */
 fun sql(before: List<String> = emptyList(), after: List<String> = emptyList()): TestCaseExtension {
     return SqlTestCaseExtension(before, after)

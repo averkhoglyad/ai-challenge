@@ -8,16 +8,11 @@ import io.kotest.matchers.should
 import java.time.Instant
 
 /**
- * Custom Kotest matchers for common assertions.
+ * Общие Kotest-матчеры для тестовых модулей проекта.
  */
 
 /**
- * Matcher that checks if an Instant is within a range (inclusive).
- * 
- * Usage:
- * ```kotlin
- * timestamp shouldBe betweenInclusive(startTime, endTime)
- * ```
+ * Проверяет, что [Instant] попадает в диапазон включительно.
  */
 fun betweenInclusive(fromInstant: Instant, toInstant: Instant): Matcher<Instant> =
     object : Matcher<Instant> {
@@ -31,12 +26,7 @@ fun betweenInclusive(fromInstant: Instant, toInstant: Instant): Matcher<Instant>
     }
 
 /**
- * Asserts that two values are equal, handling null values correctly.
- * 
- * Usage:
- * ```kotlin
- * actualValue shouldBeEqual expectedValue
- * ```
+ * Сравнивает значения и корректно обрабатывает случай, когда ожидаемое значение равно `null`.
  */
 infix fun <A> A.shouldBeEqual(expected: A?): A? {
     if (expected == null) this.shouldBeNull()
