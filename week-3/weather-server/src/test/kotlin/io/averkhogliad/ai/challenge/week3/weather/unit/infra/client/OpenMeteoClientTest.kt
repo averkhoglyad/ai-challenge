@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week3.weather.unit.client
+package io.averkhogliad.ai.challenge.week3.weather.unit.infra.client
 
 import io.averkhogliad.ai.challenge.week3.weather.infra.client.GeocodingResponse
 import io.averkhogliad.ai.challenge.week3.weather.infra.client.OpenMeteoCurrentResponse

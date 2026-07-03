@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week3.weather.unit.cache
+package io.averkhogliad.ai.challenge.week3.weather.unit.infra.cache
 
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine

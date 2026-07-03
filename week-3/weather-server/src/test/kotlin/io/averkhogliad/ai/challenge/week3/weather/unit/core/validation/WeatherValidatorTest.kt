@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week3.weather.unit.validation
+package io.averkhogliad.ai.challenge.week3.weather.unit.core.validation
 
 import io.averkhogliad.ai.challenge.week3.weather.core.exception.InvalidParametersException
 import io.averkhogliad.ai.challenge.week3.weather.core.validation.WeatherInputValidator

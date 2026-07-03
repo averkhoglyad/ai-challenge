@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week3.weather.unit.model
+package io.averkhogliad.ai.challenge.week3.weather.unit.core.model
 
 import io.averkhogliad.ai.challenge.week3.weather.core.model.WeatherCondition
 import io.averkhogliad.ai.challenge.week3.weather.core.model.WmoMapper

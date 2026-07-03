@@ -28,6 +28,29 @@ dependencies {
     testImplementation(testFixtures(project(":common-core")))
 }
 
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+
+tasks.test {
+    useJUnitPlatform {
+        filter { excludeTestsMatching("*IT") }
+    }
+}
+
+tasks.register<Test>("integrationTest") {
+    description = "Runs integration tests."
+    group = "verification"
+    useJUnitPlatform {
+        filter { includeTestsMatching("*IT") }
+    }
+    shouldRunAfter(tasks.test)
+}
+
+tasks.check {
+    dependsOn("integrationTest")
+}
+
 application {
     // Define the Fully Qualified Name for the application main class.
     mainClass = "io.averkhogliad.ai.challenge.week2.AppKt"

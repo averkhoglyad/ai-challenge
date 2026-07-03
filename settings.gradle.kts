@@ -28,5 +28,6 @@ include(":week-3:cli")
 include(":week-3:events-server")
 include(":week-3:weather-server")
 include(":week-3:notification-server")
+include(":week-4:cli")
 
 rootProject.name = "ai-challenge"

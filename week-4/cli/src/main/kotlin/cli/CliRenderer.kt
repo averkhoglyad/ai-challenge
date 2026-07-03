@@ -1,0 +1,133 @@
+package io.averkhogliad.ai.challenge.week4.cli.cli
+
+import io.averkhogliad.ai.challenge.week4.cli.domain.TaskMetadata
+import io.averkhogliad.ai.challenge.week4.cli.domain.TaskResult
+import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week4.cli.domain.model.Fact
+import io.averkhogliad.ai.challenge.week4.cli.domain.model.Task
+import io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskId
+import io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskStep
+import io.averkhogliad.ai.challenge.week4.cli.domain.service.MemoryStatus
+
+interface CliRenderer {
+    fun renderTaskHeader(metadata: TaskMetadata)
+    fun renderResult(result: TaskResult)
+    fun renderError(message: String)
+    fun renderPrompt(state: CliState)
+    fun renderHelp(state: CliState)
+    fun renderParameters(state: CliState)
+    fun renderWelcome()
+    fun renderGoodbye()
+    fun renderRequestInfo(prompt: String, config: TaskExecutionConfig)
+    fun renderLoadingStart(message: String)
+    fun renderLoadingStop()
+
+    // Dialog rendering methods (no-op — dialog functionality removed)
+    fun renderSuccess(message: String)
+    fun renderInfo(message: String)
+
+    // Todo-manager rendering methods
+    fun renderTaskList(tasks: List<Task>)
+    fun renderTaskDetail(task: Task)
+    fun renderTaskCreated(taskId: TaskId)
+    fun renderTaskUpdated(taskId: TaskId)
+    fun renderTaskDeleted(taskId: TaskId)
+    fun renderTaskClosed(taskId: TaskId)
+    fun renderTaskCancelled(taskId: TaskId)
+
+    // Step management rendering methods
+    fun renderStepCreated(step: TaskStep)
+    fun renderStepList(steps: List<TaskStep>)
+    fun renderStepCompleted(step: TaskStep)
+    fun renderStepError(message: String)
+
+    // Memory management rendering methods
+    fun renderMemoryStatus(status: MemoryStatus)
+    fun renderMemoryCleared()
+
+    // LTM (Long-Term Memory) rendering methods
+    fun renderFactSaved(fact: Fact)
+    fun renderFactList(facts: List<Fact>)
+    fun renderFactForgotten(factId: String)
+    fun renderFactNotFound(factId: String)
+    fun renderFactSearchResults(facts: List<Fact>, query: String)
+    fun renderFactSearchEmpty(query: String)
+
+    // Profile rendering methods
+    fun renderProfileList(profiles: List<io.averkhogliad.ai.challenge.week4.cli.domain.model.Profile>)
+    fun renderProfileDetail(profile: io.averkhogliad.ai.challenge.week4.cli.domain.model.Profile)
+    fun renderProfileDeleted(name: String)
+    fun renderProfileUpdated(name: String)
+    fun renderProfileError(message: String)
+    fun renderMultilineInputPrompt()
+
+    // Profile creation step prompts (description + instructions)
+    fun renderProfileDescriptionPrompt()
+    fun renderProfileInstructionsPrompt()
+
+    // Profile error rendering methods (специфичные сообщения)
+    fun renderProfileNotFoundById(id: String)
+    fun renderProfileNotFoundByName(name: String)
+    fun renderProfileAlreadyExists(name: String)
+    fun renderMissingProfileId()
+    fun renderMissingProfileName()
+    fun renderEmptyProfileContent()
+    fun renderCannotDeleteActiveProfile()
+    fun renderProfileContentTooLong(length: Int)
+
+    // Profile status rendering in :status command
+    fun renderStatusProfile(profileName: String?)
+
+    // Debug mode status rendering in :status command
+    fun renderStatusDebug(enabled: Boolean)
+
+    // Active FSM command status rendering in :status command
+    fun renderStatusActiveCommand(commandName: String?)
+
+    // FSM (Finite State Machine) visualization for debug mode
+    fun renderFsmState(state: io.averkhogliad.ai.challenge.week4.cli.domain.model.CommandState)
+
+    // Debug mode pause after step execution
+    fun waitForEnter()
+
+    // FSM state command rendering (:state)
+    fun renderFsmStateInfo(state: io.averkhogliad.ai.challenge.week4.cli.domain.model.CommandState)
+    fun renderNoActiveCommand()
+
+    // Abort command rendering (:abort)
+    fun renderAbortConfirmation()
+    fun renderAbortSuccess()
+    fun renderAbortCancelled()
+
+    // Invariant management rendering methods
+    fun renderInvariantList(invariants: List<io.averkhogliad.ai.challenge.week4.cli.domain.model.Invariant>)
+    fun renderInvariantAdded(invariant: io.averkhogliad.ai.challenge.week4.cli.domain.model.Invariant)
+    fun renderInvariantRemoved(id: Int)
+    fun renderInvariantNotFound(id: Int)
+    fun renderInvariantEmptyRule()
+    fun renderInvariantRemoveConfirmation(id: Int)
+    fun renderStatusInvariants(count: Int)
+
+    // FSM status in :status command
+    fun renderStatusFsm(
+        stage: io.averkhogliad.ai.challenge.week4.cli.domain.model.CommandStage?,
+        availableTransitions: List<io.averkhogliad.ai.challenge.week4.cli.domain.model.Transition>
+    )
+
+    // Goto command rendering methods
+    fun renderStateMap(stateMap: io.averkhogliad.ai.challenge.week4.cli.domain.model.StateMap)
+    fun renderGotoSuccess(
+        from: io.averkhogliad.ai.challenge.week4.cli.domain.model.CommandStage,
+        to: io.averkhogliad.ai.challenge.week4.cli.domain.model.CommandStage
+    )
+
+    fun renderGotoError(reason: String)
+    fun renderGotoNoActiveCommand()
+    fun renderGotoInvalidState(stateName: String)
+
+    // Debug mode — available transitions
+    fun renderAvailableTransitions(transitions: List<io.averkhogliad.ai.challenge.week4.cli.domain.model.Transition>)
+
+    // LLM telemetry rendering
+    fun renderTelemetry(result: TaskResult)
+}

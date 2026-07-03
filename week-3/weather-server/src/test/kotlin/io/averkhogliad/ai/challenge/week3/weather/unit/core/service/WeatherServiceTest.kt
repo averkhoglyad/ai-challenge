@@ -1,4 +1,4 @@
-package io.averkhogliad.ai.challenge.week3.weather.unit.service
+package io.averkhogliad.ai.challenge.week3.weather.unit.core.service
 
 import io.averkhogliad.ai.challenge.week3.weather.core.exception.ProviderUnavailableException
 import io.averkhogliad.ai.challenge.week3.weather.core.geocoding.CityResolver
