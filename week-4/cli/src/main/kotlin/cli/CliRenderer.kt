@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week4.cli.cli
 
+import io.averkhogliad.ai.challenge.week4.cli.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week4.cli.domain.TaskMetadata
 import io.averkhogliad.ai.challenge.week4.cli.domain.TaskResult
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
@@ -10,6 +11,7 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskStep
 import io.averkhogliad.ai.challenge.week4.cli.domain.service.MemoryStatus
 
 interface CliRenderer {
+    fun renderMenu(executors: List<TaskExecutor>)
     fun renderTaskHeader(metadata: TaskMetadata)
     fun renderResult(result: TaskResult)
     fun renderError(message: String)

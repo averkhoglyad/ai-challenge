@@ -336,6 +336,8 @@ private class RecordingRenderer : CliRenderer {
     override fun renderHelp(state: CliState) = Unit
     override fun renderParameters(state: CliState) = Unit
     override fun renderWelcome() = Unit
+    override fun renderMenu(executors: List<io.averkhogliad.ai.challenge.week4.cli.application.executor.TaskExecutor>) =
+        Unit
     override fun renderGoodbye() = Unit
     override fun renderRequestInfo(prompt: String, config: TaskExecutionConfig) = Unit
     override fun renderLoadingStart(message: String) = Unit

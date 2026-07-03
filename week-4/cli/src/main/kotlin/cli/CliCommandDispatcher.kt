@@ -16,7 +16,7 @@ class CliCommandDispatcher(
         is Command.Unknown -> state.also { renderer.renderError("Неизвестная команда: ${command.raw}") }
 
         is Command.SelectTask -> handleSelectTask(command, state)
-        is Command.Back -> handlers.todoTask.handleBack(state) {}
+        is Command.Back -> handleBack(state)
         is Command.Quit -> handlers.command.handle(command, state)
         is Command.UserInput -> userInputFlowHandler.handle(command, state)
 
@@ -113,6 +113,14 @@ class CliCommandDispatcher(
         is Command.IndexDeleteKeepLast -> handlers.indexer.handleIndexDeleteKeepLast(command, state)
         is Command.IndexClear -> handlers.indexer.handleIndexClear(state)
         is Command.IndexClearAll -> handlers.indexer.handleIndexClearAll(state)
+
+        is Command.Rag -> handlers.rag.handle(command.ragCommand, state)
+    }
+
+    private suspend fun handleBack(state: CliState): CliState {
+        return handlers.todoTask.handleBack(state) {
+            renderer.renderMenu(handlers.command.getAllExecutors())
+        }
     }
 
     private fun handleSelectTask(command: Command.SelectTask, state: CliState): CliState {

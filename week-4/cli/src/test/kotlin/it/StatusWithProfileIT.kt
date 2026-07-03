@@ -41,6 +41,7 @@ class StatusWithProfileIT : FreeSpec({
         val renderedMessages = mutableListOf<String>()
 
         override fun renderWelcome() {}
+        override fun renderMenu(executors: List<io.averkhogliad.ai.challenge.week4.cli.application.executor.TaskExecutor>) {}
         override fun renderTaskHeader(metadata: io.averkhogliad.ai.challenge.week4.cli.domain.TaskMetadata) {}
         override fun renderResult(result: io.averkhogliad.ai.challenge.week4.cli.domain.TaskResult) {}
         override fun renderError(message: String) {}

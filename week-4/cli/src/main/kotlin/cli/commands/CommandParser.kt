@@ -1,6 +1,7 @@
 ﻿package io.averkhogliad.ai.challenge.week4.cli.cli.commands
 
 import io.averkhogliad.ai.challenge.week4.cli.application.handler.DebugAction
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandParser
 import io.averkhogliad.ai.challenge.week4.cli.domain.model.MCPTransport
 import io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskId
 
@@ -64,7 +65,8 @@ data class CommandContext(
             "compression", "comp",
             "strategy", "branch", "checkpoint", "facts",
             "create-event", "notes",
-            "index", "index-runs", "index-switch", "index-stats", "index-compare", "index-delete", "index-clear"
+            "index", "index-runs", "index-switch", "index-stats", "index-compare", "index-delete", "index-clear",
+            "rag"
         )
 
         fun activeTaskContext(taskId: Int = 1): CommandContext = CommandContext(
@@ -272,6 +274,9 @@ object CommandParser {
             "index-compare" -> parseIndexCompareCommand(args, raw)
             "index-delete" -> parseIndexDeleteCommand(args, raw)
             "index-clear" -> parseIndexClearCommand(args)
+
+            // Команды RAG
+            "rag" -> parseRagCommand(args, raw)
 
             else -> Command.Unknown(raw)
         }
@@ -904,6 +909,16 @@ object CommandParser {
     internal fun parseIndexClearCommand(args: String): Command {
         return if (args == "--all") Command.IndexClearAll
         else Command.IndexClear
+    }
+
+    /**
+     * Парсит команду RAG: `:rag`, `:rag status`, `:rag list`.
+     * Делегирует в [RagCommandParser].
+     */
+    internal fun parseRagCommand(args: String, raw: String): Command {
+        val ragCommand = RagCommandParser.parse(raw)
+        return if (ragCommand != null) Command.Rag(ragCommand)
+        else Command.Unknown(raw)
     }
 
 }

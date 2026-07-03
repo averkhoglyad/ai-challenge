@@ -190,7 +190,7 @@ class CliApplicationTest : FreeSpec({
         profileRepository: io.averkhogliad.ai.challenge.week4.cli.domain.service.ProfileRepository = stubProfileRepository,
     ): CliApplication {
 
-        val commandHandler = CommandHandler()
+        val commandHandler = CommandHandler(emptyMap())
         val handlers = CliCommandHandlers(
             command = commandHandler,
             debug = stubDebugCommandHandler,
@@ -238,12 +238,16 @@ class CliApplicationTest : FreeSpec({
             mcp = mockk<MCPCommandHandler>(relaxed = true),
             events = mockk<EventsCommandHandler>(relaxed = true),
             indexer = mockk<io.averkhogliad.ai.challenge.week4.cli.cli.indexer.IndexCommandHandler>(relaxed = true),
+            rag = mockk<io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandHandler>(relaxed = true),
         )
         val userInputFlowHandler = UserInputFlowHandler(
             renderer = renderer,
             dialogService = stubDialogService,
             planCommandHandler = stubPlanCommandHandler,
-            commandEngine = stubCommandEngine
+            commandEngine = stubCommandEngine,
+            commandHandler = commandHandler,
+            indexRepository = mockk(relaxed = true),
+            ragQueryProcessor = null,
         )
         val planFlowHandler = PlanFlowHandler(
             renderer = renderer,
@@ -557,11 +561,15 @@ class CliApplicationTest : FreeSpec({
                     promptPresetAggregator = mockk(relaxed = true),
                     taskRepository = stubTaskRepository
                 )
+                val cmdHandler = CommandHandler(emptyMap())
                 val flow = UserInputFlowHandler(
                     renderer = renderer,
                     dialogService = dialogService,
                     planCommandHandler = stubPlanCommandHandler,
-                    commandEngine = stubCommandEngine
+                    commandEngine = stubCommandEngine,
+                    commandHandler = cmdHandler,
+                    indexRepository = mockk(relaxed = true),
+                    ragQueryProcessor = null,
                 )
 
                 // when
@@ -670,6 +678,10 @@ private class MockCliRenderer : CliRenderer {
 
     override fun renderWelcome() {
         renderedMessages.add("welcome")
+    }
+
+    override fun renderMenu(executors: List<io.averkhogliad.ai.challenge.week4.cli.application.executor.TaskExecutor>) {
+        renderedMessages.add("menu:${executors.size}")
     }
 
     override fun renderPrompt(state: CliState) {

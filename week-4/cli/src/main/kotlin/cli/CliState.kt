@@ -1,6 +1,7 @@
 package io.averkhogliad.ai.challenge.week4.cli.cli
 
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagSessionState
 
 /**
  * Иммутабельное состояние CLI (Imperative Shell).
@@ -48,7 +49,10 @@ data class CliState(
     val pendingProfileEdit: String? = null,
 
     /** Буфер для многострочного ввода содержимого профиля */
-    val multilineInputBuffer: List<String> = emptyList()
+    val multilineInputBuffer: List<String> = emptyList(),
+
+    /** Состояние RAG-сессии (Retrieval-Augmented Generation) */
+    val ragState: RagSessionState = RagSessionState()
 )
 
 /**

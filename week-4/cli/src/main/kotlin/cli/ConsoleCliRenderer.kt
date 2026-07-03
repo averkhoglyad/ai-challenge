@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week4.cli.cli
 
+import io.averkhogliad.ai.challenge.week4.cli.application.executor.TaskExecutor
 import io.averkhogliad.ai.challenge.week4.cli.cli.renderers.FsmRenderer
 import io.averkhogliad.ai.challenge.week4.cli.cli.renderers.InvariantRenderer
 import io.averkhogliad.ai.challenge.week4.cli.cli.renderers.ProfileRenderer
@@ -76,6 +77,18 @@ class ConsoleCliRenderer : CliRenderer {
         spinnerThread = null
         print("\r" + " ".repeat(spinnerMessage.length + 4) + "\r")
         System.out.flush()
+    }
+
+    override fun renderMenu(executors: List<TaskExecutor>) {
+        println()
+        println("${CYAN}${"=".repeat(60)}${RESET}")
+        println("${CYAN}  🎯 AI Challenge — Выбор задачи${RESET}")
+        println("${CYAN}${"=".repeat(60)}${RESET}")
+        for (executor in executors.sortedBy { it.taskId.value }) {
+            val meta = executor.metadata
+            println("  ${CYAN}${meta.id.value}.${RESET} ${meta.title}")
+        }
+        println("${CYAN}${"=".repeat(60)}${RESET}")
     }
 
     override fun renderTaskHeader(metadata: TaskMetadata) {

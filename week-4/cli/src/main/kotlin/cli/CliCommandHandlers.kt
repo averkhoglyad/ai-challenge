@@ -3,6 +3,7 @@
 import io.averkhogliad.ai.challenge.week4.cli.application.handler.DebugCommandHandler
 import io.averkhogliad.ai.challenge.week4.cli.cli.handlers.*
 import io.averkhogliad.ai.challenge.week4.cli.cli.indexer.IndexCommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandHandler
 
 data class CliCommandHandlers(
     val command: CommandHandler,
@@ -18,4 +19,5 @@ data class CliCommandHandlers(
     val mcp: MCPCommandHandler,
     val events: EventsCommandHandler,
     val indexer: IndexCommandHandler,
+    val rag: RagCommandHandler,
 )

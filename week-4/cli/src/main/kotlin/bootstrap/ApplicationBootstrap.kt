@@ -10,6 +10,7 @@ import io.averkhogliad.ai.challenge.week4.cli.application.indexer.DocumentLoader
 import io.averkhogliad.ai.challenge.week4.cli.application.indexer.EmbeddingGeneratorFactory
 import io.averkhogliad.ai.challenge.week4.cli.application.indexer.IndexingPipeline
 import io.averkhogliad.ai.challenge.week4.cli.application.preset.PromptPresetAggregator
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagQueryProcessor
 import io.averkhogliad.ai.challenge.week4.cli.application.service.MCPService
 import io.averkhogliad.ai.challenge.week4.cli.application.tool.ToolCallRouter
 import io.averkhogliad.ai.challenge.week4.cli.application.tool.ToolRegistry
@@ -18,6 +19,8 @@ import io.averkhogliad.ai.challenge.week4.cli.application.usecase.ListNotesUseCa
 import io.averkhogliad.ai.challenge.week4.cli.cli.*
 import io.averkhogliad.ai.challenge.week4.cli.cli.handlers.*
 import io.averkhogliad.ai.challenge.week4.cli.cli.indexer.IndexCommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandRenderer
 import io.averkhogliad.ai.challenge.week4.cli.cli.renderers.MCPRenderer
 import io.averkhogliad.ai.challenge.week4.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.AppConfig
@@ -45,6 +48,8 @@ import io.averkhogliad.ai.challenge.week4.cli.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.mcp.DefaultMCPConnectionManager
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.persistence.*
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.preset.ResourcePromptPresetLoader
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.prompt.SimpleRagPromptBuilder
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.search.InMemoryCosineSearchAdapter
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.tool.*
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
@@ -259,7 +264,15 @@ object ApplicationBootstrap {
             taskRepository = taskRepository
         )
 
-        // 15. Application: planner components (выделены из PlanCommandHandler)
+        // 14. Application: Task executors
+        val task1Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task1Executor(dialogService)
+        val task2Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task2Executor(dialogService)
+        val executors = mapOf(
+            task1Executor.taskId to task1Executor,
+            task2Executor.taskId to task2Executor,
+        )
+
+        // 15. Application: planner components
         val keywordExtractor = io.averkhogliad.ai.challenge.week4.cli.application.planner.KeywordExtractor()
         val factCollector = io.averkhogliad.ai.challenge.week4.cli.application.planner.FactCollector(
             factRepository = factRepository,
@@ -304,7 +317,7 @@ object ApplicationBootstrap {
 
 
         val input = ConsoleCliInput()
-        val commandHandler = CommandHandler()
+        val commandHandler = CommandHandler(executors)
         val taskStepHandler = TaskStepCommandHandler(
             taskStepService = taskStepService,
             renderer = renderer
@@ -412,6 +425,21 @@ object ApplicationBootstrap {
             structuralChunker = structuralChunker
         )
 
+        // ──── RAG components ────
+        val vectorSearchAdapter = InMemoryCosineSearchAdapter(indexRepository)
+        val ragPromptBuilder = SimpleRagPromptBuilder()
+        val ragQueryProcessor = if (llmPort != null) {
+            RagQueryProcessor(
+                embeddingGenerator = embeddingGenerator,
+                vectorSearchPort = vectorSearchAdapter,
+                promptBuilder = ragPromptBuilder,
+                llmPort = llmPort,
+                indexRepository = indexRepository
+            )
+        } else null
+        val ragCommandRenderer = RagCommandRenderer()
+        val ragCommandHandler = RagCommandHandler(indexRepository, ragCommandRenderer)
+
         val handlers = CliCommandHandlers(
             command = commandHandler,
             debug = debugCommandHandler,
@@ -426,13 +454,17 @@ object ApplicationBootstrap {
             mcp = mcpHandler,
             events = eventsHandler,
             indexer = indexCommandHandler,
+            rag = ragCommandHandler,
         )
 
         val userInputFlowHandler = UserInputFlowHandler(
             renderer = renderer,
             dialogService = dialogService,
             planCommandHandler = planCommandHandler,
-            commandEngine = commandEngine
+            commandEngine = commandEngine,
+            commandHandler = commandHandler,
+            indexRepository = indexRepository,
+            ragQueryProcessor = ragQueryProcessor,
         )
         val planFlowHandler = PlanFlowHandler(
             renderer = renderer,

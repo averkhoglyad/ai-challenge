@@ -76,7 +76,7 @@ class CommandHandlerTest : FreeSpec({
         "Help does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -90,7 +90,7 @@ class CommandHandlerTest : FreeSpec({
         "Quit sets isRunning to false" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState(isRunning = true)
 
                 // when
@@ -104,7 +104,7 @@ class CommandHandlerTest : FreeSpec({
         "Back is no-op in CommandHandler" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val states = listOf(
                     CliState(currentTaskId = 1),
                     CliState(currentTodoTaskId = "some-uuid"),
@@ -121,7 +121,7 @@ class CommandHandlerTest : FreeSpec({
         "SelectTask sets currentTaskId" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState(currentTaskId = null)
 
                 // when
@@ -135,7 +135,7 @@ class CommandHandlerTest : FreeSpec({
         "SelectTask switches task" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState(currentTaskId = 1)
 
                 // when
@@ -155,7 +155,7 @@ class CommandHandlerTest : FreeSpec({
         "SetTemperature updates executionConfig" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -169,7 +169,7 @@ class CommandHandlerTest : FreeSpec({
         "SetMaxTokens updates executionConfig" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -183,7 +183,7 @@ class CommandHandlerTest : FreeSpec({
         "SetStopSequences updates executionConfig" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
                 val seq = listOf("END", "STOP")
 
@@ -198,7 +198,7 @@ class CommandHandlerTest : FreeSpec({
         "ResetParameters resets to defaults" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState(executionConfig = TaskExecutionConfig(temperature = 1.8, maxTokens = 1000))
 
                 // when
@@ -212,7 +212,7 @@ class CommandHandlerTest : FreeSpec({
         "ShowParameters does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -232,7 +232,7 @@ class CommandHandlerTest : FreeSpec({
         "ListDialogs does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -246,7 +246,7 @@ class CommandHandlerTest : FreeSpec({
         "ShowHistory does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -266,7 +266,7 @@ class CommandHandlerTest : FreeSpec({
         "SetCompressionEnabled does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -280,7 +280,7 @@ class CommandHandlerTest : FreeSpec({
         "SetCompressionWindow does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -294,7 +294,7 @@ class CommandHandlerTest : FreeSpec({
         "SetCompressionBlock does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -308,7 +308,7 @@ class CommandHandlerTest : FreeSpec({
         "ShowCompressionStatus does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -328,7 +328,7 @@ class CommandHandlerTest : FreeSpec({
         "ShowStrategyMenu does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -342,7 +342,7 @@ class CommandHandlerTest : FreeSpec({
         "SwitchStrategy does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -356,7 +356,7 @@ class CommandHandlerTest : FreeSpec({
         "ShowCurrentStrategy does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -370,7 +370,7 @@ class CommandHandlerTest : FreeSpec({
         "CreateBranch does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -384,7 +384,7 @@ class CommandHandlerTest : FreeSpec({
         "SwitchBranch does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -398,7 +398,7 @@ class CommandHandlerTest : FreeSpec({
         "ListBranches does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -412,7 +412,7 @@ class CommandHandlerTest : FreeSpec({
         "CreateCheckpoint does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -426,7 +426,7 @@ class CommandHandlerTest : FreeSpec({
         "ListCheckpoints does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -440,7 +440,7 @@ class CommandHandlerTest : FreeSpec({
         "ListFacts does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -454,7 +454,7 @@ class CommandHandlerTest : FreeSpec({
         "ClearFacts does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -468,7 +468,7 @@ class CommandHandlerTest : FreeSpec({
         "AddFact does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -482,7 +482,7 @@ class CommandHandlerTest : FreeSpec({
         "RemoveFact does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -502,7 +502,7 @@ class CommandHandlerTest : FreeSpec({
         "ClearMemory does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -516,7 +516,7 @@ class CommandHandlerTest : FreeSpec({
         "ShowStatus does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -536,7 +536,7 @@ class CommandHandlerTest : FreeSpec({
         "Unknown does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -550,7 +550,7 @@ class CommandHandlerTest : FreeSpec({
         "UserInput does not change state" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -570,7 +570,7 @@ class CommandHandlerTest : FreeSpec({
         "todo commands are no-op in CommandHandler" {
             runTest {
                 // given
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when & then
@@ -600,7 +600,7 @@ class CommandHandlerTest : FreeSpec({
             repository = InMemoryTaskRepository()
             executor = TodoTaskService(repository)
             stepRepository = InMemoryTaskStepRepository()
-            handler = CommandHandler()
+            handler = CommandHandler(emptyMap())
         }
 
         suspend fun openTask(): CliState {

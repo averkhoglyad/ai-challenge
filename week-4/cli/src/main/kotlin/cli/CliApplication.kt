@@ -31,6 +31,7 @@ class CliApplication(
         var state = CliState()
 
         renderer.renderWelcome()
+        renderer.renderMenu(commandHandler.getAllExecutors())
 
         while (state.isRunning) {
             try {

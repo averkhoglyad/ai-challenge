@@ -1,6 +1,7 @@
 ﻿package io.averkhogliad.ai.challenge.week4.cli.cli.commands
 
 import io.averkhogliad.ai.challenge.week4.cli.application.handler.DebugAction
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommand
 import io.averkhogliad.ai.challenge.week4.cli.domain.model.MCPTransport
 import io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskId
 
@@ -399,4 +400,11 @@ sealed interface Command {
 
     /** Неизвестная команда (начинается с ':' но не распознана) */
     data class Unknown(val raw: String) : Command
+
+    // ═══════════════════════════════════════════════════════════════
+    // Команды RAG
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Команда управления RAG: `:rag`, `:rag status`, `:rag list` */
+    data class Rag(val ragCommand: RagCommand) : Command
 }

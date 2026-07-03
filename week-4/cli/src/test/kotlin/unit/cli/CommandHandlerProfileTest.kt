@@ -25,7 +25,7 @@ class CommandHandlerProfileTest : FreeSpec({
                 val repo = InMemoryProfileRepository()
                 val profileService = ProfileService(repo)
                 profileService.handleCreateProfile("Test Profile", "Test content", "")
-                val handler = CommandHandler()
+                val handler = CommandHandler(emptyMap())
                 val state = CliState()
 
                 // when
@@ -139,6 +139,7 @@ private class RecordingProfileRenderer : CliRenderer {
     override fun renderHelp(state: CliState) {}
     override fun renderParameters(state: CliState) {}
     override fun renderWelcome() {}
+    override fun renderMenu(executors: List<io.averkhogliad.ai.challenge.week4.cli.application.executor.TaskExecutor>) {}
     override fun renderGoodbye() {}
     override fun renderRequestInfo(prompt: String, config: TaskExecutionConfig) {}
     override fun renderLoadingStart(message: String) {}

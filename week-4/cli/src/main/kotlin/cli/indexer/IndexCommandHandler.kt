@@ -5,11 +5,10 @@ import io.averkhogliad.ai.challenge.week4.cli.application.indexer.IndexingPipeli
 import io.averkhogliad.ai.challenge.week4.cli.cli.CliRenderer
 import io.averkhogliad.ai.challenge.week4.cli.cli.CliState
 import io.averkhogliad.ai.challenge.week4.cli.cli.commands.Command
-import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.ChunkingStrategyType
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.port.ChunkingStrategy
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.port.IndexRepository
 import kotlinx.coroutines.runBlocking
-import java.util.UUID
+import java.util.*
 
 /**
  * Обработчик команд индексации документов.
@@ -68,15 +67,19 @@ class IndexCommandHandler(
                 val runId = UUID.fromString(command.runId)
                 val run = repository.getRun(runId)
                 if (run == null) {
-                    renderer.renderError("Run not found: ${command.runId}")
+                    renderer.renderError("❌ Индекс с ID '${command.runId}' не найден.")
+                    renderer.renderInfo("   Используйте :rag list или :index-runs для просмотра доступных индексов.")
+                } else if (run.status != io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.RunStatus.COMPLETED) {
+                    renderer.renderError("❌ Индекс ${command.runId} имеет статус ${run.status} и не может быть активирован.")
+                    renderer.renderInfo("   Дождитесь завершения индексации или выберите другой индекс.")
                 } else {
                     repository.setActiveIndex(runId)
-                    renderer.renderInfo("Active index switched to: ${command.runId}")
+                    renderer.renderInfo("✓ Активный индекс переключён на: ${command.runId} (${run.strategy.name}, ${run.totalChunks} чанков)")
                 }
             } catch (e: IllegalArgumentException) {
-                renderer.renderError("Invalid run ID format: ${command.runId}")
+                renderer.renderError("Неверный формат run ID: ${command.runId}")
             } catch (e: Exception) {
-                renderer.renderError("Failed to switch index: ${e.message}")
+                renderer.renderError("Не удалось переключить индекс: ${e.message}")
             }
             state
         }
