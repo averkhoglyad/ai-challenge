@@ -42,7 +42,20 @@ data class CommandContext(
             "mcp-connect",
             "mcp-disconnect",
             "mcp-tools",
-            "notes"
+            "notes",
+            "chat-new",
+            "chat-list",
+            "chat-switch",
+            "chat-rename",
+            "chat-delete",
+            "chat-archive",
+            "chat-history",
+            "task-state",
+            "task-reset",
+            "task-goal",
+            "task-term",
+            "task-constraint",
+            "exit"
         )
 
         /**
@@ -66,7 +79,11 @@ data class CommandContext(
             "strategy", "branch", "checkpoint", "facts",
             "create-event", "notes",
             "index", "index-runs", "index-switch", "index-stats", "index-compare", "index-delete", "index-clear",
-            "rag"
+            "rag",
+            // Chat commands (Task 5)
+            "chat-new", "chat-list", "chat-switch", "chat-rename", "chat-delete", "chat-archive", "chat-history",
+            "task-state", "task-reset", "task-goal", "task-term", "task-constraint",
+            "exit"
         )
 
         fun activeTaskContext(taskId: Int = 1): CommandContext = CommandContext(
@@ -277,6 +294,17 @@ object CommandParser {
 
             // Команды RAG
             "rag" -> parseRagCommand(args, raw)
+
+            // Команды чата (Task 5)
+            "chat-new", "chat-list", "chat-switch", "chat-rename", "chat-delete", "chat-archive", "chat-history" ->
+                parseChatCommand(commandName, args, raw)
+
+            "task-state", "task-reset", "task-goal", "task-term", "task-constraint" ->
+                parseTaskStateCmd(commandName, args, raw)
+
+            // Выход из chat mode — :back в режиме чата интерпретируется как ExitChatMode
+            // :exit и :clear тоже могут быть в режиме чата
+            "exit" -> Command.ExitChatMode
 
             else -> Command.Unknown(raw)
         }
@@ -918,6 +946,32 @@ object CommandParser {
     internal fun parseRagCommand(args: String, raw: String): Command {
         val ragCommand = RagCommandParser.parse(raw)
         return if (ragCommand != null) Command.Rag(ragCommand)
+        else Command.Unknown(raw)
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Парсинг команд чата (Task 5)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Парсит команду чата: `:chat-new`, `:chat-list`, `:chat-switch <id>`, etc.
+     * Делегирует в [ChatCommandParser].
+     */
+    internal fun parseChatCommand(commandName: String, args: String, raw: String): Command {
+        val chatCommand =
+            io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatCommandParser.parseChatCommand(commandName, args)
+        return if (chatCommand != null) Command.ChatCmd(chatCommand)
+        else Command.Unknown(raw)
+    }
+
+    /**
+     * Парсит команду памяти задачи: `:task-state`, `:task-reset`, `:task-goal <text>`, etc.
+     * Делегирует в [ChatCommandParser].
+     */
+    internal fun parseTaskStateCmd(commandName: String, args: String, raw: String): Command {
+        val taskCommand =
+            io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatCommandParser.parseTaskStateCommand(commandName, args)
+        return if (taskCommand != null) Command.TaskStateCmd(taskCommand)
         else Command.Unknown(raw)
     }
 

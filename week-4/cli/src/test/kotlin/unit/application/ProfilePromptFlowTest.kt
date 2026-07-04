@@ -15,6 +15,7 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import io.averkhogliad.ai.challenge.week4.cli.domain.service.ChatMessage as LlmChatMessage
 
 /**
  * Unit-тесты для сквозного потока: профиль → PromptBuilder → DialogService → промпт LLM.
@@ -232,7 +233,7 @@ private class MockLlmPort : LlmPort {
     var chatResult: TaskResult = TaskResult.Success("x")
     var chatWithMessagesResult: TaskResult = TaskResult.Success("x")
     var lastChatPrompt: Prompt = Prompt("x")
-    var lastChatMessages: List<ChatMessage> = emptyList()
+    var lastChatMessages: List<LlmChatMessage> = emptyList()
 
     override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>?): TaskResult {
         lastChatPrompt = prompt
@@ -240,7 +241,7 @@ private class MockLlmPort : LlmPort {
     }
 
     override suspend fun chatWithMessages(
-        messages: List<ChatMessage>,
+        messages: List<LlmChatMessage>,
         config: TaskExecutionConfig,
         tools: List<MCPTool>?
     ): TaskResult {

@@ -201,8 +201,9 @@ class SqliteIndexRepository(
         return connection.prepareStatement(STATISTICS_QUERY).use { stmt ->
             stmt.setString(1, runId.toString())
             stmt.executeQuery().use { rs ->
-                if (!rs.next()) throw NoSuchElementException("No chunks found for run $runId")
+                rs.next()
                 val totalChunks = rs.getInt("total_chunks")
+                if (totalChunks == 0) throw NoSuchElementException("No chunks found for run $runId")
                 val avgSize = rs.getInt("avg_size")
                 val minSize = rs.getInt("min_size")
                 val maxSize = rs.getInt("max_size")

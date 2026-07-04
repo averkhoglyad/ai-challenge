@@ -120,31 +120,29 @@ class StructuralChunker(
         }
 
         val escapedHeadings = headings.map { Regex.escape(it) }
-        val pattern = Regex("(?=(${escapedHeadings.joinToString("|") { "$it\\s*$" }}))", RegexOption.MULTILINE)
-        val parts = pattern.split(text)
+        val headingPattern = Regex("^(${escapedHeadings.joinToString("|") { it }})\\s*$", RegexOption.MULTILINE)
 
-        if (parts.size == 1) {
+        val matches = headingPattern.findAll(text).toList()
+
+        if (matches.isEmpty()) {
             result.add(null to text)
-        } else {
-            val headingPattern = Regex("^(${escapedHeadings.joinToString("|") { it }})\\s*$", RegexOption.MULTILINE)
-            var i = 0
-            while (i < parts.size) {
-                val part = parts[i].trim()
-                if (part.isEmpty()) {
-                    i++; continue
-                }
+            return result
+        }
 
-                val match = headingPattern.find(part.lines().firstOrNull() ?: "")
-                if (match != null) {
-                    val heading = match.groupValues[1]
-                    val content = if (i + 1 < parts.size) parts[i + 1].trim() else ""
-                    result.add(heading to content)
-                    i += 2
-                } else {
-                    result.add(null to part)
-                    i++
-                }
-            }
+        // Content before the first heading (if any)
+        val beforeFirst = text.substring(0, matches.first().range.first).trim()
+        if (beforeFirst.isNotEmpty()) {
+            result.add(null to beforeFirst)
+        }
+
+        // Content between headings
+        for (i in matches.indices) {
+            val match = matches[i]
+            val heading = match.groupValues[1]
+            val contentStart = match.range.last + 1
+            val contentEnd = if (i + 1 < matches.size) matches[i + 1].range.first else text.length
+            val content = text.substring(contentStart, contentEnd).trim()
+            result.add(heading to content)
         }
 
         return result

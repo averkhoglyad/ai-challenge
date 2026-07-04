@@ -45,7 +45,13 @@ class HtmlExtractor : DocumentExtractor {
         cleaned = BLOCK_CLOSE_REGEX.replace(cleaned, "\n\n")
         // Удаляем все оставшиеся HTML-теги
         cleaned = TAG_REGEX.replace(cleaned, "")
-        // Декодируем HTML entities (&amp; &lt; &gt; &quot; &#39; &nbsp;)
+        // Убираем лишние пустые строки
+        cleaned = MULTILINE_BLANK_REGEX.replace(cleaned, "\n\n")
+        // Убираем пробелы в начале и конце строк
+        cleaned = cleaned.lines()
+            .joinToString("\n") { it.trim() }
+        // Декодируем HTML entities (&amp; &lt; &gt; &quot; &#39; &nbsp;) — после trim,
+        // чтобы пробелы от &nbsp; не были удалены per-line trim'ом
         cleaned = cleaned
             .replace("&amp;", "&")
             .replace("&lt;", "<")
@@ -53,12 +59,8 @@ class HtmlExtractor : DocumentExtractor {
             .replace("&quot;", "\"")
             .replace("&#39;", "'")
             .replace("&nbsp;", " ")
-        // Убираем лишние пустые строки
-        cleaned = MULTILINE_BLANK_REGEX.replace(cleaned, "\n\n")
-        // Убираем пробелы в начале и конце строк
-        cleaned = cleaned.lines()
-            .joinToString("\n") { it.trim() }
-        return cleaned.trim()
+        // Убираем только висячие переводы строк, сохраняя значимые пробелы
+        return cleaned.trim('\n')
     }
 
     companion object {

@@ -770,3 +770,64 @@ rag.search.top-k-initial=50
 rag.search.top-k-final=5
 rag.search.threshold=0.75
 ```
+
+### Task 5: Мини-чат с RAG + памятью задачи
+
+Мини-чат, встроенный в `week-4:cli`, объединяет RAG-поиск с долгосрочной памятью задачи (Task State).
+Позволяет вести многосессионные диалоги с автоматическим отслеживанием цели, терминов и ограничений.
+
+#### Основные возможности
+
+- **Множественные чат-сессии** — создание, переключение, архивирование, удаление
+- **RAG-поиск в каждом ответе** — контекст из проиндексированных документов
+- **Автоматическая память задачи** — LLM извлекает цель, термины и ограничения из диалога
+- **Ручное управление памятью** — команды `task-*` для коррекции
+- **Автоименование чатов** — LLM генерирует название после первого обмена
+- **Graceful degradation** — при отказе LLM/extractor чат продолжает работу
+
+#### CLI-команды чата
+
+| Команда               | Описание                       |
+|-----------------------|--------------------------------|
+| `:chat-new`           | Создать новую сессию           |
+| `:chat-list`          | Список всех чат-сессий         |
+| `:chat-switch <id>`   | Переключиться на сессию        |
+| `:chat-rename <name>` | Переименовать текущую сессию   |
+| `:chat-archive`       | Архивировать текущую сессию    |
+| `:chat-delete <id>`   | Удалить сессию                 |
+| `:history`            | Показать историю текущего чата |
+
+#### CLI-команды памяти задачи
+
+| Команда                        | Описание                       |
+|--------------------------------|--------------------------------|
+| `:task-state`                  | Показать текущую память задачи |
+| `:task-reset`                  | Сбросить память                |
+| `:task-goal <text>`            | Установить цель                |
+| `:task-term-add <name> <def>`  | Добавить термин                |
+| `:task-term-remove <name>`     | Удалить термин                 |
+| `:task-constraint-add <text>`  | Добавить ограничение           |
+| `:task-constraint-remove <id>` | Удалить ограничение            |
+
+#### Архитектура
+
+| Слой               | Компоненты                                                                     |
+|--------------------|--------------------------------------------------------------------------------|
+| **Domain**         | `ChatSession`, `ChatMessage`, `TaskState`, `TaskStateDelta`, порты             |
+| **Application**    | `ChatExecutor` (pipeline), `ChatSessionManager`, `TaskStateManager`            |
+| **Infrastructure** | `LlmTaskStateExtractor`, `LlmChatNameGenerator`, `SqliteChatSessionRepository` |
+| **CLI**            | Парсеры команд, рендереры, `ChatModeHandler`, интеграция в REPL                |
+
+#### Конфигурация (`application.properties`)
+
+```properties
+# Chat
+chat.history.window-size=6
+chat.name.max-length=50
+chat.auto-name.enabled=true
+
+# Task State
+task-state.extraction.enabled=true
+task-state.extraction.max-terms=50
+task-state.extraction.max-constraints=50
+```

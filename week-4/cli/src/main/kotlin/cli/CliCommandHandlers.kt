@@ -20,4 +20,7 @@ data class CliCommandHandlers(
     val events: EventsCommandHandler,
     val indexer: IndexCommandHandler,
     val rag: RagCommandHandler,
+    val chatCommand: io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatCommandHandler? = null,
+    val taskStateCommand: io.averkhogliad.ai.challenge.week4.cli.cli.chat.TaskStateCommandHandler? = null,
+    val chatMode: io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatModeHandler? = null,
 )

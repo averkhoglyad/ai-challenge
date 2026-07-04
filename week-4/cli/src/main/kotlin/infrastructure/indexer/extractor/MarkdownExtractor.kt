@@ -81,7 +81,7 @@ class MarkdownExtractor : DocumentExtractor {
         private val HTML_COMMENT_REGEX = Regex("<!--.*?-->", RegexOption.DOT_MATCHES_ALL)
         private val IMAGE_REGEX = Regex("!\\[(.*?)]\\(.*?\\)")
         private val LINK_REGEX = Regex("\\[(.*?)]\\(.*?\\)")
-        private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```")
+        private val CODE_BLOCK_REGEX = Regex("```[^\\n]*\\n([\\s\\S]*?)```")
         private val INLINE_CODE_REGEX = Regex("`([^`]+)`")
         private val BOLD_REGEX = Regex("\\*\\*(.+?)\\*\\*")
         private val ITALIC_REGEX = Regex("(?<!\\*)\\*(?!\\*)(.+?)(?<!\\*)\\*(?!\\*)")

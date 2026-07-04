@@ -115,6 +115,12 @@ class CliCommandDispatcher(
         is Command.IndexClearAll -> handlers.indexer.handleIndexClearAll(state)
 
         is Command.Rag -> handlers.rag.handle(command.ragCommand, state)
+
+        is Command.ChatCmd -> handlers.chatCommand?.handle(command.command, state) ?: state
+        is Command.TaskStateCmd -> handlers.taskStateCommand?.handle(command.command, state) ?: state
+        is Command.ChatMessage -> handlers.chatMode?.handleMessage(command.text, state) ?: state
+        is Command.ExitChatMode -> handlers.chatMode?.exitChatMode(state) ?: state
+        is Command.ClearChatHistory -> state.also { /* handled in chat mode context */ }
     }
 
     private suspend fun handleBack(state: CliState): CliState {
@@ -124,6 +130,12 @@ class CliCommandDispatcher(
     }
 
     private fun handleSelectTask(command: Command.SelectTask, state: CliState): CliState {
-        return handlers.command.handle(command, state)
+        val newState = handlers.command.handle(command, state)
+        // Task 5: автоматический вход в режим чата
+        return if (command.taskId == 5) {
+            newState.copy(chatMode = true)
+        } else {
+            newState
+        }
     }
 }

@@ -407,4 +407,23 @@ sealed interface Command {
 
     /** Команда управления RAG: `:rag`, `:rag status`, `:rag list` */
     data class Rag(val ragCommand: RagCommand) : Command
+
+    // ═══════════════════════════════════════════════════════════════
+    // Команды чата (Task 5)
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Команда управления чатом: `:chat-new`, `:chat-list`, `:chat-switch`, etc. */
+    data class ChatCmd(val command: io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatCommand) : Command
+
+    /** Команда управления памятью задачи: `:task-state`, `:task-goal`, etc. */
+    data class TaskStateCmd(val command: io.averkhogliad.ai.challenge.week4.cli.cli.chat.TaskStateCommand) : Command
+
+    /** Сообщение в чат (текст без префикса `:` в режиме чата) */
+    data class ChatMessage(val text: String) : Command
+
+    /** Выход из режима чата: :back / :exit */
+    data object ExitChatMode : Command
+
+    /** Очистить историю чата: :clear (в режиме чата) */
+    data object ClearChatHistory : Command
 }

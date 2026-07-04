@@ -52,7 +52,13 @@ data class CliState(
     val multilineInputBuffer: List<String> = emptyList(),
 
     /** Состояние RAG-сессии (Retrieval-Augmented Generation) */
-    val ragState: RagSessionState = RagSessionState()
+    val ragState: RagSessionState = RagSessionState(),
+
+    /** Режим чата (Task 5) */
+    val chatMode: Boolean = false,
+
+    /** ID активной чат-сессии (UUID as String) */
+    val activeChatSessionId: String? = null
 )
 
 /**

@@ -20,6 +20,7 @@ class SqliteDatabase(
             createStatement().use { stmt ->
                 stmt.execute("PRAGMA journal_mode=WAL")
                 stmt.execute("PRAGMA synchronous=NORMAL")
+                stmt.execute("PRAGMA foreign_keys = ON")
             }
         }
     }

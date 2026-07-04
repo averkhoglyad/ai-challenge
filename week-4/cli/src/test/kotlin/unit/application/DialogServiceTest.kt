@@ -14,6 +14,8 @@ import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import java.time.Instant
+import io.averkhogliad.ai.challenge.week4.cli.domain.service.ChatMessage as LlmChatMessage
+import io.averkhogliad.ai.challenge.week4.cli.domain.service.ChatRole as LlmChatRole
 
 class DialogServiceTest : FreeSpec({
 
@@ -54,7 +56,7 @@ class DialogServiceTest : FreeSpec({
         var chatResult: TaskResult = TaskResult.Success("x")
         var chatWithMessagesResult: TaskResult = TaskResult.Success("x")
         var lastChatPrompt: Prompt = Prompt("x")
-        var lastChatMessages: List<ChatMessage> = emptyList()
+        var lastChatMessages: List<LlmChatMessage> = emptyList()
 
         override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig, tools: List<MCPTool>?): TaskResult {
             lastChatPrompt = prompt
@@ -62,7 +64,7 @@ class DialogServiceTest : FreeSpec({
         }
 
         override suspend fun chatWithMessages(
-            messages: List<ChatMessage>,
+            messages: List<LlmChatMessage>,
             config: TaskExecutionConfig,
             tools: List<MCPTool>?
         ): TaskResult {
@@ -170,7 +172,7 @@ class DialogServiceTest : FreeSpec({
                 // then
                 val msgs = mockLlmPort.lastChatMessages
                 msgs.isNotEmpty() shouldBe true
-                msgs.first().role shouldBe ChatRole.SYSTEM
+                msgs.first().role shouldBe LlmChatRole.SYSTEM
                 msgs.first().content shouldContain PromptBuilder.SYSTEM_INSTRUCTION
             }
         }

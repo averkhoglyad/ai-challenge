@@ -273,12 +273,13 @@ object ApplicationBootstrap {
             taskRepository = taskRepository
         )
 
-        // 14. Application: Task executors
+        // 14. Application: Task executors (task5Executor is created later, after RAG block)
         val task1Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task1Executor(dialogService)
         val task2Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task2Executor(dialogService)
         val task3Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task3Executor(dialogService)
         val task4Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task4Executor(dialogService)
-        val executors = mapOf(
+        // task5Executor: see section 14a after RAG block
+        val executors = mutableMapOf(
             task1Executor.taskId to task1Executor,
             task2Executor.taskId to task2Executor,
             task3Executor.taskId to task3Executor,
@@ -481,10 +482,11 @@ object ApplicationBootstrap {
             )
         } else null
 
+        val citationPromptBuilder = CitationAwarePromptBuilder(
+            appConfig?.rag ?: io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig()
+        )
+
         val ragQueryProcessor = if (llmPort != null) {
-            val citationPromptBuilder = CitationAwarePromptBuilder(
-                appConfig?.rag ?: io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig()
-            )
             val relevanceChecker = RelevanceChecker()
             val answerParser = RagAnswerParser()
             val answerValidator =
@@ -539,6 +541,115 @@ object ApplicationBootstrap {
             ragConfig = ragConfig
         )
 
+        // 14a. Application: Chat services (Task 5)
+        val chatConfig = io.averkhogliad.ai.challenge.week4.cli.domain.model.ChatConfig(
+            historyWindowSize = config.getOrDefault("chat.history.window-size", "6").toInt(),
+            nameMaxLength = config.getOrDefault("chat.name.max-length", "50").toInt(),
+            autoNameEnabled = config.getOrDefault("chat.auto-name.enabled", "true").toBoolean(),
+            taskStateExtractionEnabled = config.getOrDefault("task-state.extraction.enabled", "true").toBoolean(),
+            taskStateMaxTerms = config.getOrDefault("task-state.extraction.max-terms", "50").toInt(),
+            taskStateMaxConstraints = config.getOrDefault("task-state.extraction.max-constraints", "50").toInt(),
+            maxClarifiedFacts = config.getOrDefault("task-state.extraction.max-clarified-facts", "50").toInt()
+        )
+        val chatPromptBuilder = io.averkhogliad.ai.challenge.week4.cli.application.chat.ChatPromptBuilder(
+            citationPromptBuilder = citationPromptBuilder,
+            config = chatConfig
+        )
+
+        // Infrastructure: SQLite chat session repository
+        val chatSessionRepository =
+            io.averkhogliad.ai.challenge.week4.cli.infrastructure.persistence.SqliteChatSessionRepository(database)
+
+        // Infrastructure: LLM adapters for TaskStateExtractor and ChatNameGenerator
+        val taskStateExtractor: io.averkhogliad.ai.challenge.week4.cli.domain.service.TaskStateExtractor =
+            if (llmPort != null) {
+                io.averkhogliad.ai.challenge.week4.cli.infrastructure.chat.LlmTaskStateExtractor(llmPort)
+            } else {
+                object : io.averkhogliad.ai.challenge.week4.cli.domain.service.TaskStateExtractor {
+                    override suspend fun extract(
+                        currentState: io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskState,
+                        newMessages: List<io.averkhogliad.ai.challenge.week4.cli.domain.model.ChatMessage>
+                    ): Result<io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskStateDelta> =
+                        Result.success(io.averkhogliad.ai.challenge.week4.cli.domain.model.TaskStateDelta.NoChanges)
+                }
+            }
+        val chatNameGenerator: io.averkhogliad.ai.challenge.week4.cli.domain.service.ChatNameGenerator =
+            if (llmPort != null) {
+                io.averkhogliad.ai.challenge.week4.cli.infrastructure.chat.LlmChatNameGenerator(llmPort)
+            } else {
+                object : io.averkhogliad.ai.challenge.week4.cli.domain.service.ChatNameGenerator {
+                    override suspend fun generate(messages: List<io.averkhogliad.ai.challenge.week4.cli.domain.model.ChatMessage>): Result<String> =
+                        Result.success("New Chat")
+                }
+            }
+
+        // Application: ChatSessionManager
+        val chatSessionManager = io.averkhogliad.ai.challenge.week4.cli.application.chat.ChatSessionManager(
+            repository = chatSessionRepository,
+            nameGenerator = chatNameGenerator,
+            config = chatConfig
+        )
+
+        // Application: ChatExecutor
+        val chatExecutor = if (ragQueryProcessor != null) {
+            io.averkhogliad.ai.challenge.week4.cli.application.chat.ChatExecutor(
+                taskStateExtractor = taskStateExtractor,
+                ragQueryProcessor = ragQueryProcessor,
+                chatSessionRepository = chatSessionRepository,
+                chatSessionManager = chatSessionManager,
+                chatPromptBuilder = chatPromptBuilder,
+                chatNameGenerator = chatNameGenerator,
+                config = chatConfig
+            )
+        } else null
+
+        // Application: TaskStateManager
+        val taskStateManager = io.averkhogliad.ai.challenge.week4.cli.application.chat.TaskStateManager(
+            repository = chatSessionRepository,
+            config = chatConfig
+        )
+
+        if (chatExecutor != null) {
+            val task5Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task5Executor(
+                chatExecutor = chatExecutor,
+                chatSessionManager = chatSessionManager
+            )
+            executors[task5Executor.taskId] = task5Executor
+        }
+
+        // CLI: Chat renderers (all are singleton objects)
+        val chatAnswerRenderer = io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatAnswerRenderer
+        val chatListRenderer = io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatListRenderer
+        val chatHistoryRenderer = io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatHistoryRenderer
+        val chatNotificationRenderer = io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatNotificationRenderer
+        val taskStateRenderer = io.averkhogliad.ai.challenge.week4.cli.cli.chat.TaskStateRenderer
+
+        // CLI: Chat command handlers
+        val chatCommandHandler = io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatCommandHandler(
+            chatSessionManager = chatSessionManager,
+            repository = chatSessionRepository,
+            listRenderer = chatListRenderer,
+            notificationRenderer = chatNotificationRenderer,
+            historyRenderer = chatHistoryRenderer
+        )
+        val taskStateCommandHandler = io.averkhogliad.ai.challenge.week4.cli.cli.chat.TaskStateCommandHandler(
+            taskStateManager = taskStateManager,
+            renderer = taskStateRenderer,
+            notificationRenderer = chatNotificationRenderer
+        )
+
+        // CLI: ChatModeHandler
+        val chatModeHandler = if (chatExecutor != null) {
+            io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatModeHandler(
+                chatExecutor = chatExecutor,
+                chatSessionManager = chatSessionManager,
+                chatCommandHandler = chatCommandHandler,
+                taskStateCommandHandler = taskStateCommandHandler,
+                answerRenderer = chatAnswerRenderer,
+                notificationRenderer = chatNotificationRenderer
+            )
+        } else null
+
         val handlers = CliCommandHandlers(
             command = commandHandler,
             debug = debugCommandHandler,
@@ -554,6 +665,9 @@ object ApplicationBootstrap {
             events = eventsHandler,
             indexer = indexCommandHandler,
             rag = ragCommandHandler,
+            chatCommand = chatCommandHandler,
+            taskStateCommand = taskStateCommandHandler,
+            chatMode = chatModeHandler,
         )
 
         val userInputFlowHandler = UserInputFlowHandler(
@@ -583,6 +697,7 @@ object ApplicationBootstrap {
             dispatcher = dispatcher,
             commandHandler = commandHandler,
             applicationResources = database,
+            chatModeHandler = chatModeHandler,
             initialState = initialState,
         )
 

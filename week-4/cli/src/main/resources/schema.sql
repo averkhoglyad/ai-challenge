@@ -29,3 +29,32 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS chat_sessions (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT 'New Chat',
+    name_generated INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 0,
+    config_json TEXT NOT NULL,
+    task_state_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    citations_json TEXT,
+    sources_json TEXT,
+    timestamp TEXT NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id
+ON chat_messages(session_id);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_active
+ON chat_sessions(active);
