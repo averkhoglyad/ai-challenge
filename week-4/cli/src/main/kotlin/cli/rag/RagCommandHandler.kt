@@ -3,7 +3,9 @@ package io.averkhogliad.ai.challenge.week4.cli.cli.rag
 import io.averkhogliad.ai.challenge.week4.cli.application.rag.MetricsAnalyzer
 import io.averkhogliad.ai.challenge.week4.cli.application.rag.QueryHistoryService
 import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagConfigService
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagStateManager
 import io.averkhogliad.ai.challenge.week4.cli.cli.CliState
+import io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.RunStatus
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.port.IndexRepository
 import kotlinx.coroutines.runBlocking
@@ -21,7 +23,9 @@ class RagCommandHandler(
     private val historyService: QueryHistoryService? = null,
     private val metricsAnalyzer: MetricsAnalyzer? = null,
     private val historyRenderer: QueryHistoryRenderer = QueryHistoryRenderer(),
-    private val analysisRenderer: MetricsAnalysisRenderer = MetricsAnalysisRenderer()
+    private val analysisRenderer: MetricsAnalysisRenderer = MetricsAnalysisRenderer(),
+    private val ragStateManager: RagStateManager? = null,
+    private val ragConfig: RagConfig? = null
 ) {
 
     /**
@@ -41,6 +45,8 @@ class RagCommandHandler(
         is RagCommand.Analyze -> handleAnalyze(state)
         is RagCommand.Compare -> handleCompare(command, state)
         is RagCommand.HistoryClear -> handleHistoryClear(state)
+        is RagCommand.SetRelevanceThreshold -> handleSetRelevance(command, state)
+        is RagCommand.ResetSettings -> handleResetSettings(state)
     }
 
     private fun handleToggle(state: CliState): CliState {
@@ -183,5 +189,40 @@ class RagCommandHandler(
         runBlocking { historyService.clearHistory() }
         historyRenderer.renderHistoryCleared(count)
         return state
+    }
+
+    // ──── Новые команды Task 4 (Анти-галлюцинации) ────
+
+    private fun handleSetRelevance(command: RagCommand.SetRelevanceThreshold, state: CliState): CliState {
+        if (ragStateManager == null) {
+            ragRenderer.showWarning("Управление порогом релевантности недоступно (RagStateManager не настроен).")
+            return state
+        }
+
+        val threshold = command.threshold
+
+        // Предупреждения для экстремальных значений
+        if (threshold > 0.90f) {
+            ragRenderer.showWarning("⚠️  Высокий порог ($threshold) может привести к частым ответам «не знаю».")
+        } else if (threshold < 0.50f) {
+            ragRenderer.showWarning("⚠️  Низкий порог ($threshold) может допустить галлюцинации.")
+        }
+
+        val current = ragStateManager.getState().relevanceThreshold
+        ragStateManager.updateRelevanceThreshold(threshold)
+        ragRenderer.showInfo("Порог релевантности обновлён: $current → $threshold")
+        return state.copy(ragState = ragStateManager.getState())
+    }
+
+    private fun handleResetSettings(state: CliState): CliState {
+        if (ragStateManager == null) {
+            ragRenderer.showWarning("Сброс настроек недоступен (RagStateManager не настроен).")
+            return state
+        }
+
+        ragStateManager.resetToDefaults()
+        val defaultThreshold = ragConfig?.relevanceThreshold ?: ragStateManager.getState().relevanceThreshold
+        ragRenderer.showInfo("Настройки сброшены к значениям из конфигурации (порог: $defaultThreshold).")
+        return state.copy(ragState = ragStateManager.getState())
     }
 }

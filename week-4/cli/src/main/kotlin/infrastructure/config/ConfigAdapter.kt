@@ -78,6 +78,10 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
             .toLongOrNull() ?: throw IllegalArgumentException(
             "Invalid llm.timeout-seconds: '${config.getOrNull("llm.timeout-seconds")}'"
         )
+        val tokenEstimateCharsPerToken = config.getOrDefault("llm.token-estimate-chars-per-token", "4")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid llm.token-estimate-chars-per-token: '${config.getOrNull("llm.token-estimate-chars-per-token")}'"
+        )
 
         return LlmConfig(
             baseUrl = baseUrl,
@@ -85,7 +89,8 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
             defaultModelId = defaultModelId,
             defaultTemperature = defaultTemperature,
             defaultMaxTokens = defaultMaxTokens,
-            timeoutSeconds = timeoutSeconds
+            timeoutSeconds = timeoutSeconds,
+            tokenEstimateCharsPerToken = tokenEstimateCharsPerToken
         )
     }
 
@@ -143,11 +148,28 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
             "Invalid rag.search.threshold: '${config.getOrNull("rag.search.threshold")}'"
         )
 
+        // ──── Task 4: Anti-hallucination ────
+        val relevanceThreshold = config.getOrDefault("rag.anti-hallucination.relevance-threshold", "0.70")
+            .toFloatOrNull() ?: throw IllegalArgumentException(
+            "Invalid rag.anti-hallucination.relevance-threshold"
+        )
+        val maxCitations = config.getOrDefault("rag.anti-hallucination.max-citations", "5")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid rag.anti-hallucination.max-citations"
+        )
+        val minCitations = config.getOrDefault("rag.anti-hallucination.min-citations", "1")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid rag.anti-hallucination.min-citations"
+        )
+
         return RagConfig(
             defaultMode = mode,
             defaultTopKInitial = topKInitial,
             defaultTopKFinal = topKFinal,
-            defaultThreshold = threshold
+            defaultThreshold = threshold,
+            relevanceThreshold = relevanceThreshold,
+            maxCitationsPerAnswer = maxCitations,
+            minCitationsRequired = minCitations
         )
     }
 

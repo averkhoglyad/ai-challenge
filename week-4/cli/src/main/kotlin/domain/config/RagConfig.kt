@@ -20,7 +20,11 @@ data class RagConfig(
     val defaultMode: SearchMode = SearchMode.Filtered,
     val defaultTopKInitial: Int = 50,
     val defaultTopKFinal: Int = 5,
-    val defaultThreshold: Float = 0.75f
+    val defaultThreshold: Float = 0.75f,
+    // ──── Task 4: Anti-hallucination ────
+    val relevanceThreshold: Float = 0.70f,
+    val maxCitationsPerAnswer: Int = 5,
+    val minCitationsRequired: Int = 1
 ) {
     init {
         require(defaultTopKInitial > 0) { "defaultTopKInitial must be > 0, got $defaultTopKInitial" }
@@ -29,6 +33,12 @@ data class RagConfig(
             "defaultTopKFinal ($defaultTopKFinal) must be <= defaultTopKInitial ($defaultTopKInitial)"
         }
         require(defaultThreshold in 0.0f..1.0f) { "defaultThreshold must be in 0.0..1.0, got $defaultThreshold" }
+        require(relevanceThreshold in 0.0f..1.0f) { "relevanceThreshold must be in 0.0..1.0, got $relevanceThreshold" }
+        require(maxCitationsPerAnswer > 0) { "maxCitationsPerAnswer must be > 0, got $maxCitationsPerAnswer" }
+        require(minCitationsRequired > 0) { "minCitationsRequired must be > 0, got $minCitationsRequired" }
+        require(minCitationsRequired <= maxCitationsPerAnswer) {
+            "minCitationsRequired ($minCitationsRequired) must be <= maxCitationsPerAnswer ($maxCitationsPerAnswer)"
+        }
     }
 
     /**

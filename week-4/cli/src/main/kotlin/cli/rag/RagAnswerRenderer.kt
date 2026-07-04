@@ -1,10 +1,7 @@
 package io.averkhogliad.ai.challenge.week4.cli.cli.rag
 
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.QueryExecutionStats
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagSessionState
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RelevantChunk
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchMode
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.*
 
 /**
  * Рендерер RAG-ответов: конфигурационный блок, предупреждения, секция источников.
@@ -33,6 +30,7 @@ object RagAnswerRenderer {
             } else {
                 println("[RAG] Включён, Индекс: НЕ ВЫБРАН \u001b[33m⚠\u001b[0m")
             }
+            println("[Anti-Hallucination] Порог релевантности: ${ragState.relevanceThreshold}")
         } else {
             println("[RAG] Выключен")
         }
@@ -129,5 +127,60 @@ object RagAnswerRenderer {
             if (index < sources.size - 1) println()
         }
         println(separator)
+    }
+
+    // ──── Task 4: Anti-hallucination рендеринг ────
+
+    /** Отображает секцию процитированных фрагментов с нумерацией и метаданными. */
+    fun renderCitations(citations: List<Citation>) {
+        if (citations.isEmpty()) return
+
+        val separator = "─".repeat(55)
+        println(separator)
+        println("📎 Цитаты (${citations.size}):")
+        println()
+
+        for ((index, citation) in citations.withIndex()) {
+            val num = index + 1
+            println("[$num] ${citation.source} (чанк: ${citation.chunkId}, релевантность: ${"%.2f".format(citation.relevanceScore)})")
+            println("    \"${citation.text.take(300).replace("\n", " ")}\"")
+            if (index < citations.size - 1) println()
+        }
+        println(separator)
+    }
+
+    /** Отображает предупреждение о недостаточности контекста и рекомендации. */
+    fun renderInsufficientContext(answer: RagAnswer) {
+        println()
+        println("\u001b[33m⚠\u001b[0m Недостаточно релевантного контекста для ответа.")
+        if (answer.clarificationRequest != null) {
+            println("   ${answer.clarificationRequest}")
+        }
+        if (answer.maxRelevanceScore != null && answer.requiredThreshold != null) {
+            println(
+                "   Макс. релевантность: ${"%.2f".format(answer.maxRelevanceScore)} (требуется: ${
+                    "%.2f".format(
+                        answer.requiredThreshold
+                    )
+                })"
+            )
+        }
+        println()
+        println("   Попробуйте:")
+        println("   - Переформулировать вопрос")
+        println("   - Снизить порог релевантности: :rag relevance <значение>")
+        println("   - Использовать другой индекс: :index-switch <runId>")
+        println()
+    }
+
+    /** Отображает предупреждения валидации ответа (отсутствие цитат, ссылок и т.д.). */
+    fun renderValidationWarnings(errors: List<String>) {
+        if (errors.isEmpty()) return
+        println()
+        println("\u001b[33m⚠\u001b[0m Предупреждения валидации:")
+        for (error in errors) {
+            println("   - $error")
+        }
+        println()
     }
 }

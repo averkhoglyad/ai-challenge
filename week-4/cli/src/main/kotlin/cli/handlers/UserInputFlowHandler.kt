@@ -18,8 +18,8 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.service.CommandEngine
 /**
  * Обработчик пользовательского ввода (prompt-ов).
  *
- * Оркестрирует флоу: парсинг → RAG (если Task 2/3 и включён) / plain LLM → рендеринг.
- * Интегрирует [RagQueryProcessor] для Task 2 и Task 3 с доступом к [CliState.ragState].
+Оркестрирует флоу: парсинг → RAG (если Task 2–4 и включён) / plain LLM → рендеринг.
+ * Интегрирует [RagQueryProcessor] для Task 2, Task 3 и Task 4 с доступом к [CliState.ragState].
  */
 class UserInputFlowHandler(
     private val renderer: CliRenderer,
@@ -50,8 +50,8 @@ class UserInputFlowHandler(
         }
 
         if (state.currentTaskId != null) {
-            // Task 2 и Task 3 с RAG: прямой вызов RagQueryProcessor с доступом к ragState
-            if ((state.currentTaskId == 2 || state.currentTaskId == 3) && ragQueryProcessor != null) {
+            // Task 2, 3, 4 с RAG: прямой вызов RagQueryProcessor с доступом к ragState
+            if ((state.currentTaskId == 2 || state.currentTaskId == 3 || state.currentTaskId == 4) && ragQueryProcessor != null) {
                 return handleRagQuery(command, state)
             }
 
@@ -73,7 +73,7 @@ class UserInputFlowHandler(
     }
 
     /**
-     * Обрабатывает запрос через RAG для Task 2.
+     * Обрабатывает запрос через RAG для Task 2–4.
      */
     private suspend fun handleRagQuery(command: Command.UserInput, state: CliState): CliState {
         val ragState = state.ragState
@@ -101,19 +101,39 @@ class UserInputFlowHandler(
 
                 FallbackReason.RAG_DISABLED -> { /* обычный LLM, без предупреждения */
                 }
+                FallbackReason.INSUFFICIENT_RELEVANCE -> { /* Task 4: handled via isInsufficientContext */
+                }
+
+                FallbackReason.PARSE_ERROR -> { /* Task 4: handled via validationErrors */
+                }
+
+                FallbackReason.VALIDATION_ERROR -> { /* Task 4: handled via validationErrors */
+                }
             }
         }
 
         // Ответ LLM — проверяем ошибку
         if (ragAnswer.isLlmError) {
             renderer.renderError(ragAnswer.llmError ?: "Неизвестная ошибка LLM")
+        } else if (ragAnswer.isInsufficientContext) {
+            RagAnswerRenderer.renderInsufficientContext(ragAnswer)
         } else {
             renderer.renderResult(TaskResult.Success(ragAnswer.answer))
+        }
+
+        // Цитаты (Task 4)
+        if (ragAnswer.citations.isNotEmpty()) {
+            RagAnswerRenderer.renderCitations(ragAnswer.citations)
         }
 
         // Секция источников
         if (ragAnswer.sources.isNotEmpty()) {
             RagAnswerRenderer.renderSources(ragAnswer.sources)
+        }
+
+        // Предупреждения валидации (Task 4)
+        if (ragAnswer.validationErrors.isNotEmpty()) {
+            RagAnswerRenderer.renderValidationWarnings(ragAnswer.validationErrors)
         }
 
         // Статистика запроса (Task 3)

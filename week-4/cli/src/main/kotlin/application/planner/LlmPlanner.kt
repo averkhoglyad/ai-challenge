@@ -25,9 +25,15 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.service.LlmPort
  * val planner = LlmPlanner(llmPort)
  * val result = planner.plan("Добавить кэширование", "Нужен Redis", "• Факт 1", "[INVARIANTS] ...")
  * ```
+ *
+ * @property llmPort порт для взаимодействия с LLM
+ * @property temperature температура генерации (по умолчанию 0.7)
+ * @property maxTokens максимальное количество токенов в ответе (по умолчанию 2000)
  */
 class LlmPlanner(
-    private val llmPort: LlmPort
+    private val llmPort: LlmPort,
+    private val temperature: Double = 0.7,
+    private val maxTokens: Int = 2000
 ) {
 
     /**
@@ -63,8 +69,8 @@ class LlmPlanner(
     ): PlanResult {
         val prompt = buildPrompt(taskTitle, description, relevantFacts, invariantsText)
         val config = TaskExecutionConfig(
-            temperature = 0.7,
-            maxTokens = 2000
+            temperature = temperature,
+            maxTokens = maxTokens
         )
 
         val result = try {

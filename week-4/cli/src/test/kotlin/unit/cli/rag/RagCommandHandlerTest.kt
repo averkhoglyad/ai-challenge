@@ -3,8 +3,10 @@ package io.averkhogliad.ai.challenge.week4.cli.unit.cli.rag
 import io.averkhogliad.ai.challenge.week4.cli.application.rag.MetricsAnalyzer
 import io.averkhogliad.ai.challenge.week4.cli.application.rag.QueryHistoryService
 import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagConfigService
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagStateManager
 import io.averkhogliad.ai.challenge.week4.cli.cli.CliState
 import io.averkhogliad.ai.challenge.week4.cli.cli.rag.*
+import io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.ChunkingStrategyType
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.IndexingRun
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.RunStatus
@@ -29,6 +31,8 @@ class RagCommandHandlerTest : FreeSpec({
     lateinit var metricsAnalyzer: MetricsAnalyzer
     lateinit var historyRenderer: QueryHistoryRenderer
     lateinit var analysisRenderer: MetricsAnalysisRenderer
+    lateinit var ragStateManager: RagStateManager
+    lateinit var ragConfig: RagConfig
     lateinit var handler: RagCommandHandler
 
     fun completedRun(): IndexingRun = IndexingRun(
@@ -54,6 +58,8 @@ class RagCommandHandlerTest : FreeSpec({
         metricsAnalyzer = mockk()
         historyRenderer = mockk(relaxed = true)
         analysisRenderer = mockk(relaxed = true)
+        ragStateManager = mockk(relaxed = true)
+        ragConfig = RagConfig(relevanceThreshold = 0.70f)
         handler = RagCommandHandler(
             repository,
             renderer,
@@ -61,7 +67,9 @@ class RagCommandHandlerTest : FreeSpec({
             historyService,
             metricsAnalyzer,
             historyRenderer,
-            analysisRenderer
+            analysisRenderer,
+            ragStateManager = ragStateManager,
+            ragConfig = ragConfig
         )
     }
 
@@ -298,5 +306,36 @@ class RagCommandHandlerTest : FreeSpec({
         // then
         coVerify { metricsAnalyzer.analyze() }
         newState shouldBe state
+    }
+
+    // ──── Task 4: Anti-hallucination commands ────
+
+    "handle SetRelevanceThreshold" - {
+
+        "updates threshold and shows info" {
+            val state = CliState(ragState = RagSessionState(relevanceThreshold = 0.70f))
+            coEvery { ragStateManager.getState() } returns state.ragState
+            coEvery { ragStateManager.getState() } returns state.ragState.copy(relevanceThreshold = 0.85f)
+
+            val newState = handler.handle(RagCommand.SetRelevanceThreshold(0.85f), state)
+
+            newState.ragState.relevanceThreshold shouldBe 0.85f
+        }
+    }
+
+    "handle ResetSettings" - {
+
+        "resets to config default" {
+            val state = CliState(ragState = RagSessionState(relevanceThreshold = 0.85f))
+            coEvery { ragStateManager.getState() } returns state.ragState
+            coEvery { ragStateManager.getState() } returns RagSessionState(
+                config = state.ragState.config,
+                relevanceThreshold = 0.70f
+            )
+
+            val newState = handler.handle(RagCommand.ResetSettings, state)
+
+            newState.ragState.relevanceThreshold shouldBe 0.70f
+        }
     }
 })

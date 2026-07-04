@@ -11,6 +11,8 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchMode
  * - `:rag mode <mode>`, `:rag threshold <value>`, `:rag topk <i> <f>`, `:rag config` (Task 3)
  * - `:rag history [N]`, `:rag history --detail <id>`, `:rag history --clear`
  * - `:rag analyze`, `:rag analyze --compare <m1> <m2>`
+ * - `:rag relevance <0.0..1.0>` (Task 4)
+ * - `:rag reset` (Task 4)
  */
 object RagCommandParser {
 
@@ -42,6 +44,8 @@ object RagCommandParser {
             "threshold" -> parseSetThreshold(args)
             "topk" -> parseSetTopK(args)
             "history" -> parseHistory(args)
+            "relevance" -> parseSetRelevance(args)
+            "reset" -> RagCommand.ResetSettings
             else -> null
         }
     }
@@ -99,6 +103,13 @@ object RagCommandParser {
 
             else -> null
         }
+    }
+
+    private fun parseSetRelevance(args: List<String>): RagCommand? {
+        if (args.isEmpty()) return null
+        val value = args[0].toFloatOrNull() ?: return null
+        if (value < 0f || value > 1f) return null
+        return RagCommand.SetRelevanceThreshold(value)
     }
 
     fun parseSearchMode(input: String): SearchMode? = when (input.lowercase()) {

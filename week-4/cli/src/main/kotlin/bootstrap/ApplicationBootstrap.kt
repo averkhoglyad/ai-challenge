@@ -52,6 +52,7 @@ import io.averkhogliad.ai.challenge.week4.cli.infrastructure.mcp.DefaultMCPConne
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.persistence.*
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.preset.ResourcePromptPresetLoader
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.history.SqliteQueryHistoryRepository
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.prompt.CitationAwarePromptBuilder
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.prompt.SimpleRagPromptBuilder
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.rerank.LlmReranker
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.rerank.ThresholdReranker
@@ -62,6 +63,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind
@@ -275,10 +277,12 @@ object ApplicationBootstrap {
         val task1Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task1Executor(dialogService)
         val task2Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task2Executor(dialogService)
         val task3Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task3Executor(dialogService)
+        val task4Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task4Executor(dialogService)
         val executors = mapOf(
             task1Executor.taskId to task1Executor,
             task2Executor.taskId to task2Executor,
             task3Executor.taskId to task3Executor,
+            task4Executor.taskId to task4Executor,
         )
 
         // 15. Application: planner components
@@ -289,7 +293,12 @@ object ApplicationBootstrap {
         )
         val stepParser = io.averkhogliad.ai.challenge.week4.cli.application.planner.StepParser()
         val llmPlanner = if (llmPort != null) {
-            io.averkhogliad.ai.challenge.week4.cli.application.planner.LlmPlanner(llmPort)
+            io.averkhogliad.ai.challenge.week4.cli.application.planner.LlmPlanner(
+                llmPort = llmPort,
+                temperature = config.getOrDefault("planner.temperature", "0.7").toDoubleOrNull()
+                    ?: appConfig?.llm?.defaultTemperature ?: 0.7,
+                maxTokens = config.getOrDefault("planner.max-tokens", "2000").toIntOrNull() ?: 2000
+            )
         } else null
 
         // 16. Application: CommandEngine (shared FSM engine, must be passed to CliApplication)
@@ -434,7 +443,7 @@ object ApplicationBootstrap {
             structuralChunker = structuralChunker
         )
 
-        // ──── RAG components (Task 2 + Task 3) ────
+        // ──── RAG components (Task 2/3/4) ────
         val vectorSearchAdapter = InMemoryCosineSearchAdapter(indexRepository)
         val ragPromptBuilder = SimpleRagPromptBuilder()
 
@@ -443,9 +452,24 @@ object ApplicationBootstrap {
         val historyService = QueryHistoryService(historyRepository)
 
         // Task 3: Reranking + Rewrite
+        val tokenEstimateChars = appConfig?.llm?.tokenEstimateCharsPerToken ?: 4
         val thresholdReranker = ThresholdReranker()
-        val llmReranker = if (llmPort != null) LlmReranker(llmPort, thresholdReranker) else null
-        val llmQueryRewriter = if (llmPort != null) LlmQueryRewriter(llmPort) else null
+        val llmReranker = if (llmPort != null) {
+            val fbScore = config.getOrDefault("reranker.fallback-score", "5.0").toFloatOrNull() ?: 5.0f
+            val normDiv = config.getOrDefault("reranker.normalization-divisor", "10.0").toFloatOrNull() ?: 10.0f
+            val chunkLimit = config.getOrDefault("reranker.chunk-text-limit", "300").toIntOrNull() ?: 300
+            LlmReranker(
+                llmPort,
+                thresholdReranker,
+                fallbackScore = fbScore,
+                normalizationDivisor = normDiv,
+                chunkTextLimit = chunkLimit,
+                tokenEstimateCharsPerToken = tokenEstimateChars
+            )
+        } else null
+        val llmQueryRewriter = if (llmPort != null) {
+            LlmQueryRewriter(llmPort, tokenEstimateCharsPerToken = tokenEstimateChars)
+        } else null
 
         // Task 3: Search pipeline
         val searchPipeline = if (llmPort != null && llmQueryRewriter != null && llmReranker != null) {
@@ -458,6 +482,14 @@ object ApplicationBootstrap {
         } else null
 
         val ragQueryProcessor = if (llmPort != null) {
+            val citationPromptBuilder = CitationAwarePromptBuilder(
+                appConfig?.rag ?: io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig()
+            )
+            val relevanceChecker = RelevanceChecker()
+            val answerParser = RagAnswerParser()
+            val answerValidator =
+                RagAnswerValidator(appConfig?.rag ?: io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig())
+
             RagQueryProcessor(
                 embeddingGenerator = embeddingGenerator,
                 vectorSearchPort = vectorSearchAdapter,
@@ -465,27 +497,36 @@ object ApplicationBootstrap {
                 llmPort = llmPort,
                 indexRepository = indexRepository,
                 searchPipeline = searchPipeline,
-                historyService = historyService
+                historyService = historyService,
+                tokenEstimateCharsPerToken = appConfig?.llm?.tokenEstimateCharsPerToken ?: 4,
+                relevanceChecker = relevanceChecker,
+                citationPromptBuilder = citationPromptBuilder,
+                answerParser = answerParser,
+                answerValidator = answerValidator,
+                ragConfig = appConfig?.rag ?: io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig()
             )
         } else null
 
         // Task 3: Config + Metrics
-        val defaultSearchConfig = appConfig?.rag?.toSearchConfig()
-            ?: io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchConfig()
+        val ragConfig = appConfig?.rag ?: io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig()
+        val defaultSearchConfig = ragConfig.toSearchConfig()
         val ragConfigService = RagConfigService()
 
-        val initialState = CliState(
-            ragState = RagSessionState(
-                config = defaultSearchConfig,
-                topK = defaultSearchConfig.topKFinal,
-                similarityThreshold = defaultSearchConfig.threshold
-            )
+        val initialRagState = RagSessionState(
+            config = defaultSearchConfig,
+            topK = defaultSearchConfig.topKFinal,
+            similarityThreshold = defaultSearchConfig.threshold,
+            relevanceThreshold = ragConfig.relevanceThreshold
         )
+        val ragStateHolder = MutableStateFlow(initialRagState)
+        val ragStateManager = DefaultRagStateManager(ragConfig, ragStateHolder)
+
+        val initialState = CliState(ragState = initialRagState)
         val metricsAnalyzer = MetricsAnalyzer(historyService)
         val historyRenderer = QueryHistoryRenderer()
         val analysisRenderer = MetricsAnalysisRenderer()
 
-        val ragCommandRenderer = RagCommandRenderer()
+        val ragCommandRenderer = RagCommandRenderer(ragConfig = ragConfig)
         val ragCommandHandler = RagCommandHandler(
             indexRepository = indexRepository,
             ragRenderer = ragCommandRenderer,
@@ -493,7 +534,9 @@ object ApplicationBootstrap {
             historyService = historyService,
             metricsAnalyzer = metricsAnalyzer,
             historyRenderer = historyRenderer,
-            analysisRenderer = analysisRenderer
+            analysisRenderer = analysisRenderer,
+            ragStateManager = ragStateManager,
+            ragConfig = ragConfig
         )
 
         val handlers = CliCommandHandlers(

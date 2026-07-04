@@ -118,5 +118,30 @@ class RagCommandParserTest : FreeSpec({
             RagCommandParser.parseSearchMode("ReRanked") shouldBe SearchMode.Reranked
             RagCommandParser.parseSearchMode("rewrite") shouldBe SearchMode.Rewrite
         }
+
+        // ──── Task 4: Anti-hallucination commands ────
+
+        ":rag relevance 0.8" {
+            RagCommandParser.parse(":rag relevance 0.8") shouldBe RagCommand.SetRelevanceThreshold(0.8f)
+        }
+
+        ":rag relevance 0.0" {
+            RagCommandParser.parse(":rag relevance 0.0") shouldBe RagCommand.SetRelevanceThreshold(0.0f)
+        }
+
+        ":rag relevance 1.0" {
+            RagCommandParser.parse(":rag relevance 1.0") shouldBe RagCommand.SetRelevanceThreshold(1.0f)
+        }
+
+        "rejects invalid relevance threshold" {
+            RagCommandParser.parse(":rag relevance 1.5") shouldBe null
+            RagCommandParser.parse(":rag relevance -0.1") shouldBe null
+            RagCommandParser.parse(":rag relevance abc") shouldBe null
+            RagCommandParser.parse(":rag relevance") shouldBe null
+        }
+
+        ":rag reset" {
+            RagCommandParser.parse(":rag reset") shouldBe RagCommand.ResetSettings
+        }
     }
 })

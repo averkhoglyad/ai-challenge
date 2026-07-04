@@ -25,7 +25,8 @@ data class LlmConfig(
     val defaultModelId: ModelId,
     val defaultTemperature: Double = 0.7,
     val defaultMaxTokens: Int = 500,
-    val timeoutSeconds: Long = 60
+    val timeoutSeconds: Long = 60,
+    val tokenEstimateCharsPerToken: Int = 4
 ) {
     init {
         require(baseUrl.isNotBlank()) { "baseUrl cannot be blank" }
@@ -33,6 +34,7 @@ data class LlmConfig(
         require(defaultTemperature in 0.0..2.0) { "temperature must be in 0.0..2.0, got $defaultTemperature" }
         require(defaultMaxTokens in 1..128000) { "maxTokens must be in 1..128000, got $defaultMaxTokens" }
         require(timeoutSeconds > 0) { "timeoutSeconds must be positive, got $timeoutSeconds" }
+        require(tokenEstimateCharsPerToken > 0) { "tokenEstimateCharsPerToken must be positive, got $tokenEstimateCharsPerToken" }
     }
 
     /**

@@ -16,7 +16,8 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.service.LlmPort
  * При ошибке LLM — fallback на оригинальный запрос с [tokenUsage] = 0.
  */
 class LlmQueryRewriter(
-    private val llm: LlmPort
+    private val llm: LlmPort,
+    private val tokenEstimateCharsPerToken: Int = 4
 ) : QueryRewriter {
 
     override suspend fun rewrite(query: String): RewriteResult {
@@ -39,7 +40,7 @@ class LlmQueryRewriter(
 
             RewriteResult(
                 rewrittenQuery = content.trim(),
-                tokenUsage = prompt.length / 4
+                tokenUsage = prompt.length / tokenEstimateCharsPerToken
             )
         } catch (e: Exception) {
             System.err.println("[WARN] Query rewrite failed: ${e.message}, using original query")

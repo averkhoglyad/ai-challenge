@@ -23,7 +23,11 @@ import kotlinx.serialization.json.Json
  */
 class LlmReranker(
     private val llm: LlmPort,
-    private val thresholdReranker: ThresholdReranker = ThresholdReranker()
+    private val thresholdReranker: ThresholdReranker = ThresholdReranker(),
+    private val fallbackScore: Float = 5.0f,
+    private val normalizationDivisor: Float = 10.0f,
+    private val chunkTextLimit: Int = 300,
+    private val tokenEstimateCharsPerToken: Int = 4
 ) : RerankingStrategy {
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -46,7 +50,7 @@ class LlmReranker(
             val scores = parseRerankScores(content)
 
             val scored = chunks.mapIndexed { index, chunk ->
-                chunk.copy(score = scores.getOrElse(index) { 5.0f } / 10.0f)
+                chunk.copy(score = scores.getOrElse(index) { fallbackScore } / normalizationDivisor)
             }.sortedByDescending { it.score }
 
             val finalChunks = scored.take(config.topKFinal)
@@ -57,7 +61,7 @@ class LlmReranker(
             RerankResult(
                 rankedChunks = finalChunks,
                 droppedChunks = dropped,
-                tokenUsage = prompt.length / 4
+                tokenUsage = prompt.length / tokenEstimateCharsPerToken
             )
         } catch (e: Exception) {
             System.err.println("[WARN] LLM rerank failed: ${e.message}, falling back to threshold")
@@ -69,7 +73,7 @@ class LlmReranker(
 
     private fun buildRerankPrompt(query: String, chunks: List<RelevantChunk>): String {
         val chunksText = chunks.mapIndexed { i, c ->
-            "${i + 1}. ${c.chunk.text.take(300).replace("\n", " ")}"
+            "${i + 1}. ${c.chunk.text.take(chunkTextLimit).replace("\n", " ")}"
         }.joinToString("\n")
 
         return """

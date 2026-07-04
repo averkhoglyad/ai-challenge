@@ -46,4 +46,11 @@ sealed interface RagCommand {
 
     /** Очистить историю: :rag history --clear */
     data object HistoryClear : RagCommand
+
+    // ──── Анти-галлюцинации (Task 4) ────
+    /** Установить порог релевантности: :rag relevance <0.0..1.0> */
+    data class SetRelevanceThreshold(val threshold: Float) : RagCommand
+
+    /** Сбросить настройки к значениям из конфигурации: :rag reset */
+    data object ResetSettings : RagCommand
 }

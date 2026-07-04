@@ -2,45 +2,16 @@ package io.averkhogliad.ai.challenge.week4.cli.application.rag
 
 import io.averkhogliad.ai.challenge.week4.cli.domain.Prompt
 import io.averkhogliad.ai.challenge.week4.cli.domain.TaskResult
+import io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.port.EmbeddingGenerator
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.port.IndexRepository
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.FallbackReason
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagAnswer
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagSessionState
-import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchContext
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.*
 import io.averkhogliad.ai.challenge.week4.cli.domain.rag.port.RagPromptBuilder
 import io.averkhogliad.ai.challenge.week4.cli.domain.rag.port.VectorSearchPort
 import io.averkhogliad.ai.challenge.week4.cli.domain.service.LlmPort
 import java.util.*
 
-/**
- * Оркестратор RAG-запроса.
- *
- * Реализует полный флоу Retrieval-Augmented Generation:
- * 1. Проверка состояния RAG ([RagSessionState.enabled])
- * 2. Получение активного индекса из [IndexRepository]
- * 3. Выполнение поискового pipeline через [SearchPipeline] (если доступен)
- *    или прямой векторный поиск через [VectorSearchPort] (legacy)
- * 4. Сборка augmented-промпта через [RagPromptBuilder]
- * 5. Отправка в LLM через [LlmPort]
- *
- * ## SearchPipeline vs Legacy
- * Если [searchPipeline] задан, используется новый флоу с rewrite→search→rerank→filter.
- * Иначе — legacy-флоу с прямым векторным поиском (обратная совместимость).
- *
- * ## Graceful degradation
- * При любых сбоях (нет индекса, пустой поиск, ошибка embedding/search/LLM)
- * выполняет fallback на обычный LLM-запрос, возвращая [RagAnswer.fallbackToPlain] = true.
- *
- * @param embeddingGenerator генератор эмбеддингов (Infrastructure)
- * @param vectorSearchPort порт векторного поиска (Infrastructure)
- * @param promptBuilder сборщик RAG-промпта (Infrastructure)
- * @param llmPort порт LLM (Infrastructure)
- * @param indexRepository репозиторий индексов (Infrastructure)
- * @param searchPipeline опциональный поисковый pipeline с rewrite/rerank/filter
- * @param historyService опциональный сервис истории запросов
- */
 class RagQueryProcessor(
     private val embeddingGenerator: EmbeddingGenerator,
     private val vectorSearchPort: VectorSearchPort,
@@ -48,7 +19,13 @@ class RagQueryProcessor(
     private val llmPort: LlmPort,
     private val indexRepository: IndexRepository,
     private val searchPipeline: SearchPipeline? = null,
-    private val historyService: QueryHistoryService? = null
+    private val historyService: QueryHistoryService? = null,
+    private val tokenEstimateCharsPerToken: Int = 4,
+    private val relevanceChecker: RelevanceChecker = RelevanceChecker(),
+    private val citationPromptBuilder: RagPromptBuilder? = null,
+    private val answerParser: RagAnswerParser = RagAnswerParser(),
+    private val answerValidator: RagAnswerValidator? = null,
+    private val ragConfig: RagConfig = RagConfig()
 ) {
 
     /**
@@ -154,10 +131,28 @@ class RagQueryProcessor(
             }
         }
 
-        // Шаг 4: Сборка RAG-промпта
-        val augmentedPrompt = promptBuilder.build(question, relevantChunks)
+        // Шаг 4: Проверка порога релевантности (Task 4: anti-hallucination)
+        val relevanceCheck = relevanceChecker.check(relevantChunks, ragState.relevanceThreshold)
+        if (relevanceCheck is RelevanceCheckResult.Insufficient) {
+            return RagAnswer(
+                answer = "Недостаточно релевантного контекста для ответа на вопрос.",
+                sources = relevantChunks,
+                ragEnabled = true,
+                fallbackToPlain = false,
+                fallbackReason = FallbackReason.INSUFFICIENT_RELEVANCE,
+                searchContext = searchContext,
+                isInsufficientContext = true,
+                clarificationRequest = "Пожалуйста, уточните ваш вопрос или переформулируйте его.",
+                maxRelevanceScore = relevanceCheck.maxScore,
+                requiredThreshold = relevanceCheck.threshold
+            )
+        }
 
-        // Шаг 5: LLM-запрос с контекстом
+        // Шаг 5: Сборка RAG-промпта (citations-aware если доступен)
+        val effectivePromptBuilder = citationPromptBuilder ?: promptBuilder
+        val augmentedPrompt = effectivePromptBuilder.build(question, relevantChunks)
+
+        // Шаг 6: LLM-запрос с контекстом
         val llmStartTime = System.currentTimeMillis()
         val result = try {
             llmPort.chat(Prompt(augmentedPrompt), config)
@@ -173,6 +168,12 @@ class RagQueryProcessor(
         }
         val answerTokens = estimateTokens(augmentedPrompt)
 
+        val llmResponseText = when (result) {
+            is TaskResult.Success -> result.content
+            is TaskResult.Error -> "[Ошибка LLM] ${result.message}"
+            is TaskResult.Partial -> result.content
+        }
+
         // Обновляем токены в searchContext (если был pipeline)
         val finalSearchContext = if (searchPipeline != null) {
             val updatedTokens = searchContext.stats.tokens.copy(answer = answerTokens)
@@ -185,35 +186,59 @@ class RagQueryProcessor(
             searchContext
         }
 
-        // Шаг 6: Возврат результата с источниками
-        val answer = when (result) {
-            is TaskResult.Success -> result.content
-            is TaskResult.Error -> "[Ошибка LLM] ${result.message}"
-            is TaskResult.Partial -> result.content
+        // Шаг 7: Парсинг структурированного ответа (Task 4)
+        val parsed = answerParser.parse(llmResponseText, relevantChunks)
+
+        val ragAnswer = when (parsed) {
+            is RagResult.Success -> RagAnswer(
+                answer = parsed.answer,
+                sources = relevantChunks,
+                citations = parsed.citations,
+                ragEnabled = true,
+                fallbackToPlain = false,
+                searchContext = finalSearchContext
+            )
+
+            is RagResult.InsufficientContext -> RagAnswer(
+                answer = parsed.clarificationRequest ?: "Недостаточно контекста для ответа.",
+                sources = relevantChunks,
+                ragEnabled = true,
+                fallbackToPlain = false,
+                fallbackReason = FallbackReason.INSUFFICIENT_RELEVANCE,
+                searchContext = finalSearchContext,
+                isInsufficientContext = true,
+                clarificationRequest = parsed.clarificationRequest
+            )
+
+            is RagResult.Fallback -> RagAnswer(
+                answer = parsed.rawText,
+                sources = relevantChunks,
+                ragEnabled = true,
+                fallbackToPlain = false,
+                fallbackReason = FallbackReason.PARSE_ERROR,
+                searchContext = finalSearchContext
+            )
         }
 
-        System.err.println("[INFO] RAG query completed: ${relevantChunks.size} sources, answer length=${answer.length}")
+        // Шаг 8: Валидация ответа (Task 4)
+        val validationErrors = answerValidator?.validate(ragAnswer) ?: emptyList()
+        if (validationErrors.isNotEmpty()) {
+            System.err.println("[WARN] Answer validation failed: $validationErrors")
+        }
+        val validatedAnswer = ragAnswer.copy(validationErrors = validationErrors)
 
-        val ragAnswer = RagAnswer(
-            answer = answer,
-            sources = relevantChunks,
-            ragEnabled = true,
-            fallbackToPlain = false,
-            fallbackReason = null,
-            llmError = null,
-            searchContext = finalSearchContext
-        )
+        System.err.println("[INFO] RAG query completed: ${relevantChunks.size} sources, citations=${ragAnswer.citations.size}, answer length=${ragAnswer.answer.length}")
 
         // Автоматическое сохранение в историю
         if (historyService != null && searchPipeline != null) {
             try {
-                historyService.recordQuery(question, ragAnswer, finalSearchContext)
+                historyService.recordQuery(question, validatedAnswer, finalSearchContext)
             } catch (e: Exception) {
                 System.err.println("[WARN] Failed to save query to history: ${e.message}")
             }
         }
 
-        return ragAnswer
+        return validatedAnswer
     }
 
     /**
@@ -257,5 +282,5 @@ class RagQueryProcessor(
         )
     }
 
-    private fun estimateTokens(text: String): Int = text.length / 4
+    private fun estimateTokens(text: String): Int = text.length / tokenEstimateCharsPerToken
 }
