@@ -32,9 +32,9 @@ data class MemoryContext(
  */
 class MemoryService(
     private val sessionRepository: DialogSessionRepository,
-    private val taskRepository: TaskRepository? = null,
-    private val taskStepRepository: TaskStepRepository? = null,
-    private val factRepository: FactRepository? = null,
+    private val taskRepository: TaskRepository,
+    private val taskStepRepository: TaskStepRepository,
+    private val factRepository: FactRepository,
     private val stmWindowSize: Int = DEFAULT_STM_WINDOW_SIZE
 ) {
     /**
@@ -108,7 +108,7 @@ class MemoryService(
      */
     suspend fun getMemoryStatus(level: SessionLevel, taskId: TaskId? = null): MemoryStatus {
         val session = getSessionForLevel(level, taskId)
-        val ltmCount = factRepository?.count() ?: 0
+        val ltmCount = factRepository.count()
         return MemoryStatus(
             sessionId = session.id,
             level = session.level,
@@ -183,7 +183,7 @@ class MemoryService(
         userQuery: String? = null,
         factSearchLimit: Int = 5
     ): MemoryContext {
-        val relevantFacts = if (userQuery != null && factRepository != null) {
+        val relevantFacts = if (userQuery != null) {
             factRepository.search(userQuery).take(factSearchLimit)
         } else {
             emptyList()
@@ -210,7 +210,7 @@ class MemoryService(
         val sessionId = createSessionId(level, taskId)
         return when (level) {
             SessionLevel.TASK_LIST -> {
-                val tasks = taskRepository?.findAll() ?: emptyList()
+                val tasks = taskRepository.findAll()
                 if (tasks.isEmpty()) null else {
                     WorkingMemory(
                         sessionId = sessionId,
@@ -222,8 +222,8 @@ class MemoryService(
             }
 
             SessionLevel.TASK_DETAIL -> {
-                val steps = taskId?.let { taskStepRepository?.findByTaskId(it) } ?: emptyList()
-                val taskDescription = taskId?.let { taskRepository?.findById(it)?.description }
+                val steps = taskId?.let { taskStepRepository.findByTaskId(it) } ?: emptyList()
+                val taskDescription = taskId?.let { taskRepository.findById(it)?.description }
                 WorkingMemory(
                     sessionId = sessionId,
                     currentMessages = emptyList(),

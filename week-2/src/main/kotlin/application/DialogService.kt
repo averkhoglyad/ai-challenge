@@ -12,7 +12,7 @@ import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
 import kotlin.coroutines.cancellation.CancellationException
 
 class DialogService(
-    private val llmPort: LlmPort?,
+    private val llmPort: LlmPort,
     private val memoryService: MemoryService,
     private val promptBuilder: PromptBuilder,
     private val taskExecutionConfig: TaskExecutionConfig = TaskExecutionConfig(),
@@ -24,9 +24,6 @@ class DialogService(
         level: SessionLevel,
         taskId: TaskId? = null
     ): TaskResult {
-        if (llmPort == null) {
-            return TaskResult.Error("LLM не настроен. Добавьте API-ключ в конфигурацию.")
-        }
         return try {
             val memoryContext = memoryService.getFullMemoryContext(
                 level = level,
@@ -65,9 +62,6 @@ class DialogService(
         level: SessionLevel,
         taskId: TaskId? = null
     ): TaskResult {
-        if (llmPort == null) {
-            return TaskResult.Error("LLM не настроен. Добавьте API-ключ в конфигурацию.")
-        }
         return try {
             val memoryContext = memoryService.getFullMemoryContext(
                 level = level,

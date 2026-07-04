@@ -13,5 +13,6 @@ package io.averkhogliad.ai.challenge.week4.cli.domain.rag.model
 data class RagSessionState(
     val enabled: Boolean = false,
     val topK: Int = 5,
-    val similarityThreshold: Float = 0.7f
+    val similarityThreshold: Float = 0.7f,
+    val config: SearchConfig = SearchConfig()
 )

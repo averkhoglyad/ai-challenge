@@ -1,131 +1,173 @@
 package io.averkhogliad.ai.challenge.week2.it
 
+import io.averkhogliad.ai.challenge.week2.application.ProfileOperationError
 import io.averkhogliad.ai.challenge.week2.application.ProfileService
 import io.averkhogliad.ai.challenge.week2.domain.model.ProfileId
-import io.averkhogliad.ai.challenge.week2.domain.service.ProfileRepository
-import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.InMemoryProfileRepository
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
-import kotlin.test.*
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteDatabase
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteProfileRepository
+import io.kotest.assertions.throwables.shouldThrowExactly
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.test.runTest
+import java.io.File
+import java.nio.file.Files
 
-/**
- * Интеграционные тесты для полного потока операций с профилями.
- *
- * Проверяет взаимодействие между слоями:
- * - [ProfileService] (Application)
- * - [InMemoryProfileRepository] (Infrastructure)
- */
-class ProfileIT {
+class ProfileIT : FreeSpec({
 
-    private val repository: ProfileRepository = InMemoryProfileRepository()
-    private val service = ProfileService(repository)
+    lateinit var tempDbFile: File
+    lateinit var database: SqliteDatabase
+    lateinit var repository: SqliteProfileRepository
+    lateinit var service: ProfileService
 
-    @Test
-    fun `full flow - create list activate`() = runBlocking {
-        // Создаём первый профиль (теперь создаётся неактивным)
-        val profileA = service.handleCreateProfile("Profile A", "Content for A", "")
-        assertFalse(profileA.isActive)
-        assertEquals("Profile A", profileA.name)
-
-        // Создаём второй профиль (должен быть неактивным)
-        val profileB = service.handleCreateProfile("Profile B", "Content for B", "")
-        assertFalse(profileB.isActive)
-
-        // Проверяем список
-        val profiles = service.handleListProfiles()
-        assertEquals(2, profiles.size)
-        val activeInList = profiles.find { it.isActive }
-        assertNull(activeInList, "После создания профилей ни один не должен быть активным")
-
-        // Активируем Profile A по имени
-        service.handleActivateByName("Profile A")
-        val active = service.handleGetActiveProfile()
-        assertNotNull(active)
-        assertEquals("Profile A", active.name)
-
-        // Активируем второй профиль
-        service.handleActivateProfile(profileB.id)
-
-        // Проверяем, что теперь активен Profile B
-        val active2 = service.handleGetActiveProfile()
-        assertNotNull(active2)
-        assertEquals("Profile B", active2.name)
-
-        // Проверяем, что Profile A теперь неактивен
-        val profileAAfter = repository.findById(profileA.id)
-        assertNotNull(profileAAfter)
-        assertFalse(profileAAfter.isActive)
+    beforeEach {
+        tempDbFile = Files.createTempFile("test-profile-it-", ".db").toFile()
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        repository = SqliteProfileRepository(database)
+        service = ProfileService(repository)
     }
 
-    @Test
-    fun `should reject duplicate profile names`() = runBlocking {
-        service.handleCreateProfile("Unique Name", "Content", "")
-        assertThrows<IllegalArgumentException> {
-            service.handleCreateProfile("Unique Name", "Other Content", "")
+    afterEach {
+        database.close()
+        tempDbFile.delete()
+        File(tempDbFile.absolutePath + "-wal").delete()
+        File(tempDbFile.absolutePath + "-shm").delete()
+    }
+
+    "full flow" - {
+
+        "creates, lists and activates profiles" {
+            runTest {
+                // given — два неактивных профиля
+                val profileA = service.handleCreateProfile("Profile A", "Content for A", "")
+                profileA.isActive shouldBe false
+                profileA.name shouldBe "Profile A"
+
+                val profileB = service.handleCreateProfile("Profile B", "Content for B", "")
+                profileB.isActive shouldBe false
+
+                // when — список и активация
+                val profiles = service.handleListProfiles()
+                profiles shouldHaveSize 2
+                profiles.find { it.isActive }.shouldBeNull()
+
+                service.handleActivateByName("Profile A")
+                val active = service.handleGetActiveProfile()
+                active.shouldNotBeNull()
+                active.name shouldBe "Profile A"
+
+                // when — переключение на второй профиль
+                service.handleActivateProfile(profileB.id)
+
+                // then
+                val active2 = service.handleGetActiveProfile()
+                active2.shouldNotBeNull()
+                active2.name shouldBe "Profile B"
+
+                val profileAAfter = repository.findById(profileA.id)
+                profileAAfter.shouldNotBeNull()
+                profileAAfter.isActive shouldBe false
+            }
+        }
+
+        "edits profile name and description, persists changes" {
+            runTest {
+                // given
+                val profile = service.handleCreateProfile("Original", "Original Description", "Original Instructions")
+
+                // when
+                val updated = service.handleEditProfile(
+                    "Original",
+                    newName = "Renamed",
+                    newDescription = "Updated Description",
+                    newInstructions = null
+                )
+
+                // then
+                updated.name shouldBe "Renamed"
+                updated.description shouldBe "Updated Description"
+
+                val found = repository.findById(profile.id)
+                found.shouldNotBeNull()
+                found.name shouldBe "Renamed"
+            }
+        }
+
+        "deletes inactive profile and keeps active one" {
+            runTest {
+                // given
+                val profile = service.handleCreateProfile("Solo", "Content", "")
+                profile.isActive shouldBe false
+                val second = service.handleCreateProfile("Backup", "Content", "")
+
+                service.handleActivateProfile(profile.id)
+                repository.findById(profile.id)!!.isActive shouldBe true
+                service.handleActivateProfile(second.id)
+
+                // when
+                service.handleDeleteProfile("Solo")
+
+                // then
+                val active = service.handleGetActiveProfile()
+                active.shouldNotBeNull()
+                active.name shouldBe "Backup"
+                repository.findById(profile.id).shouldBeNull()
+            }
+        }
+
+        "shows active profile after switch" {
+            runTest {
+                // given
+                service.handleCreateProfile("First", "Description A", "Instructions A")
+                val second = service.handleCreateProfile("Second", "Description B", "Instructions B")
+                service.handleActivateProfile(second.id)
+
+                // when
+                val shown = service.handleShowProfile(null)
+
+                // then
+                shown.name shouldBe "Second"
+                shown.description shouldBe "Description B"
+            }
         }
     }
 
-    @Test
-    fun `should throw when activating nonexistent profile`() = runBlocking {
-        assertThrows<IllegalArgumentException> {
-            service.handleActivateProfile(ProfileId("nonexistent-id"))
+    "validation" - {
+
+        "rejects duplicate profile names" {
+            runTest {
+                service.handleCreateProfile("Unique Name", "Content", "")
+
+                shouldThrowExactly<ProfileOperationError.AlreadyExists> {
+                    service.handleCreateProfile("Unique Name", "Other Content", "")
+                }
+            }
+        }
+
+        "throws when activating nonexistent profile by id" {
+            runTest {
+                shouldThrowExactly<ProfileOperationError.NotFoundById> {
+                    service.handleActivateProfile(ProfileId("nonexistent-id"))
+                }
+            }
+        }
+
+        "persists profiles across operations in the real database" {
+            runTest {
+                // given
+                val profile = service.handleCreateProfile("Persistent", "Description", "Instructions")
+
+                // when — прямой запрос к репозиторию
+                val found = repository.findById(profile.id)
+
+                // then
+                found.shouldNotBeNull()
+                found.name shouldBe "Persistent"
+                found.description shouldBe "Description"
+                found.instructions shouldBe "Instructions"
+            }
         }
     }
-
-    @Test
-    fun `should persist profiles across operations`() = runBlocking {
-        val profile = service.handleCreateProfile("Persistent", "Description", "Instructions")
-        val found = repository.findById(profile.id)
-        assertNotNull(found)
-        assertEquals("Persistent", found.name)
-        assertEquals("Description", found.description)
-        assertEquals("Instructions", found.instructions)
-    }
-
-    @Test
-    fun `full flow - edit profile name and description`() = runBlocking {
-        val profile = service.handleCreateProfile("Original", "Original Description", "Original Instructions")
-        val updated = service.handleEditProfile(
-            "Original",
-            newName = "Renamed",
-            newDescription = "Updated Description",
-            newInstructions = null
-        )
-        assertEquals("Renamed", updated.name)
-        assertEquals("Updated Description", updated.description)
-        // Verify persistence
-        val found = repository.findById(profile.id)
-        assertNotNull(found)
-        assertEquals("Renamed", found.name)
-    }
-
-    @Test
-    fun `full flow - delete active profile and verify active cleared`() = runBlocking {
-        // Создаём два профиля
-        val profile = service.handleCreateProfile("Solo", "Content", "")
-        assertFalse(profile.isActive)
-        val second = service.handleCreateProfile("Backup", "Content", "")
-        // Активируем Solo, затем переключаемся на Backup, чтобы Solo стал неактивным
-        service.handleActivateProfile(profile.id)
-        assertTrue(repository.findById(profile.id)!!.isActive)
-        service.handleActivateProfile(second.id)
-        // Теперь удаляем первый
-        service.handleDeleteProfile("Solo")
-        val active = service.handleGetActiveProfile()
-        assertNotNull(active)
-        assertEquals("Backup", active.name)
-        val found = repository.findById(profile.id)
-        assertNull(found)
-    }
-
-    @Test
-    fun `full flow - show active profile after switch`() = runBlocking {
-        service.handleCreateProfile("First", "Description A", "Instructions A")
-        val second = service.handleCreateProfile("Second", "Description B", "Instructions B")
-        service.handleActivateProfile(second.id)
-        val shown = service.handleShowProfile(null)
-        assertEquals("Second", shown.name)
-        assertEquals("Description B", shown.description)
-    }
-}
+})

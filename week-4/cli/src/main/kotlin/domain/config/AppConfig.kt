@@ -12,11 +12,13 @@ package io.averkhogliad.ai.challenge.week4.cli.domain.config
  *
  * @property llm Конфигурация LLM-клиента
  * @property defaultExecution Конфигурация выполнения задачи по умолчанию
+ * @property rag Конфигурация RAG-системы по умолчанию
  * @property replTimeoutSeconds Таймаут REPL-сессии в секундах (> 0)
  */
 data class AppConfig(
     val llm: LlmConfig,
     val defaultExecution: TaskExecutionConfig = TaskExecutionConfig(),
+    val rag: RagConfig = RagConfig(),
     val replTimeoutSeconds: Long = 300
 ) {
     init {

@@ -9,12 +9,13 @@ import io.averkhogliad.ai.challenge.week2.application.cache.CachingInvariantServ
 import io.averkhogliad.ai.challenge.week2.application.executor.*
 import io.averkhogliad.ai.challenge.week2.cli.*
 import io.averkhogliad.ai.challenge.week2.cli.handlers.*
+import io.averkhogliad.ai.challenge.week2.domain.ModelId
+import io.averkhogliad.ai.challenge.week2.domain.Prompt
+import io.averkhogliad.ai.challenge.week2.domain.TaskResult
 import io.averkhogliad.ai.challenge.week2.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week2.domain.config.LlmConfig
-import io.averkhogliad.ai.challenge.week2.domain.service.ConfigPort
-import io.averkhogliad.ai.challenge.week2.domain.service.LlmPort
-import io.averkhogliad.ai.challenge.week2.domain.service.MemoryService
-import io.averkhogliad.ai.challenge.week2.domain.service.PromptBuilder
+import io.averkhogliad.ai.challenge.week2.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week2.domain.service.*
 import io.averkhogliad.ai.challenge.week2.infrastructure.config.ConfigAdapter
 import io.averkhogliad.ai.challenge.week2.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.*
@@ -90,11 +91,22 @@ object ApplicationBootstrap {
         val configPort: ConfigPort = ConfigAdapter(config)
 
         // 1a. Infrastructure: загрузка AppConfig и создание LLM-клиента (опционально)
-        val llmPort: LlmPort? = try {
+        val llmPort: LlmPort = try {
             val appConfig: AppConfig = configPort.loadAppConfig()
             createLlmPort(appConfig.llm)
         } catch (_: NoSuchElementException) {
-            null  // LLM не настроен — DialogService работает в режиме offline
+            object : LlmPort {
+                override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult =
+                    TaskResult.Error("LLM не настроен. Добавьте API-ключ в конфигурацию.")
+
+                override suspend fun chatWithMessages(
+                    messages: List<ChatMessage>,
+                    config: TaskExecutionConfig
+                ): TaskResult =
+                    TaskResult.Error("LLM не настроен. Добавьте API-ключ в конфигурацию.")
+
+                override suspend fun listModels(): List<ModelId> = emptyList()
+            }
         }
 
         // 2. Infrastructure: единый владелец SQLite-соединения
@@ -162,9 +174,7 @@ object ApplicationBootstrap {
             keywordExtractor = keywordExtractor
         )
         val stepParser = io.averkhogliad.ai.challenge.week2.application.planner.StepParser()
-        val llmPlanner = if (llmPort != null) {
-            io.averkhogliad.ai.challenge.week2.application.planner.LlmPlanner(llmPort)
-        } else null
+        val llmPlanner = io.averkhogliad.ai.challenge.week2.application.planner.LlmPlanner(llmPort)
 
         // 16. Application: CommandEngine (shared FSM engine, must be passed to CliApplication)
         val commandEngine = io.averkhogliad.ai.challenge.week2.application.DefaultCommandEngine()
@@ -301,11 +311,22 @@ object ApplicationBootstrap {
      * DialogService обрабатывает `null` gracefully — возвращает сообщение об ошибке.
      *
      * @param llmConfig доменная конфигурация LLM из [AppConfig.llm]
-     * @return [LlmPort] или `null` если API-ключ не настроен
+     * @return [LlmPort]; возвращает no-op заглушку если API-ключ не настроен
      */
-    private fun createLlmPort(llmConfig: LlmConfig): LlmPort? {
+    private fun createLlmPort(llmConfig: LlmConfig): LlmPort {
         if (llmConfig.apiKey.isBlank()) {
-            return null
+            return object : LlmPort {
+                override suspend fun chat(prompt: Prompt, config: TaskExecutionConfig): TaskResult =
+                    TaskResult.Error("LLM не настроен. Добавьте API-ключ в конфигурацию.")
+
+                override suspend fun chatWithMessages(
+                    messages: List<ChatMessage>,
+                    config: TaskExecutionConfig
+                ): TaskResult =
+                    TaskResult.Error("LLM не настроен. Добавьте API-ключ в конфигурацию.")
+
+                override suspend fun listModels(): List<ModelId> = emptyList()
+            }
         }
 
         val clientConfig = LlmClientConfig(

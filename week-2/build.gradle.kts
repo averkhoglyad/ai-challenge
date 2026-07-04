@@ -22,9 +22,8 @@ dependencies {
     // SQLite JDBC driver for dialog persistence.
     implementation(libs.sqliteJdbc)
 
-    // Testing
-    testImplementation(kotlin("test"))
-    testImplementation(libs.kotlinx.coroutines.test)
+    // Testing — common-test (Kotest, MockK, coroutines-test, Spring extensions)
+    testImplementation(project(":common-test"))
     testImplementation(testFixtures(project(":common-core")))
 }
 

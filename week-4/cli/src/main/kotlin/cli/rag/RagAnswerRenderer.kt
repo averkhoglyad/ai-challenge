@@ -1,8 +1,10 @@
 package io.averkhogliad.ai.challenge.week4.cli.cli.rag
 
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.QueryExecutionStats
 import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagSessionState
 import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RelevantChunk
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchMode
 
 /**
  * Рендерер RAG-ответов: конфигурационный блок, предупреждения, секция источников.
@@ -84,6 +86,26 @@ object RagAnswerRenderer {
         println()
         println("   Попробуйте переиндексировать документы или обратитесь к логам для диагностики.")
         println()
+    }
+
+    /**
+     * Краткая статистика после RAG-запроса.
+     */
+    fun renderStatsSummary(stats: QueryExecutionStats) {
+        println()
+        println("📊 Статистика запроса:")
+        println("  Режим: ${modeDisplayName(stats.mode)}")
+        println("  Время: ${stats.totalMs}ms")
+        println("  Чанки: ${stats.chunks.initial} → ${stats.chunks.filtered} → ${stats.chunks.final}")
+        println("  Средний score: ${"%.2f".format(stats.score.filteredAvg)}")
+        println("  Токены: ${stats.tokens.total}")
+    }
+
+    private fun modeDisplayName(mode: SearchMode): String = when (mode) {
+        SearchMode.Raw -> "raw"
+        SearchMode.Filtered -> "filtered"
+        SearchMode.Reranked -> "reranked"
+        SearchMode.Rewrite -> "rewrite"
     }
 
     /**

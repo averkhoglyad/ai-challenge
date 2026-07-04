@@ -11,6 +11,7 @@ class CliApplication(
     private val dispatcher: CliCommandDispatcher,
     private val commandHandler: CommandHandler,
     private val applicationResources: AutoCloseable,
+    private val initialState: CliState = CliState(),
 ) : AutoCloseable {
 
     fun run() {
@@ -28,7 +29,7 @@ class CliApplication(
     }
 
     private suspend fun repl() {
-        var state = CliState()
+        var state = initialState
 
         renderer.renderWelcome()
         renderer.renderMenu(commandHandler.getAllExecutors())

@@ -18,8 +18,8 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.service.CommandEngine
 /**
  * Обработчик пользовательского ввода (prompt-ов).
  *
- * Оркестрирует флоу: парсинг → RAG (если Task 2 и включён) / plain LLM → рендеринг.
- * Интегрирует [RagQueryProcessor] для Task 2 с доступом к [CliState.ragState].
+ * Оркестрирует флоу: парсинг → RAG (если Task 2/3 и включён) / plain LLM → рендеринг.
+ * Интегрирует [RagQueryProcessor] для Task 2 и Task 3 с доступом к [CliState.ragState].
  */
 class UserInputFlowHandler(
     private val renderer: CliRenderer,
@@ -50,8 +50,8 @@ class UserInputFlowHandler(
         }
 
         if (state.currentTaskId != null) {
-            // Task 2 с RAG: прямой вызов RagQueryProcessor с доступом к ragState
-            if (state.currentTaskId == 2 && ragQueryProcessor != null) {
+            // Task 2 и Task 3 с RAG: прямой вызов RagQueryProcessor с доступом к ragState
+            if ((state.currentTaskId == 2 || state.currentTaskId == 3) && ragQueryProcessor != null) {
                 return handleRagQuery(command, state)
             }
 
@@ -114,6 +114,11 @@ class UserInputFlowHandler(
         // Секция источников
         if (ragAnswer.sources.isNotEmpty()) {
             RagAnswerRenderer.renderSources(ragAnswer.sources)
+        }
+
+        // Статистика запроса (Task 3)
+        if (ragAnswer.searchContext != null) {
+            RagAnswerRenderer.renderStatsSummary(ragAnswer.searchContext.stats)
         }
 
         return state

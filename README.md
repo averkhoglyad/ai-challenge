@@ -13,8 +13,7 @@
 - **`week-2`** — FSM-планирование, инварианты, профили, память и todo-менеджер
 - **`week-3:cli`** — актуальный пользовательский CLI для задач, шагов, памяти, MCP, событий и уведомлений
 - **`week-3:events-server`** — сервер календарных событий с REST API и MCP-интерфейсом
-- **`week-3:weather-server`** — погодный сервис с REST API, кэшированием и MCP-интерфейсом
-- **`week-3:notification-server`** — сервис уведомлений, который использует CLI и интеграции week-3
+- **`week-4:cli`** — RAG (Retrieval-Augmented Generation): индексация документов, векторный поиск, реранкинг, аналитика
 
 ### Общие модули
 
@@ -731,4 +730,43 @@ val context = strategy.prepareContext(dialog, systemPrompt, config, state)
 ```properties
 context.strategy.timeouts.fact-extraction-ms=30000
 context.strategy.timeouts.compression-ms=30000
+```
+
+## Week 4: RAG (Retrieval-Augmented Generation)
+
+В `week-4:cli` реализована RAG-система с индексацией документов, векторным поиском, реранкингом и аналитикой.
+
+### Основные возможности
+
+- **Индексация документов** — загрузка Markdown/HTML/текстовых файлов, чанкинг, генерация эмбеддингов
+- **Векторный поиск** — cosine similarity по эмбеддингам чанков
+- **4 режима поиска**: `raw`, `filtered`, `reranked`, `rewrite`
+- **Пороговая фильтрация** — отсев чанков ниже заданного threshold
+- **LLM-реранкинг** — оценка релевантности чанков через LLM с fallback на threshold
+- **Переписывание запросов** — автоматическое улучшение поискового запроса через LLM
+- **5 метрик на запрос** — totalMs, ChunkFlow, ScoreDelta, TokenBreakdown, DropBreakdown
+- **История запросов** — сохранение в SQLite, просмотр, аналитика, сравнение режимов
+
+### CLI-команды RAG
+
+| Команда                                   | Описание                      |
+|-------------------------------------------|-------------------------------|
+| `:rag toggle`                             | Включить/выключить RAG        |
+| `:rag status`                             | Текущий статус и конфигурация |
+| `:rag list`                               | Список индексационных runs    |
+| `:rag mode raw/filtered/reranked/rewrite` | Выбор режима поиска           |
+| `:rag threshold 0.85`                     | Порог фильтрации (0.0–1.0)    |
+| `:rag topk <initial> <final>`             | Настройка top-K               |
+| `:rag config`                             | Просмотр конфигурации         |
+| `:rag history [N]`                        | История запросов              |
+| `:rag analyze`                            | Анализ производительности     |
+| `:rag analyze --compare <m1> <m2>`        | Сравнение режимов             |
+
+### Конфигурация RAG (`application.properties`)
+
+```properties
+rag.search.mode=filtered
+rag.search.top-k-initial=50
+rag.search.top-k-final=5
+rag.search.threshold=0.75
 ```

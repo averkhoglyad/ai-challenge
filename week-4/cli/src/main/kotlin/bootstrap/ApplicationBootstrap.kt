@@ -10,7 +10,7 @@ import io.averkhogliad.ai.challenge.week4.cli.application.indexer.DocumentLoader
 import io.averkhogliad.ai.challenge.week4.cli.application.indexer.EmbeddingGeneratorFactory
 import io.averkhogliad.ai.challenge.week4.cli.application.indexer.IndexingPipeline
 import io.averkhogliad.ai.challenge.week4.cli.application.preset.PromptPresetAggregator
-import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagQueryProcessor
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.*
 import io.averkhogliad.ai.challenge.week4.cli.application.service.MCPService
 import io.averkhogliad.ai.challenge.week4.cli.application.tool.ToolCallRouter
 import io.averkhogliad.ai.challenge.week4.cli.application.tool.ToolRegistry
@@ -19,6 +19,8 @@ import io.averkhogliad.ai.challenge.week4.cli.application.usecase.ListNotesUseCa
 import io.averkhogliad.ai.challenge.week4.cli.cli.*
 import io.averkhogliad.ai.challenge.week4.cli.cli.handlers.*
 import io.averkhogliad.ai.challenge.week4.cli.cli.indexer.IndexCommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.MetricsAnalysisRenderer
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.QueryHistoryRenderer
 import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandHandler
 import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandRenderer
 import io.averkhogliad.ai.challenge.week4.cli.cli.renderers.MCPRenderer
@@ -29,6 +31,7 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.config.ServicesConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.config.loadIndexerConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.model.MCPConnectionState
 import io.averkhogliad.ai.challenge.week4.cli.domain.model.MCPTransport
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagSessionState
 import io.averkhogliad.ai.challenge.week4.cli.domain.service.ConfigPort
 import io.averkhogliad.ai.challenge.week4.cli.domain.service.LlmPort
 import io.averkhogliad.ai.challenge.week4.cli.domain.service.MCPConnectionManager
@@ -48,7 +51,11 @@ import io.averkhogliad.ai.challenge.week4.cli.infrastructure.llm.LlmAdapter
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.mcp.DefaultMCPConnectionManager
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.persistence.*
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.preset.ResourcePromptPresetLoader
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.history.SqliteQueryHistoryRepository
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.prompt.SimpleRagPromptBuilder
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.rerank.LlmReranker
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.rerank.ThresholdReranker
+import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.rewrite.LlmQueryRewriter
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.rag.search.InMemoryCosineSearchAdapter
 import io.averkhogliad.ai.challenge.week4.cli.infrastructure.tool.*
 import io.ktor.client.*
@@ -167,12 +174,12 @@ object ApplicationBootstrap {
         val configPort: ConfigPort = ConfigAdapter(config)
 
         // 1a. Infrastructure: загрузка AppConfig и создание LLM-клиента (опционально)
-        val llmPort: LlmPort? = try {
-            val appConfig: AppConfig = configPort.loadAppConfig()
-            createLlmPort(appConfig.llm)
+        val appConfig: AppConfig? = try {
+            configPort.loadAppConfig()
         } catch (_: NoSuchElementException) {
-            null  // LLM не настроен — DialogService работает в режиме offline
+            null  // LLM не настроен — работает в режиме offline
         }
+        val llmPort: LlmPort? = appConfig?.let { createLlmPort(it.llm) }
 
         // 1b. Infrastructure: загрузка конфигурации индексатора
         val indexerConfig = config.loadIndexerConfig()
@@ -267,9 +274,11 @@ object ApplicationBootstrap {
         // 14. Application: Task executors
         val task1Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task1Executor(dialogService)
         val task2Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task2Executor(dialogService)
+        val task3Executor = io.averkhogliad.ai.challenge.week4.cli.application.executor.Task3Executor(dialogService)
         val executors = mapOf(
             task1Executor.taskId to task1Executor,
             task2Executor.taskId to task2Executor,
+            task3Executor.taskId to task3Executor,
         )
 
         // 15. Application: planner components
@@ -425,20 +434,67 @@ object ApplicationBootstrap {
             structuralChunker = structuralChunker
         )
 
-        // ──── RAG components ────
+        // ──── RAG components (Task 2 + Task 3) ────
         val vectorSearchAdapter = InMemoryCosineSearchAdapter(indexRepository)
         val ragPromptBuilder = SimpleRagPromptBuilder()
+
+        // Task 3: Query history repository
+        val historyRepository = SqliteQueryHistoryRepository(database)
+        val historyService = QueryHistoryService(historyRepository)
+
+        // Task 3: Reranking + Rewrite
+        val thresholdReranker = ThresholdReranker()
+        val llmReranker = if (llmPort != null) LlmReranker(llmPort, thresholdReranker) else null
+        val llmQueryRewriter = if (llmPort != null) LlmQueryRewriter(llmPort) else null
+
+        // Task 3: Search pipeline
+        val searchPipeline = if (llmPort != null && llmQueryRewriter != null && llmReranker != null) {
+            SearchPipeline(
+                queryRewriter = llmQueryRewriter,
+                vectorSearch = vectorSearchAdapter,
+                reranker = llmReranker,
+                embeddingGenerator = embeddingGenerator
+            )
+        } else null
+
         val ragQueryProcessor = if (llmPort != null) {
             RagQueryProcessor(
                 embeddingGenerator = embeddingGenerator,
                 vectorSearchPort = vectorSearchAdapter,
                 promptBuilder = ragPromptBuilder,
                 llmPort = llmPort,
-                indexRepository = indexRepository
+                indexRepository = indexRepository,
+                searchPipeline = searchPipeline,
+                historyService = historyService
             )
         } else null
+
+        // Task 3: Config + Metrics
+        val defaultSearchConfig = appConfig?.rag?.toSearchConfig()
+            ?: io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchConfig()
+        val ragConfigService = RagConfigService()
+
+        val initialState = CliState(
+            ragState = RagSessionState(
+                config = defaultSearchConfig,
+                topK = defaultSearchConfig.topKFinal,
+                similarityThreshold = defaultSearchConfig.threshold
+            )
+        )
+        val metricsAnalyzer = MetricsAnalyzer(historyService)
+        val historyRenderer = QueryHistoryRenderer()
+        val analysisRenderer = MetricsAnalysisRenderer()
+
         val ragCommandRenderer = RagCommandRenderer()
-        val ragCommandHandler = RagCommandHandler(indexRepository, ragCommandRenderer)
+        val ragCommandHandler = RagCommandHandler(
+            indexRepository = indexRepository,
+            ragRenderer = ragCommandRenderer,
+            configService = ragConfigService,
+            historyService = historyService,
+            metricsAnalyzer = metricsAnalyzer,
+            historyRenderer = historyRenderer,
+            analysisRenderer = analysisRenderer
+        )
 
         val handlers = CliCommandHandlers(
             command = commandHandler,
@@ -484,6 +540,7 @@ object ApplicationBootstrap {
             dispatcher = dispatcher,
             commandHandler = commandHandler,
             applicationResources = database,
+            initialState = initialState,
         )
 
 

@@ -44,7 +44,8 @@ data class RagAnswer(
     val ragEnabled: Boolean = false,
     val fallbackToPlain: Boolean = false,
     val fallbackReason: FallbackReason? = null,
-    val llmError: String? = null
+    val llmError: String? = null,
+    val searchContext: SearchContext? = null
 ) {
     val isLlmError: Boolean get() = llmError != null
 }

@@ -1,17 +1,20 @@
 package io.averkhogliad.ai.challenge.week4.cli.unit.cli.rag
 
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.MetricsAnalyzer
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.QueryHistoryService
+import io.averkhogliad.ai.challenge.week4.cli.application.rag.RagConfigService
 import io.averkhogliad.ai.challenge.week4.cli.cli.CliState
-import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommand
-import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandHandler
-import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandRenderer
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.*
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.ChunkingStrategyType
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.IndexingRun
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.model.RunStatus
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.port.IndexRepository
 import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.RagSessionState
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchMode
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import java.time.Instant
 import java.util.*
@@ -21,6 +24,11 @@ class RagCommandHandlerTest : FreeSpec({
     val runId = UUID.randomUUID()
     lateinit var repository: IndexRepository
     lateinit var renderer: RagCommandRenderer
+    lateinit var configService: RagConfigService
+    lateinit var historyService: QueryHistoryService
+    lateinit var metricsAnalyzer: MetricsAnalyzer
+    lateinit var historyRenderer: QueryHistoryRenderer
+    lateinit var analysisRenderer: MetricsAnalysisRenderer
     lateinit var handler: RagCommandHandler
 
     fun completedRun(): IndexingRun = IndexingRun(
@@ -41,7 +49,20 @@ class RagCommandHandlerTest : FreeSpec({
     beforeEach {
         repository = mockk()
         renderer = mockk(relaxed = true)
-        handler = RagCommandHandler(repository, renderer)
+        configService = mockk()
+        historyService = mockk()
+        metricsAnalyzer = mockk()
+        historyRenderer = mockk(relaxed = true)
+        analysisRenderer = mockk(relaxed = true)
+        handler = RagCommandHandler(
+            repository,
+            renderer,
+            configService,
+            historyService,
+            metricsAnalyzer,
+            historyRenderer,
+            analysisRenderer
+        )
     }
 
     "handle Toggle" - {
@@ -164,5 +185,118 @@ class RagCommandHandlerTest : FreeSpec({
             // then — state unchanged (renderer должен показать только completed)
             newState shouldBe state
         }
+    }
+
+    // ──── Task 3: Mode, Threshold, TopK, Config commands ────
+
+    "handle SetMode" - {
+
+        "updates ragState config mode" {
+            // given
+            val state = CliState(ragState = RagSessionState())
+            val newRagState = state.ragState.copy(
+                config = state.ragState.config.copy(mode = SearchMode.Reranked)
+            )
+            coEvery { configService.setMode(state.ragState, SearchMode.Reranked) } returns newRagState
+
+            // when
+            val newState = handler.handle(RagCommand.SetMode(SearchMode.Reranked), state)
+
+            // then
+            newState.ragState.config.mode shouldBe SearchMode.Reranked
+        }
+    }
+
+    "handle SetThreshold" - {
+
+        "updates ragState config threshold" {
+            // given
+            val state = CliState(ragState = RagSessionState())
+            val newRagState = state.ragState.copy(
+                config = state.ragState.config.copy(threshold = 0.9f)
+            )
+            coEvery { configService.setThreshold(state.ragState, 0.9f) } returns newRagState
+
+            // when
+            val newState = handler.handle(RagCommand.SetThreshold(0.9f), state)
+
+            // then
+            newState.ragState.config.threshold shouldBe 0.9f
+        }
+    }
+
+    "handle SetTopK" - {
+
+        "updates ragState config topK" {
+            // given
+            val state = CliState(ragState = RagSessionState())
+            val newRagState = state.ragState.copy(
+                config = state.ragState.config.copy(topKInitial = 100, topKFinal = 10)
+            )
+            coEvery { configService.setTopK(state.ragState, 100, 10) } returns newRagState
+
+            // when
+            val newState = handler.handle(RagCommand.SetTopK(100, 10), state)
+
+            // then
+            newState.ragState.config.topKInitial shouldBe 100
+            newState.ragState.config.topKFinal shouldBe 10
+        }
+    }
+
+    "handle Config" - {
+
+        "does not change state" {
+            // given
+            val state = CliState(ragState = RagSessionState())
+
+            // when
+            val newState = handler.handle(RagCommand.Config, state)
+
+            // then
+            newState shouldBe state
+        }
+    }
+
+    // ──── Task 3: History and analytics commands ────
+
+    "handle History calls historyService.getLast" {
+        // given
+        val state = CliState()
+        coEvery { historyService.getLast(5) } returns emptyList()
+
+        // when
+        val newState = handler.handle(RagCommand.History(limit = 5), state)
+
+        // then
+        coVerify { historyService.getLast(5) }
+        newState shouldBe state
+    }
+
+    "handle HistoryDetail calls historyService.getDetailed" {
+        // given
+        val state = CliState()
+        coEvery { historyService.getDetailed(1L) } returns null
+
+        // when
+        val newState = handler.handle(RagCommand.HistoryDetail(1), state)
+
+        // then
+        coVerify { historyService.getDetailed(1L) }
+        newState shouldBe state
+    }
+
+    "handle Analyze calls metricsAnalyzer.analyze" {
+        // given
+        val state = CliState()
+        coEvery { historyService.getAggregatedStats(50) } returns mockk()
+        coEvery { metricsAnalyzer.analyze() } returns mockk()
+
+        // when
+        val newState = handler.handle(RagCommand.Analyze, state)
+
+        // then
+        coVerify { metricsAnalyzer.analyze() }
+        newState shouldBe state
     }
 })

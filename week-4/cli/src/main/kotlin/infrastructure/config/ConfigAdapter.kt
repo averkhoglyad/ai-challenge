@@ -5,7 +5,9 @@ import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
 import io.averkhogliad.ai.challenge.week4.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.LlmConfig
+import io.averkhogliad.ai.challenge.week4.cli.domain.config.RagConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.config.TaskExecutionConfig
+import io.averkhogliad.ai.challenge.week4.cli.domain.rag.model.SearchMode
 import io.averkhogliad.ai.challenge.week4.cli.domain.service.ConfigPort
 
 /**
@@ -43,11 +45,13 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
     override fun loadAppConfig(): AppConfig {
         val llmConfig = loadLlmConfig()
         val executionConfig = loadDefaultExecutionConfig()
+        val ragConfig = loadRagConfig()
         val replTimeout = loadReplTimeout()
 
         return AppConfig(
             llm = llmConfig,
             defaultExecution = executionConfig,
+            rag = ragConfig,
             replTimeoutSeconds = replTimeout
         )
     }
@@ -121,6 +125,39 @@ class ConfigAdapter(private val config: Config) : ConfigPort {
         return TaskExecutionConfig(
             temperature = temperature,
             maxTokens = maxTokens
+        )
+    }
+
+    private fun loadRagConfig(): RagConfig {
+        val mode = parseSearchMode(config.getOrDefault("rag.search.mode", "filtered"))
+        val topKInitial = config.getOrDefault("rag.search.top-k-initial", "50")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid rag.search.top-k-initial: '${config.getOrNull("rag.search.top-k-initial")}'"
+        )
+        val topKFinal = config.getOrDefault("rag.search.top-k-final", "5")
+            .toIntOrNull() ?: throw IllegalArgumentException(
+            "Invalid rag.search.top-k-final: '${config.getOrNull("rag.search.top-k-final")}'"
+        )
+        val threshold = config.getOrDefault("rag.search.threshold", "0.75")
+            .toFloatOrNull() ?: throw IllegalArgumentException(
+            "Invalid rag.search.threshold: '${config.getOrNull("rag.search.threshold")}'"
+        )
+
+        return RagConfig(
+            defaultMode = mode,
+            defaultTopKInitial = topKInitial,
+            defaultTopKFinal = topKFinal,
+            defaultThreshold = threshold
+        )
+    }
+
+    private fun parseSearchMode(raw: String): SearchMode = when (raw.lowercase()) {
+        "raw" -> SearchMode.Raw
+        "filtered" -> SearchMode.Filtered
+        "reranked" -> SearchMode.Reranked
+        "rewrite" -> SearchMode.Rewrite
+        else -> throw IllegalArgumentException(
+            "Invalid rag.search.mode: '$raw'. Expected one of: raw, filtered, reranked, rewrite"
         )
     }
 

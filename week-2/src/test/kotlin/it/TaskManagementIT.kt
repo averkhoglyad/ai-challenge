@@ -1,344 +1,295 @@
 package io.averkhogliad.ai.challenge.week2.it
 
 import io.averkhogliad.ai.challenge.week2.application.service.TodoTaskService
-import io.averkhogliad.ai.challenge.week2.domain.model.Task
-import io.averkhogliad.ai.challenge.week2.domain.model.TaskId
 import io.averkhogliad.ai.challenge.week2.domain.model.TaskStatus
-import io.averkhogliad.ai.challenge.week2.domain.service.TaskRepository
-import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteDatabase
+import io.averkhogliad.ai.challenge.week2.infrastructure.persistence.SqliteTaskRepository
+import io.kotest.core.spec.style.FreeSpec
+import io.kotest.matchers.collections.shouldHaveSize
+import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.test.runTest
+import java.io.File
+import java.nio.file.Files
 
-/**
- * Integration-тесты для проверки end-to-end сценариев управления задачами.
- *
- * Покрывают пользовательские истории US-2.1–US-2.9 и комплексный сценарий.
- */
-class TaskManagementIT {
+class TaskManagementIT : FreeSpec({
 
-    private lateinit var taskRepository: TaskRepository
-    private lateinit var TodoTaskService: TodoTaskService
+    lateinit var tempDbFile: File
+    lateinit var database: SqliteDatabase
+    lateinit var repository: SqliteTaskRepository
+    lateinit var todoTaskService: TodoTaskService
 
-    @BeforeEach
-    fun setup() {
-        taskRepository = InMemoryTaskRepository()
-        TodoTaskService = TodoTaskService(taskRepository)
+    beforeEach {
+        tempDbFile = Files.createTempFile("test-task-mgmt-it-", ".db").toFile()
+        database = SqliteDatabase(tempDbFile.absolutePath)
+        repository = SqliteTaskRepository(database)
+        todoTaskService = TodoTaskService(repository)
     }
 
-    // ========================================================================
-    // US-2.1: Создание задачи
-    // ========================================================================
-
-    @Test
-    fun `create task via add command`() = runBlocking {
-        // Дано: пустой репозиторий
-        assertTrue(taskRepository.findAll().isEmpty())
-
-        // Когда: выполняем :add "Купить молоко"
-        val createdTask = TodoTaskService.addTask("Купить молоко")
-
-        // Тогда: задача создана, статус OPEN, можно найти по ID
-        assertNotNull(createdTask.id)
-        assertEquals("Купить молоко", createdTask.title)
-        assertEquals(TaskStatus.OPEN, createdTask.status)
-
-        val foundTask = taskRepository.findById(createdTask.id)
-        assertNotNull(foundTask)
-        assertEquals(createdTask.id, foundTask.id)
-        assertEquals("Купить молоко", foundTask.title)
+    afterEach {
+        database.close()
+        tempDbFile.delete()
+        File(tempDbFile.absolutePath + "-wal").delete()
+        File(tempDbFile.absolutePath + "-shm").delete()
     }
 
-    // ========================================================================
-    // US-2.2: Просмотр списка задач
-    // ========================================================================
+    "create task" - {
 
-    @Test
-    fun `list all tasks`() = runBlocking {
-        // Дано: 3 задачи с разными статусами
-        val task1 = TodoTaskService.addTask("Задача 1")
-        val task2 = TodoTaskService.addTask("Задача 2")
-        val task3 = TodoTaskService.addTask("Задача 3")
+        "adds a new task and persists to database" {
+            runTest {
+                // when
+                val createdTask = todoTaskService.addTask("Купить молоко")
 
-        // Закрываем вторую задачу
-        TodoTaskService.openTask(task2.id)
-        TodoTaskService.closeTask(null)
+                // then
+                createdTask.id.shouldNotBeNull()
+                createdTask.title shouldBe "Купить молоко"
+                createdTask.status shouldBe TaskStatus.OPEN
 
-        // Отменяем третью задачу
-        TodoTaskService.cancelTask(task3.id)
-
-        // Когда: выполняем :list
-        val allTasks = TodoTaskService.listTasks()
-
-        // Тогда: все задачи отображаются
-        assertEquals(3, allTasks.size)
-        assertTrue(allTasks.any { it.id == task1.id && it.status == TaskStatus.OPEN })
-        assertTrue(allTasks.any { it.id == task2.id && it.status == TaskStatus.CLOSED })
-        assertTrue(allTasks.any { it.id == task3.id && it.status == TaskStatus.CANCELLED })
+                val foundTask = repository.findById(createdTask.id)
+                foundTask.shouldNotBeNull()
+                foundTask.id shouldBe createdTask.id
+                foundTask.title shouldBe "Купить молоко"
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.3: Редактирование задачи
-    // ========================================================================
+    "list tasks" - {
 
-    @Test
-    fun `edit task by id`() = runBlocking {
-        // Дано: задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Старое название")
-        val taskId = createdTask.id
+        "lists all tasks with different statuses" {
+            runTest {
+                // given
+                val task1 = todoTaskService.addTask("Задача 1")
+                val task2 = todoTaskService.addTask("Задача 2")
+                val task3 = todoTaskService.addTask("Задача 3")
 
-        // Когда: выполняем :edit abc123 "Новое название"
-        val updatedTask = TodoTaskService.editTask(taskId, "Новое название")
+                todoTaskService.openTask(task2.id)
+                todoTaskService.closeTask(null)
 
-        // Тогда: заголовок задачи обновлен
-        assertEquals("Новое название", updatedTask.title)
-        assertEquals(taskId, updatedTask.id)
+                todoTaskService.cancelTask(task3.id)
 
-        val foundTask = taskRepository.findById(taskId)
-        assertNotNull(foundTask)
-        assertEquals("Новое название", foundTask.title)
+                // when
+                val allTasks = todoTaskService.listTasks()
+
+                // then
+                allTasks shouldHaveSize 3
+                allTasks.any { it.id == task1.id && it.status == TaskStatus.OPEN } shouldBe true
+                allTasks.any { it.id == task2.id && it.status == TaskStatus.CLOSED } shouldBe true
+                allTasks.any { it.id == task3.id && it.status == TaskStatus.CANCELLED } shouldBe true
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.4: Удаление задачи
-    // ========================================================================
+    "edit task" - {
 
-    @Test
-    fun `drop task by id`() = runBlocking {
-        // Дано: задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Задача для удаления")
-        val taskId = createdTask.id
+        "edits task title by id" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Старое название")
+                val taskId = createdTask.id
 
-        assertTrue(taskRepository.exists(taskId))
+                // when
+                val updatedTask = todoTaskService.editTask(taskId, "Новое название")
 
-        // Когда: выполняем :drop abc123
-        TodoTaskService.dropTask(taskId)
+                // then
+                updatedTask.title shouldBe "Новое название"
+                updatedTask.id shouldBe taskId
 
-        // Тогда: задача удалена из репозитория
-        assertNull(taskRepository.findById(taskId))
-        assertTrue(!taskRepository.exists(taskId))
+                val foundTask = repository.findById(taskId)
+                foundTask.shouldNotBeNull()
+                foundTask.title shouldBe "Новое название"
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.5: Открытие задачи
-    // ========================================================================
+    "drop task" - {
 
-    @Test
-    fun `open task sets currentTaskId`() = runBlocking {
-        // Дано: задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Задача для открытия")
-        val taskId = createdTask.id
+        "drops task by id, removes from database" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Задача для удаления")
+                val taskId = createdTask.id
+                repository.exists(taskId) shouldBe true
 
-        assertNull(TodoTaskService.currentTaskId)
+                // when
+                todoTaskService.dropTask(taskId)
 
-        // Когда: выполняем :open abc123
-        val openedTask = TodoTaskService.openTask(taskId)
-
-        // Тогда: currentTaskId установлен в "abc123"
-        assertEquals(taskId, TodoTaskService.currentTaskId)
-        assertEquals(taskId, openedTask.id)
+                // then
+                repository.findById(taskId).shouldBeNull()
+                repository.exists(taskId) shouldBe false
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.6: Закрытие задачи
-    // ========================================================================
+    "open task" - {
 
-    @Test
-    fun `close task changes status to CLOSED`() = runBlocking {
-        // Дано: открытая задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Задача для закрытия")
-        val taskId = createdTask.id
-        TodoTaskService.openTask(taskId)
+        "sets currentTaskId and returns opened task" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Задача для открытия")
+                val taskId = createdTask.id
+                todoTaskService.currentTaskId.shouldBeNull()
 
-        assertEquals(TaskStatus.OPEN, createdTask.status)
-        assertEquals(taskId, TodoTaskService.currentTaskId)
+                // when
+                val openedTask = todoTaskService.openTask(taskId)
 
-        // Когда: выполняем :close
-        val closedTask = TodoTaskService.closeTask(null)
-
-        // Тогда: статус задачи изменен на CLOSED, currentTaskId очищен
-        assertEquals(TaskStatus.CLOSED, closedTask.status)
-        assertNull(TodoTaskService.currentTaskId)
-
-        val foundTask = taskRepository.findById(taskId)
-        assertNotNull(foundTask)
-        assertEquals(TaskStatus.CLOSED, foundTask.status)
+                // then
+                todoTaskService.currentTaskId shouldBe taskId
+                openedTask.id shouldBe taskId
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.7: Отмена задачи
-    // ========================================================================
+    "close task" - {
 
-    @Test
-    fun `cancel task changes status to CANCELLED`() = runBlocking {
-        // Дано: задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Задача для отмены")
-        val taskId = createdTask.id
+        "changes status to CLOSED and clears currentTaskId" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Задача для закрытия")
+                val taskId = createdTask.id
+                todoTaskService.openTask(taskId)
 
-        assertEquals(TaskStatus.OPEN, createdTask.status)
+                createdTask.status shouldBe TaskStatus.OPEN
+                todoTaskService.currentTaskId shouldBe taskId
 
-        // Когда: выполняем :cancel abc123
-        val cancelledTask = TodoTaskService.cancelTask(taskId)
+                // when
+                val closedTask = todoTaskService.closeTask(null)
 
-        // Тогда: статус задачи изменен на CANCELLED
-        assertEquals(TaskStatus.CANCELLED, cancelledTask.status)
+                // then
+                closedTask.status shouldBe TaskStatus.CLOSED
+                todoTaskService.currentTaskId.shouldBeNull()
 
-        val foundTask = taskRepository.findById(taskId)
-        assertNotNull(foundTask)
-        assertEquals(TaskStatus.CANCELLED, foundTask.status)
+                val foundTask = repository.findById(taskId)
+                foundTask.shouldNotBeNull()
+                foundTask.status shouldBe TaskStatus.CLOSED
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.8: Возврат к списку
-    // ========================================================================
+    "cancel task" - {
 
-    @Test
-    fun `back command clears currentTaskId`() = runBlocking {
-        // Дано: открытая задача
-        val createdTask = TodoTaskService.addTask("Задача для возврата")
-        val taskId = createdTask.id
-        TodoTaskService.openTask(taskId)
+        "changes status to CANCELLED" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Задача для отмены")
+                val taskId = createdTask.id
+                createdTask.status shouldBe TaskStatus.OPEN
 
-        assertEquals(taskId, TodoTaskService.currentTaskId)
+                // when
+                val cancelledTask = todoTaskService.cancelTask(taskId)
 
-        // Когда: выполняем :back
-        TodoTaskService.back()
+                // then
+                cancelledTask.status shouldBe TaskStatus.CANCELLED
 
-        // Тогда: currentTaskId очищен
-        assertNull(TodoTaskService.currentTaskId)
+                val foundTask = repository.findById(taskId)
+                foundTask.shouldNotBeNull()
+                foundTask.status shouldBe TaskStatus.CANCELLED
+            }
+        }
     }
 
-    // ========================================================================
-    // US-2.9: Контекстные команды
-    // ========================================================================
+    "back command" - {
 
-    @Test
-    fun `contextual edit without id uses currentTaskId`() = runBlocking {
-        // Дано: открытая задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Старое название")
-        val taskId = createdTask.id
-        TodoTaskService.openTask(taskId)
+        "clears currentTaskId" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Задача для возврата")
+                val taskId = createdTask.id
+                todoTaskService.openTask(taskId)
+                todoTaskService.currentTaskId shouldBe taskId
 
-        assertEquals(taskId, TodoTaskService.currentTaskId)
+                // when
+                todoTaskService.back()
 
-        // Когда: выполняем :edit "Новое название" (без ID)
-        val updatedTask = TodoTaskService.editTask(null, "Новое название")
-
-        // Тогда: задача с ID "abc123" обновлена
-        assertEquals("Новое название", updatedTask.title)
-        assertEquals(taskId, updatedTask.id)
-
-        val foundTask = taskRepository.findById(taskId)
-        assertNotNull(foundTask)
-        assertEquals("Новое название", foundTask.title)
+                // then
+                todoTaskService.currentTaskId.shouldBeNull()
+            }
+        }
     }
 
-    @Test
-    fun `contextual close without id uses currentTaskId`() = runBlocking {
-        // Дано: открытая задача с ID "abc123"
-        val createdTask = TodoTaskService.addTask("Задача для контекстного закрытия")
-        val taskId = createdTask.id
-        TodoTaskService.openTask(taskId)
+    "contextual commands" - {
 
-        assertEquals(taskId, TodoTaskService.currentTaskId)
-        assertEquals(TaskStatus.OPEN, createdTask.status)
+        "edit without id uses currentTaskId" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Старое название")
+                val taskId = createdTask.id
+                todoTaskService.openTask(taskId)
+                todoTaskService.currentTaskId shouldBe taskId
 
-        // Когда: выполняем :close (без ID)
-        val closedTask = TodoTaskService.closeTask(null)
+                // when
+                val updatedTask = todoTaskService.editTask(null, "Новое название")
 
-        // Тогда: задача с ID "abc123" закрыта
-        assertEquals(TaskStatus.CLOSED, closedTask.status)
-        assertEquals(taskId, closedTask.id)
-        assertNull(TodoTaskService.currentTaskId)
+                // then
+                updatedTask.title shouldBe "Новое название"
+                updatedTask.id shouldBe taskId
 
-        val foundTask = taskRepository.findById(taskId)
-        assertNotNull(foundTask)
-        assertEquals(TaskStatus.CLOSED, foundTask.status)
+                val foundTask = repository.findById(taskId)
+                foundTask.shouldNotBeNull()
+                foundTask.title shouldBe "Новое название"
+            }
+        }
+
+        "close without id uses currentTaskId" {
+            runTest {
+                // given
+                val createdTask = todoTaskService.addTask("Задача для контекстного закрытия")
+                val taskId = createdTask.id
+                todoTaskService.openTask(taskId)
+
+                todoTaskService.currentTaskId shouldBe taskId
+                createdTask.status shouldBe TaskStatus.OPEN
+
+                // when
+                val closedTask = todoTaskService.closeTask(null)
+
+                // then
+                closedTask.status shouldBe TaskStatus.CLOSED
+                closedTask.id shouldBe taskId
+                todoTaskService.currentTaskId.shouldBeNull()
+
+                val foundTask = repository.findById(taskId)
+                foundTask.shouldNotBeNull()
+                foundTask.status shouldBe TaskStatus.CLOSED
+            }
+        }
     }
 
-    // ========================================================================
-    // Комплексный сценарий: Full workflow
-    // ========================================================================
+    "full workflow" - {
 
-    @Test
-    fun `full workflow - create, open, edit, close, list`() = runBlocking {
-        // 1. Создаем задачу: :add "Задача 1"
-        val createdTask = TodoTaskService.addTask("Задача 1")
-        val taskId = createdTask.id
-        assertEquals(TaskStatus.OPEN, createdTask.status)
+        "create, open, edit, close, list — complete lifecycle" {
+            runTest {
+                // 1. create
+                val createdTask = todoTaskService.addTask("Задача 1")
+                val taskId = createdTask.id
+                createdTask.status shouldBe TaskStatus.OPEN
 
-        // 2. Открываем задачу: :open <id>
-        val openedTask = TodoTaskService.openTask(taskId)
-        assertEquals(taskId, TodoTaskService.currentTaskId)
-        assertEquals(taskId, openedTask.id)
+                // 2. open
+                val openedTask = todoTaskService.openTask(taskId)
+                todoTaskService.currentTaskId shouldBe taskId
+                openedTask.id shouldBe taskId
 
-        // 3. Редактируем контекстно: :edit "Обновленное название"
-        val updatedTask = TodoTaskService.editTask(null, "Обновленное название")
-        assertEquals("Обновленное название", updatedTask.title)
-        assertEquals(taskId, updatedTask.id)
+                // 3. edit contextually
+                val updatedTask = todoTaskService.editTask(null, "Обновленное название")
+                updatedTask.title shouldBe "Обновленное название"
+                updatedTask.id shouldBe taskId
 
-        // 4. Закрываем контекстно: :close
-        val closedTask = TodoTaskService.closeTask(null)
-        assertEquals(TaskStatus.CLOSED, closedTask.status)
-        assertEquals(taskId, closedTask.id)
-        assertNull(TodoTaskService.currentTaskId)
+                // 4. close contextually
+                val closedTask = todoTaskService.closeTask(null)
+                closedTask.status shouldBe TaskStatus.CLOSED
+                closedTask.id shouldBe taskId
+                todoTaskService.currentTaskId.shouldBeNull()
 
-        // 5. Проверяем список: :list
-        val allTasks = TodoTaskService.listTasks()
-        assertEquals(1, allTasks.size)
+                // 5. list
+                val allTasks = todoTaskService.listTasks()
+                allTasks shouldHaveSize 1
 
-        // 6. Задача должна быть в статусе CLOSED
-        val finalTask = allTasks.first()
-        assertEquals(taskId, finalTask.id)
-        assertEquals("Обновленное название", finalTask.title)
-        assertEquals(TaskStatus.CLOSED, finalTask.status)
+                // 6. final state
+                val finalTask = allTasks.first()
+                finalTask.id shouldBe taskId
+                finalTask.title shouldBe "Обновленное название"
+                finalTask.status shouldBe TaskStatus.CLOSED
+            }
+        }
     }
-}
-
-// ============================================================================
-// In-memory реализация TaskRepository для тестов
-// ============================================================================
-
-/**
- * In-memory реализация [TaskRepository] для интеграционного тестирования.
- *
- * Хранит задачи в [MutableMap], что позволяет быстро тестировать бизнес-логику
- * без необходимости поднимать реальную базу данных.
- */
-class InMemoryTaskRepository : TaskRepository {
-    private val tasks = mutableMapOf<TaskId, Task>()
-
-    override suspend fun save(task: Task) {
-        tasks[task.id] = task
-    }
-
-    override suspend fun findById(id: TaskId): Task? {
-        return tasks[id]
-    }
-
-    override suspend fun findAll(): List<Task> {
-        return tasks.values.toList()
-    }
-
-    override suspend fun delete(id: TaskId) {
-        tasks.remove(id)
-    }
-
-    override suspend fun exists(id: TaskId): Boolean {
-        return tasks.containsKey(id)
-    }
-
-    override suspend fun saveSteps(
-        taskId: TaskId,
-        steps: List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep>
-    ) {
-        // no-op for task management tests
-    }
-
-    override suspend fun findStepsByTaskId(taskId: TaskId): List<io.averkhogliad.ai.challenge.week2.domain.model.TaskStep> {
-        return emptyList()
-    }
-}
+})
