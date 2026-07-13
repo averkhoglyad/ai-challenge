@@ -35,7 +35,7 @@ object ChatListRenderer {
             return
         }
 
-        val separator = "━".repeat(72)
+        val separator = "━".repeat(80)
         println()
         println(separator)
         println("${BOLD}Список чатов (${sessions.size})${RESET}")
@@ -44,11 +44,11 @@ object ChatListRenderer {
         // Заголовок таблицы
         println(
             String.format(
-                "  %-2s  %-36s  %-12s  %-8s",
-                "#", "Имя", "Обновлён", "Статус"
+                "  %-2s  %-36s  %-10s  %-12s  %-8s",
+                "#", "Имя", "ID", "Обновлён", "Статус"
             )
         )
-        println("  ${"─".repeat(68)}")
+        println("  ${"─".repeat(80)}")
 
         for ((index, session) in sessions.withIndex()) {
             val num = index + 1
@@ -56,6 +56,8 @@ object ChatListRenderer {
             val updated = dateFormatter.format(session.metadata.updatedAt)
             val isActive = session.metadata.id == activeId
             val isArchived = session.metadata.archived
+
+            val shortId = session.metadata.id.toString().take(8)
 
             val status = when {
                 isActive -> "${GREEN}▶ активен${RESET}"
@@ -68,8 +70,9 @@ object ChatListRenderer {
 
             println(
                 String.format(
-                    "  %-2d  %s %s ${DIM}%-12s${RESET}  %s",
+                    "  %-2d  %s %s ${DIM}%-10s${RESET} ${DIM}%-12s${RESET}  %s",
                     num, CYAN + displayName + RESET, nameMarker,
+                    shortId,
                     updated, status
                 )
             )
@@ -77,7 +80,7 @@ object ChatListRenderer {
 
         println(separator)
         println()
-        println("${DIM}Команды:${RESET} ${CYAN}:chat-new${RESET} | ${CYAN}:chat-switch <id>${RESET} | ${CYAN}:chat-rename <name>${RESET} | ${CYAN}:chat-delete <id>${RESET} | ${CYAN}:chat-archive${RESET}")
+        println("${DIM}Команды:${RESET} ${CYAN}:chat-new${RESET} | ${CYAN}:chat-switch <#|id>${RESET} | ${CYAN}:chat-rename <name>${RESET} | ${CYAN}:chat-delete <#|id>${RESET} | ${CYAN}:chat-archive${RESET}")
         println()
     }
 }

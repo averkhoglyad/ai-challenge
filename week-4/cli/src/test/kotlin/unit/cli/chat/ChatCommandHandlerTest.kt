@@ -122,12 +122,27 @@ class ChatCommandHandlerTest : FreeSpec({
                 // given
                 val state = CliState()
 
-                // when
+                // when — "xx" (< 4 символов, не число, не UUID) → BadFormat
+                val result = handler.handle(ChatCommand.Switch("xx"), state)
+
+                // then
+                result shouldBe state
+                verify { ChatNotificationRenderer.renderError("Неверный формат ID: xx") }
+            }
+        }
+
+        "should render error when prefix matches no session" {
+            runTest {
+                // given
+                coEvery { chatSessionManager.listSessions() } returns emptyList()
+                val state = CliState()
+
+                // when — валидный префикс, но нет совпадений
                 val result = handler.handle(ChatCommand.Switch("not-a-uuid"), state)
 
                 // then
                 result shouldBe state
-                verify { ChatNotificationRenderer.renderError("Неверный формат ID: not-a-uuid") }
+                verify { ChatNotificationRenderer.renderError("Сессия не найдена: not-a-uuid") }
             }
         }
 
@@ -209,7 +224,7 @@ class ChatCommandHandlerTest : FreeSpec({
             runTest {
                 // given
                 val id = UUID.randomUUID()
-                coEvery { chatSessionManager.deleteSession(id) } returns Unit
+                coEvery { chatSessionManager.deleteSession(id) } returns true
                 val state = CliState(activeChatSessionId = UUID.randomUUID().toString()) // другой активный чат
 
                 // when
@@ -227,7 +242,7 @@ class ChatCommandHandlerTest : FreeSpec({
                 // given
                 val id = UUID.randomUUID()
                 val newActive = createSession(UUID.randomUUID(), "New Active")
-                coEvery { chatSessionManager.deleteSession(id) } returns Unit
+                coEvery { chatSessionManager.deleteSession(id) } returns true
                 coEvery { chatSessionManager.getActiveSession() } returns newActive
                 val state = CliState(activeChatSessionId = id.toString())
 

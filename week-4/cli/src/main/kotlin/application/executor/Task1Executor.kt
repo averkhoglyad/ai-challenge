@@ -33,8 +33,8 @@ class Task1Executor(
 
     override val metadata: TaskMetadata = TaskMetadata(
         id = taskId,
-        title = "Task 1: AI Agent with LLM",
-        description = "Интеллектуальный агент с использованием LLM для общения, конфигурации и работы с инструментами.",
+        title = "Task 1: Индексация для LLM Embedding",
+        description = "Индексация документов для LLM Embedding.",
         availableCommands = listOf(
             ":temp <value>", ":maxtokens <n>", ":params",
             ":plan", ":status", ":clear",

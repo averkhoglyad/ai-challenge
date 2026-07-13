@@ -407,7 +407,14 @@ object ApplicationBootstrap {
 
         // ──── Indexer components ────
 
-        val indexerHttpClient = HttpClient(CIO)
+        val indexerHttpClient = HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                })
+            }
+        }
         val embeddingGeneratorFactory = EmbeddingGeneratorFactory(indexerHttpClient)
         val embeddingGenerator = embeddingGeneratorFactory.create(indexerConfig.embedding)
 
@@ -698,6 +705,8 @@ object ApplicationBootstrap {
             commandHandler = commandHandler,
             applicationResources = database,
             chatModeHandler = chatModeHandler,
+            ragCommandHandler = ragCommandHandler,
+            indexCommandHandler = indexCommandHandler,
             initialState = initialState,
         )
 

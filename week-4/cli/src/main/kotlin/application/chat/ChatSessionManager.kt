@@ -113,12 +113,13 @@ class ChatSessionManager(
      * либо создаётся новая.
      *
      * @param id идентификатор удаляемой сессии
+     * @return true если сессия существовала и была удалена, false если не найдена
      */
-    suspend fun deleteSession(id: UUID) {
-        val wasActive = repository.loadById(id)
-            .getOrNull()
-            ?.isActive()
-            ?: false
+    suspend fun deleteSession(id: UUID): Boolean {
+        val loaded = repository.loadById(id).getOrNull()
+        if (loaded == null) return false
+
+        val wasActive = loaded.isActive()
 
         repository.deleteSession(id).onFailure { error ->
             System.err.println("[$TAG] Failed to delete session $id: ${error.message}")
@@ -127,6 +128,7 @@ class ChatSessionManager(
         if (wasActive) {
             activateLastOrCreate()
         }
+        return true
     }
 
     /**

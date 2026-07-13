@@ -46,17 +46,27 @@ class ChatCommandHandler(
     }
 
     private suspend fun handleSwitch(command: ChatCommand.Switch, state: CliState): CliState {
-        return try {
-            val id = UUID.fromString(command.id)
-            val session = chatSessionManager.switchToSession(id)
-            notificationRenderer.renderSwitchedTo(session.metadata.name, id)
-            state.copy(activeChatSessionId = id.toString())
-        } catch (e: IllegalArgumentException) {
-            notificationRenderer.renderError("Неверный формат ID: ${command.id}")
-            state
-        } catch (e: IllegalStateException) {
-            notificationRenderer.renderError(e.message ?: "Сессия не найдена: ${command.id}")
-            state
+        return when (val result = resolveSessionId(command.id)) {
+            is ResolveResult.Found -> {
+                try {
+                    val session = chatSessionManager.switchToSession(result.id)
+                    notificationRenderer.renderSwitchedTo(session.metadata.name, result.id)
+                    state.copy(activeChatSessionId = result.id.toString())
+                } catch (e: IllegalStateException) {
+                    notificationRenderer.renderError(e.message ?: "Сессия не найдена: ${command.id}")
+                    state
+                }
+            }
+
+            is ResolveResult.NotFound -> {
+                notificationRenderer.renderError("Сессия не найдена: ${command.id}")
+                state
+            }
+
+            is ResolveResult.BadFormat -> {
+                notificationRenderer.renderError("Неверный формат ID: ${command.id}")
+                state
+            }
         }
     }
 
@@ -81,22 +91,32 @@ class ChatCommandHandler(
     }
 
     private suspend fun handleDelete(command: ChatCommand.Delete, state: CliState): CliState {
-        return try {
-            val id = UUID.fromString(command.id)
-            chatSessionManager.deleteSession(id)
-            notificationRenderer.renderChatDeleted(id)
+        return when (val result = resolveSessionId(command.id)) {
+            is ResolveResult.Found -> {
+                val deleted = chatSessionManager.deleteSession(result.id)
+                if (!deleted) {
+                    notificationRenderer.renderError("Сессия не найдена: ${command.id}")
+                    return state
+                }
+                notificationRenderer.renderChatDeleted(result.id)
 
-            // Если удалили активный чат — сбрасываем activeChatSessionId
-            if (state.activeChatSessionId == command.id) {
-                // После удаления ChatSessionManager активирует последний или создаст новый
-                val newActive = chatSessionManager.getActiveSession()
-                state.copy(activeChatSessionId = newActive?.metadata?.id?.toString())
-            } else {
+                if (state.activeChatSessionId == result.id.toString()) {
+                    val newActive = chatSessionManager.getActiveSession()
+                    state.copy(activeChatSessionId = newActive?.metadata?.id?.toString())
+                } else {
+                    state
+                }
+            }
+
+            is ResolveResult.NotFound -> {
+                notificationRenderer.renderError("Сессия не найдена: ${command.id}")
                 state
             }
-        } catch (e: IllegalArgumentException) {
-            notificationRenderer.renderError("Неверный формат ID: ${command.id}")
-            state
+
+            is ResolveResult.BadFormat -> {
+                notificationRenderer.renderError("Неверный формат ID: ${command.id}")
+                state
+            }
         }
     }
 
@@ -137,5 +157,45 @@ class ChatCommandHandler(
             notificationRenderer.renderError("Ошибка при отображении истории: ${e.message}")
             state
         }
+    }
+
+    /**
+     * Результат разрешения идентификатора сессии.
+     */
+    private sealed class ResolveResult {
+        data class Found(val id: UUID) : ResolveResult()
+        data object NotFound : ResolveResult()
+        data object BadFormat : ResolveResult()
+    }
+
+    /**
+     * Разрешает идентификатор сессии: числовой индекс (1-based), UUID или префикс UUID.
+     *
+     * @param raw строка — номер из списка, полный UUID или первые символы UUID
+     * @return [ResolveResult] с найденным UUID, признаком отсутствия или неверного формата
+     */
+    private suspend fun resolveSessionId(raw: String): ResolveResult {
+        val sessions = chatSessionManager.listSessions()
+        // 1. Числовой индекс (1-based)
+        val index = raw.toIntOrNull()
+        if (index != null) {
+            if (index >= 1) {
+                val session = sessions.getOrNull(index - 1)
+                if (session != null) return ResolveResult.Found(session.metadata.id)
+            }
+            return ResolveResult.NotFound
+        }
+        // 2. Полный UUID
+        runCatching { UUID.fromString(raw) }.getOrNull()?.let { return ResolveResult.Found(it) }
+        // 3. Поиск по префиксу UUID (минимум 4 символа)
+        if (raw.length >= 4) {
+            val prefix = raw.lowercase()
+            val match = sessions
+                .map { it.metadata.id }
+                .firstOrNull { it.toString().lowercase().startsWith(prefix) }
+            if (match != null) return ResolveResult.Found(match)
+            return ResolveResult.NotFound
+        }
+        return ResolveResult.BadFormat
     }
 }

@@ -1,9 +1,13 @@
 package io.averkhogliad.ai.challenge.week4.cli.cli
 
 import io.averkhogliad.ai.challenge.week4.cli.cli.chat.ChatModeHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.commands.Command
 import io.averkhogliad.ai.challenge.week4.cli.cli.commands.CommandContext
 import io.averkhogliad.ai.challenge.week4.cli.cli.commands.CommandParser
 import io.averkhogliad.ai.challenge.week4.cli.cli.handlers.CommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.indexer.IndexCommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandHandler
+import io.averkhogliad.ai.challenge.week4.cli.cli.rag.RagCommandParser
 import kotlinx.coroutines.runBlocking
 
 class CliApplication(
@@ -13,6 +17,8 @@ class CliApplication(
     private val commandHandler: CommandHandler,
     private val applicationResources: AutoCloseable,
     private val chatModeHandler: ChatModeHandler? = null,
+    private val ragCommandHandler: RagCommandHandler? = null,
+    private val indexCommandHandler: IndexCommandHandler? = null,
     private val initialState: CliState = CliState(),
 ) : AutoCloseable {
 
@@ -61,7 +67,12 @@ class CliApplication(
 
         // При первом входе в chat mode: создать/активировать сессию
         if (currentState.activeChatSessionId == null) {
-            currentState = handler.enterChatMode(currentState)
+            try {
+                currentState = handler.enterChatMode(currentState)
+            } catch (e: Exception) {
+                renderer.renderError("Не удалось войти в режим чата: ${e.message}")
+                return currentState.copy(chatMode = false)
+            }
         }
 
         while (currentState.isRunning && currentState.chatMode) {
@@ -80,6 +91,10 @@ class CliApplication(
                     when (commandName) {
                         "back", "b", "exit" -> handler.exitChatMode(currentState)
                         "quit", "q" -> currentState.copy(isRunning = false)
+                        "new" -> handler.handleCommand("chat-new", "", currentState)
+                        "rag" -> handleRagCommand(args, currentState)
+                        "index-switch" -> handleIndexSwitch(args, currentState)
+                        "index-runs" -> handleIndexRuns(currentState)
                         "clear" -> {
                             val sessionIdStr = currentState.activeChatSessionId
                             if (sessionIdStr != null) {
@@ -94,7 +109,16 @@ class CliApplication(
                             currentState
                         }
 
-                        else -> handler.handleCommand(commandName, args, currentState)
+                        else -> {
+                            // Пробуем диспетчер (глобальные команды: help, params, status, ...)
+                            val context = buildCommandContext(currentState)
+                            val command = CommandParser.parse(rawInput, context)
+                            if (command is Command.Unknown) {
+                                handler.handleCommand(commandName, args, currentState)
+                            } else {
+                                dispatcher.handle(command, currentState)
+                            }
+                        }
                     }
                 } else {
                     handler.handleMessage(rawInput, currentState)
@@ -114,5 +138,43 @@ class CliApplication(
 
         return CommandContext.activeTaskContext(state.currentTaskId ?: 1)
 
+    }
+
+    private fun handleRagCommand(args: String, state: CliState): CliState {
+        val handler = ragCommandHandler ?: run {
+            renderer.renderError("RAG недоступен (LLM не настроен)")
+            return state
+        }
+        val fullInput = if (args.isEmpty()) ":rag" else ":rag $args"
+        val command = RagCommandParser.parse(fullInput)
+        return if (command != null) {
+            handler.handle(command, state)
+        } else {
+            renderer.renderError("Неизвестная RAG-команда: $fullInput")
+            state
+        }
+    }
+
+    private fun handleIndexSwitch(args: String, state: CliState): CliState {
+        val handler = indexCommandHandler ?: run {
+            renderer.renderError("Индексация недоступна")
+            return state
+        }
+        if (args.isEmpty()) {
+            renderer.renderError("Укажите run ID: :index-switch <runId>")
+            return state
+        }
+        return handler.handleIndexSwitch(
+            io.averkhogliad.ai.challenge.week4.cli.cli.commands.Command.IndexSwitch(args),
+            state
+        )
+    }
+
+    private fun handleIndexRuns(state: CliState): CliState {
+        val handler = indexCommandHandler ?: run {
+            renderer.renderError("Индексация недоступна")
+            return state
+        }
+        return handler.handleIndexRuns(state)
     }
 }

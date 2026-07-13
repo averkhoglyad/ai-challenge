@@ -65,7 +65,7 @@ object IndexResultRenderer {
         )
 
         for (run in runs) {
-            val shortId = run.id.toString().take(8) + "..."
+            val fullId = run.id.toString()
             val date = run.startedAt.toString().replace("T", " ").take(19)
             val strategy = run.strategy.name
             val source = run.sourcePath.let {
@@ -79,7 +79,7 @@ object IndexResultRenderer {
             }
 
             println(
-                V + pad(shortId, idWidth) + V + pad(date, dateWidth) + V +
+                V + pad(fullId, idWidth) + V + pad(date, dateWidth) + V +
                         pad(strategy, strategyWidth) + V + pad(source, sourceWidth) + V +
                         pad(run.totalChunks.toString(), chunksWidth) + V + padAnsi(
                     statusDisplay,
