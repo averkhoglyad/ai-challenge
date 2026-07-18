@@ -32,6 +32,7 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 kotlinxCoroutinesReactor = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-reactor", version.ref = "kotlinxCoroutines" }
 kotlinxDatetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 mordant = { module = "com.github.ajalt.mordant:mordant", version.ref = "mordant" }
+mordantMarkdown = { module = "com.github.ajalt.mordant:mordant-markdown", version.ref = "mordant" }
 
 # Testing — Kotest
 kotestRunnerJunit5 = { module = "io.kotest:kotest-runner-junit5", version.ref = "kotest" }

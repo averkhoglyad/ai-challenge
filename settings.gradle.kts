@@ -21,6 +21,8 @@ plugins {
 // Learn more about structuring projects with Gradle - https://docs.gradle.org/8.7/userguide/multi_project_builds.html
 include(":common:config")
 include(":common:llm")
+include(":common:repl")
+include(":common:repl-mordant")
 include(":common:test")
 include(":week-0")
 include(":week-1")
