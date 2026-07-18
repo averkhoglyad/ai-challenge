@@ -17,11 +17,14 @@
 
 ### Общие модули
 
-- **`common-core`** — переиспользуемое ядро: конфигурация, LLM-клиент, feature flags и общие test fixtures
-- **`common-test`** — общая тестовая инфраструктура: Kotest, MockK, Spring extensions, SQL-утилиты и matchers
+- **`common:config`** — загрузка и объединение конфигурации (`Config`, `ConfigProvider`, `MergedConfig`, и т.д.)
+- **`common:llm`** — OpenAI-совместимый LLM-клиент и доменные модели (`LlmClient`, `ChatMessage`, `ChatResponse`,
+  `ModelInfo` и т.д.)
+- **`common:test`** — общая тестовая инфраструктура: Kotest, MockK, test fixtures (`TestConfig`, `MockLlmClient`),
+  Spring/JDBC helpers, SQL-утилиты и matchers
 
-Общая логика сборки вынесена в convention plugin в `buildSrc`. Новые Spring/Kotlin модули week-3 опираются на
-`common-core` и `common-test`, чтобы не дублировать инфраструктурный код.
+Общая логика сборки вынесена в convention plugin в `buildSrc`. CLI-модули используют `:common:config` и `:common:llm`
+для runtime, а в тестах зависят от `:common:test`.
 
 ## Учебные задачи
 

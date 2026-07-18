@@ -9,8 +9,6 @@ COPY gradlew gradle/ settings.gradle.kts gradle.properties ./
 COPY buildSrc/ buildSrc/
 
 # All module build scripts (for dependency resolution)
-COPY common-core/build.gradle.kts common-core/
-COPY common-test/build.gradle.kts common-test/
 COPY week-3/weather-server/build.gradle.kts week-3/weather-server/
 
 # Download dependencies — this layer is cached as long as build scripts don't change

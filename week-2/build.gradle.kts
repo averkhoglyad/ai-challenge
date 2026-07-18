@@ -17,14 +17,14 @@ dependencies {
     implementation(libs.mordant)
 
     // Shared utilities and config component.
-    implementation(project(":common-core"))
+    implementation(project(":common:config"))
+    implementation(project(":common:llm"))
 
     // SQLite JDBC driver for dialog persistence.
     implementation(libs.sqliteJdbc)
 
-    // Testing — common-test (Kotest, MockK, coroutines-test, Spring extensions)
-    testImplementation(project(":common-test"))
-    testImplementation(testFixtures(project(":common-core")))
+    // Testing — common:test (Kotest, MockK, coroutines-test, Spring extensions)
+    testImplementation(project(":common:test"))
 }
 
 tasks.withType<Test>().configureEach {

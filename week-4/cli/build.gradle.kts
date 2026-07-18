@@ -17,7 +17,8 @@ dependencies {
     implementation(libs.mordant)
 
     // Shared utilities and config component.
-    implementation(project(":common-core"))
+    implementation(project(":common:config"))
+    implementation(project(":common:llm"))
 
     // SQLite JDBC driver for dialog persistence.
     implementation(libs.sqliteJdbc)
@@ -32,10 +33,10 @@ dependencies {
     implementation(libs.ktorClientContentNegotiation)
     implementation(libs.ktorSerializationKotlinxJson)
 
-    // Testing — common-test pulls Kotest, MockK, coroutines-test
-    testImplementation(project(":common-test"))
+    // Testing — common:test pulls Kotest, MockK, coroutines-test
+
     testImplementation(kotlin("test"))
-    testImplementation(testFixtures(project(":common-core")))
+    testImplementation(project(":common:test"))
 }
 
 tasks.withType<Test>().configureEach {

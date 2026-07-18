@@ -40,10 +40,10 @@ dependencies {
     implementation(libs.sqliteJdbc)
 
     // Shared utilities and config component.
-    implementation(project(":common-core"))
+
 
     // Testing
-    testImplementation(project(":common-test"))
+    testImplementation(project(":common:test"))
     testImplementation(kotlin("test"))
     testImplementation("org.springframework.boot:spring-boot-starter-test") {
         exclude(group = "org.junit.vintage", module = "junit-vintage-engine")

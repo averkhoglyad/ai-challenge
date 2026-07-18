@@ -17,7 +17,8 @@ dependencies {
     implementation(libs.mordant)
 
     // Shared utilities and config component.
-    implementation(project(":common-core"))
+    implementation(project(":common:config"))
+    implementation(project(":common:llm"))
 
     // SQLite JDBC driver for dialog persistence.
     implementation(libs.sqliteJdbc)
@@ -25,7 +26,7 @@ dependencies {
     // Testing
     testImplementation(kotlin("test"))
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(testFixtures(project(":common-core")))
+    testImplementation(project(":common:test"))
 }
 
 application {
