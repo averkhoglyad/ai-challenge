@@ -12,4 +12,10 @@ interface GitPort {
     suspend fun getLastCommitHash(rootPath: Path): DomainResult<String>
     suspend fun isMergeCommit(rootPath: Path): DomainResult<Boolean>
     suspend fun branchExists(rootPath: Path, branch: String): DomainResult<Boolean>
+    suspend fun getCommitsBetween(
+        rootPath: Path,
+        base: String?,
+        head: String = "HEAD",
+        limit: Int = 500
+    ): DomainResult<String>
 }

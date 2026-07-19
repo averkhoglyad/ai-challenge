@@ -82,6 +82,26 @@ class ProcessGitAdapter : GitPort {
         }
     }
 
+    override suspend fun getCommitsBetween(
+        rootPath: Path,
+        base: String?,
+        head: String,
+        limit: Int,
+    ): DomainResult<String> {
+        require(limit > 0) { "limit must be greater than zero" }
+        val revisionRange = base?.let { "$it..$head" } ?: head
+        return runGitCommand(
+            rootPath,
+            listOf(
+                "log",
+                "--max-count=$limit",
+                "--name-only",
+                "--format=%x1e%H%x1f%h%x1f%an%x1f%aI%x1f%B%x1f",
+                revisionRange,
+            ),
+        )
+    }
+
     private fun runGitCommand(directory: Path, args: List<String>): DomainResult<String> {
         return try {
             val process = ProcessBuilder()

@@ -17,7 +17,12 @@ class AgentLoopService(
     private val projectContextProvider: ProjectContextProvider,
 ) {
 
-    fun processQuery(query: String, systemPromptOverride: String? = null): Flow<String> = flow {
+    fun processQuery(
+        query: String,
+        systemPromptOverride: String? = null,
+        excludeExplicitTools: Boolean = false,
+        maxToolCalls: Int = 20,
+    ): Flow<String> = flow {
         val ctxResult = projectContextProvider.getContext()
         val ctx = when (ctxResult) {
             is DomainResult.Success -> ctxResult.value
@@ -27,8 +32,13 @@ class AgentLoopService(
             }
         }
 
-        val systemPrompt = systemPromptOverride ?: buildSystemPrompt(ctx)
-        val toolDefinitions = toolRegistry.getDefinitions().map { definition ->
+        val systemPrompt = systemPromptOverride ?: buildSystemPrompt(ctx, excludeExplicitTools)
+        val allDefinitions = if (excludeExplicitTools) {
+            toolRegistry.getDefinitions().filter { !it.requiresExplicitInvocation }
+        } else {
+            toolRegistry.getDefinitions()
+        }
+        val toolDefinitions = allDefinitions.map { definition ->
             buildJsonObject {
                 put("type", "function")
                 putJsonObject("function") {
@@ -47,9 +57,20 @@ class AgentLoopService(
             )
 
             if (!response.toolCalls.isNullOrEmpty()) {
+                var toolCallCount = 0
                 // Execute tool calls
                 val toolMessages = mutableListOf<ChatMessage>()
                 for (toolCall in response.toolCalls) {
+                    if (toolCallCount >= maxToolCalls) {
+                        toolMessages.add(
+                            ChatMessage.tool(
+                                toolCall.id,
+                                "Error: Maximum tool calls ($maxToolCalls) exceeded"
+                            )
+                        )
+                        continue
+                    }
+                    toolCallCount++
                     val toolName = toolCall.function.name
                     val tool = toolRegistry.getTool(toolName)
                     if (tool != null) {
@@ -63,6 +84,7 @@ class AgentLoopService(
                         val content = when (result) {
                             is io.averkhogliad.ai.challenge.week6.domain.tools.ToolResult.Success -> result.content
                             is io.averkhogliad.ai.challenge.week6.domain.tools.ToolResult.Error -> "Error: ${result.message}"
+                            is io.averkhogliad.ai.challenge.week6.domain.tools.ToolResult.PendingConfirm -> "Operation requires confirmation: ${result.message}"
                         }
                         toolMessages.add(ChatMessage.tool(toolCall.id, content))
                     } else {
@@ -95,7 +117,10 @@ class AgentLoopService(
         }
     }
 
-    private fun buildSystemPrompt(ctx: io.averkhogliad.ai.challenge.week6.domain.model.ProjectContext?): String {
+    private fun buildSystemPrompt(
+        ctx: io.averkhogliad.ai.challenge.week6.domain.model.ProjectContext?,
+        excludeExplicitTools: Boolean = false,
+    ): String {
         val sb = StringBuilder()
         sb.appendLine("Ты помощник, отвечающий на вопросы о структуре и документации проекта.")
 
@@ -113,7 +138,11 @@ class AgentLoopService(
             }
         }
 
-        val toolDefs = toolRegistry.getDefinitions()
+        val toolDefs = if (excludeExplicitTools) {
+            toolRegistry.getDefinitions().filter { !it.requiresExplicitInvocation }
+        } else {
+            toolRegistry.getDefinitions()
+        }
         if (toolDefs.isNotEmpty()) {
             sb.appendLine()
             sb.appendLine("Доступные инструменты:")

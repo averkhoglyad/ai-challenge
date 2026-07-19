@@ -4,7 +4,6 @@ import io.averkhogliad.ai.challenge.llm.chat.ChatMessage
 import io.averkhogliad.ai.challenge.llm.chat.LlmClient
 import io.averkhogliad.ai.challenge.week6.application.rag.RagService
 import io.averkhogliad.ai.challenge.week6.domain.review.Review
-import io.averkhogliad.ai.challenge.week6.domain.review.ReviewFinding
 import io.averkhogliad.ai.challenge.week6.domain.review.ReviewTrigger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -12,9 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import java.util.UUID
+import java.util.*
 
 class ReviewCodeUseCase(
     private val llmClient: LlmClient,
@@ -93,6 +90,7 @@ class ReviewCodeUseCase(
                         val content = when (result) {
                             is io.averkhogliad.ai.challenge.week6.domain.tools.ToolResult.Success -> result.content
                             is io.averkhogliad.ai.challenge.week6.domain.tools.ToolResult.Error -> "Error: ${result.message}"
+                            is io.averkhogliad.ai.challenge.week6.domain.tools.ToolResult.PendingConfirm -> "Operation pending: ${result.message}"
                         }
                         toolMessages.add(ChatMessage.tool(toolCall.id, content))
                     }

@@ -1,5 +1,6 @@
 package io.averkhogliad.ai.challenge.week6.application
 
+import io.averkhogliad.ai.challenge.week6.application.fileops.ProjectSettingsRepository
 import io.averkhogliad.ai.challenge.week6.domain.error.DomainError
 import io.averkhogliad.ai.challenge.week6.domain.error.DomainResult
 import io.averkhogliad.ai.challenge.week6.domain.error.asFailure
@@ -23,6 +24,7 @@ class OpenProjectUseCase(
     private val sourceRepository: IndexedSourceRepository? = null,
     private val collectDefaultSourcesUseCase: CollectDefaultSourcesUseCase? = null,
     private val indexSourcesUseCase: IndexSourcesUseCase? = null,
+    private val projectSettingsRepository: ProjectSettingsRepository? = null,
 ) {
     private val scope = CoroutineScope(Dispatchers.Default)
 
@@ -57,7 +59,13 @@ class OpenProjectUseCase(
                 updatedAt = now,
             )
             when (val saved = projectRepository.save(newProject)) {
-                is DomainResult.Success -> saved.value
+                is DomainResult.Success -> {
+                    projectSettingsRepository?.let { repo ->
+                        val fromProps = loadExclusionsFromProperties()
+                        repo.saveExclusions(newProject.id, fromProps)
+                    }
+                    saved.value
+                }
                 is DomainResult.Failure -> return DomainResult.Failure(saved.error)
             }
         }
@@ -65,7 +73,6 @@ class OpenProjectUseCase(
         val setResult = appStateRepository.setValue(ACTIVE_PROJECT_KEY, project.id)
         if (setResult.isFailure) return setResult.asFailure()
 
-        // Collect and index default sources in background
         val srcRepo = sourceRepository
         val defaultsUC = collectDefaultSourcesUseCase
         val indexUC = indexSourcesUseCase
@@ -82,6 +89,21 @@ class OpenProjectUseCase(
         }
 
         return DomainResult.Success(project)
+    }
+
+    private fun loadExclusionsFromProperties(): List<String> {
+        return try {
+            javaClass.classLoader.getResourceAsStream("app.properties")?.use { stream ->
+                val props = java.util.Properties()
+                props.load(stream)
+                val raw = props.getProperty("fileops.exclusions", "")
+                raw.split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+            } ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private fun resolveProjectName(path: Path): String {

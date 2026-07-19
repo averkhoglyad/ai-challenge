@@ -11,6 +11,7 @@ object ProjectsTable : Table("projects") {
     val faqPath: Column<String?> = varchar("faq_path", 1024).nullable()
     val createdAt: Column<Long> = long("created_at")
     val updatedAt: Column<Long> = long("updated_at")
+    val exclusions: Column<String?> = text("exclusions").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -72,6 +73,24 @@ object ReviewFindingsTable : Table("review_findings") {
     val recommendation: Column<String?> = varchar("recommendation", 4096).nullable()
 
     override val primaryKey = PrimaryKey(id)
+}
+
+object ReleasesTable : Table("releases") {
+    val id: Column<String> = varchar("id", 36)
+    val projectId: Column<String> = varchar("project_id", 36).references(ProjectsTable.id)
+    val version: Column<String> = varchar("version", 255)
+    val previousVersion: Column<String?> = varchar("previous_version", 255).nullable()
+    val range: Column<String> = varchar("range", 1024)
+    val changelogJson: Column<String> = text("changelog_json")
+    val commitsJson: Column<String> = text("commits_json")
+    val createdAt: Column<Long> = long("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+
+    init {
+        index("idx_releases_project", false, projectId)
+        index("idx_releases_version", true, projectId, version)
+    }
 }
 
 object PullRequestsTable : Table("pull_requests") {

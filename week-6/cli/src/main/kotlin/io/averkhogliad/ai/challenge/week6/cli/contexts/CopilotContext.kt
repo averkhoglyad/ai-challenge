@@ -8,7 +8,6 @@ import io.averkhogliad.ai.challenge.week6.cli.handlers.ListProjectsCommandHandle
 import io.averkhogliad.ai.challenge.week6.cli.handlers.OpenCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.SupportCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.mcp.*
-import io.averkhogliad.ai.challenge.week6.cli.handlers.review.*
 import io.averkhogliad.cli.repl.core.CommandEffect
 import io.averkhogliad.cli.repl.core.CommandHandler
 import io.averkhogliad.cli.repl.core.DefaultInputHandler
@@ -34,6 +33,16 @@ class CopilotContext(
     private val prListHandler: CommandHandler? = null,
     private val prReviewHandler: CommandHandler? = null,
     private val prDiffHandler: CommandHandler? = null,
+    private val findCommandHandler: CommandHandler? = null,
+    private val fileReadCommandHandler: CommandHandler? = null,
+    private val fileInfoCommandHandler: CommandHandler? = null,
+    private val fileListCommandHandler: CommandHandler? = null,
+    private val configExclusionsHandler: CommandHandler? = null,
+    private val refactorCommandHandler: CommandHandler? = null,
+    private val releaseCommandHandler: CommandHandler? = null,
+    private val releaseSuggestHandler: CommandHandler? = null,
+    private val releaseHistoryHandler: CommandHandler? = null,
+    private val releaseShowHandler: CommandHandler? = null,
 ) : ReplContext {
 
     override val name: String = "copilot"
@@ -59,6 +68,16 @@ class CopilotContext(
         prListHandler,
         prReviewHandler,
         prDiffHandler,
+        findCommandHandler,
+        fileReadCommandHandler,
+        fileInfoCommandHandler,
+        fileListCommandHandler,
+        configExclusionsHandler,
+        refactorCommandHandler,
+        releaseSuggestHandler,
+        releaseHistoryHandler,
+        releaseShowHandler,
+        releaseCommandHandler,
     )
 
     override val defaultHandler: DefaultInputHandler = object : DefaultInputHandler {
@@ -70,7 +89,7 @@ class CopilotContext(
                     "Готов помочь с проектом. Попробуйте /ask или задайте вопрос."
                 )
             }
-            return CommandEffect.StreamOutput(service.processQuery(rawInput))
+            return CommandEffect.StreamOutput(service.processQuery(rawInput, excludeExplicitTools = true))
         }
     }
 }

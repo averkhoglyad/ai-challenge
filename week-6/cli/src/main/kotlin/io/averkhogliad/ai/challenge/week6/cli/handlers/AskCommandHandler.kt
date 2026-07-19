@@ -22,7 +22,7 @@ class AskCommandHandler(
             return CommandEffect.Print("Использование: /ask <вопрос>", isError = true)
         }
 
-        val flow: Flow<String> = agentLoopService.processQuery(query)
+        val flow: Flow<String> = agentLoopService.processQuery(query, excludeExplicitTools = true)
 
         return CommandEffect.StreamOutput(flow)
     }

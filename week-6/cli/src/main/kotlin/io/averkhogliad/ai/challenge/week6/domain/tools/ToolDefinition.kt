@@ -7,4 +7,5 @@ data class ToolDefinition(
     val description: String,
     val inputSchema: JsonObject,
     val source: ToolSource = ToolSource.Builtin,
+    val requiresExplicitInvocation: Boolean = false,
 )

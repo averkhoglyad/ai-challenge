@@ -1,20 +1,20 @@
 package io.averkhogliad.ai.challenge.week6.infrastructure.db
 
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.sqlite.SQLiteConfig
 import java.nio.file.Path
 
 object DatabaseFactory {
 
     fun connect(dbPath: Path): Database {
         val url = "jdbc:sqlite:$dbPath"
-        val db = Database.connect(
+        val sqliteConfig = SQLiteConfig().apply {
+            enforceForeignKeys(true)
+        }
+        return Database.connect(
             url = url,
             driver = "org.sqlite.JDBC",
+            setupConnection = { connection -> sqliteConfig.apply(connection) },
         )
-        org.jetbrains.exposed.v1.jdbc.transactions.transaction(db) {
-            exec("PRAGMA journal_mode=WAL")
-            exec("PRAGMA foreign_keys = ON")
-        }
-        return db
     }
 }

@@ -48,15 +48,6 @@ bin/
 ### External config files ###
 # Local config files (NEVER commit real API keys)
 /config/
-/.idea/.gitignore
-/.idea/amplicode-jpa.xml
-/.idea/goEnvironmentSettings.xml
-/.idea/gradle.xml
-/.idea/kotlinc.xml
-/.idea/LanguageServersSettings.xml
-/.idea/misc.xml
-/.idea/vcs.xml
-/.idea/WebToolsSettings.xml
 /.kilocode/
 /docs/
 /.tasks/
