@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week3.weather.core.repository
 
-import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.v1.core.Table
 
 object GeoCacheTable : Table("geo_cache") {
     val cacheKey = varchar("cache_key", 255)

@@ -43,7 +43,7 @@ class ReplEngine(
                 }
 
                 val effect = try {
-                    dispatcher.dispatch(input)
+                    dispatcher.dispatch(input.trim())
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

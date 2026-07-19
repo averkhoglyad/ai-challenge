@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.infrastructure.config
 
-import io.averkhogliad.ai.challenge.utils.config.TestConfig
+import io.averkhogliad.ai.challenge.llm.config.TestConfig
 import io.averkhogliad.ai.challenge.week1.domain.ModelId
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows

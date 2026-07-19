@@ -22,7 +22,7 @@ import io.averkhogliad.ai.challenge.week0.domain.service.ModelBenchmarkService
  * - **Агрегирует результаты** — список [ModelBenchmarkService.ModelBenchmarkResult]
  *   преобразуется в единый [TaskResult.Success] с полным контентом
  *   и статистикой в metadata
- * - **Не зависит от UI** — executor не содержит Terminal/Mordant, не зависит от [ModelInfo][io.averkhogliad.ai.challenge.utils.llm.ModelInfo]
+ * - **Не зависит от UI** — executor не содержит Terminal/Mordant, не зависит от [ModelInfo][io.averkhogliad.ai.challenge.llm.chat.ModelInfo]
  *
  * Executor содержит только оркестрацию: построение конфига → вызов сервиса → агрегация.
  */

@@ -7,12 +7,12 @@ import io.averkhogliad.ai.challenge.week3.cli.domain.config.AppConfig
  *
  * Определяет контракт, который domain-слой использует для получения
  * конфигурационных данных. Реализация в infrastructure-слое ([ConfigAdapter])
- * читает данные из [Config][io.averkhogliad.ai.challenge.utils.config.Config]
+ * читает данные из [Config][io.averkhogliad.ai.challenge.llm.config.Config]
  * и маппит их в domain-конфиги.
  *
  * Domain-слой НЕ зависит от:
- * - [Config][io.averkhogliad.ai.challenge.utils.config.Config]
- * - [ConfigProvider][io.averkhogliad.ai.challenge.utils.config.ConfigProvider]
+ * - [Config][io.averkhogliad.ai.challenge.llm.config.Config]
+ * - [ConfigProvider][io.averkhogliad.ai.challenge.llm.config.ConfigProvider]
  * - application.properties
  */
 interface ConfigPort {

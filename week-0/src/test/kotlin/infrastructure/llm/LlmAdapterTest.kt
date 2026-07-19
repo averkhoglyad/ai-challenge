@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week0.infrastructure.llm
 
-import io.averkhogliad.ai.challenge.utils.llm.*
+import io.averkhogliad.ai.challenge.llm.chat.*
 import io.averkhogliad.ai.challenge.week0.domain.ModelId
 import io.averkhogliad.ai.challenge.week0.domain.Prompt
 import io.averkhogliad.ai.challenge.week0.domain.TaskResult

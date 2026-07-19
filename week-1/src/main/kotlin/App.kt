@@ -1,8 +1,8 @@
 package io.averkhogliad.ai.challenge.week1
 
-import io.averkhogliad.ai.challenge.utils.config.ClasspathConfigSource
-import io.averkhogliad.ai.challenge.utils.config.ConfigProvider
-import io.averkhogliad.ai.challenge.utils.config.FileConfigSource
+import io.averkhogliad.ai.challenge.llm.config.ClasspathConfigSource
+import io.averkhogliad.ai.challenge.llm.config.ConfigProvider
+import io.averkhogliad.ai.challenge.llm.config.FileConfigSource
 import io.averkhogliad.ai.challenge.week1.bootstrap.ApplicationBootstrap
 import io.averkhogliad.ai.challenge.week1.cli.CliApplication
 import java.nio.file.Files

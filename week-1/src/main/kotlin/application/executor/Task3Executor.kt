@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.application.executor
 
-import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
+import io.averkhogliad.ai.challenge.llm.chat.ModelInfo
 import io.averkhogliad.ai.challenge.week1.application.DialogManager
 import io.averkhogliad.ai.challenge.week1.domain.Prompt
 import io.averkhogliad.ai.challenge.week1.domain.TaskId

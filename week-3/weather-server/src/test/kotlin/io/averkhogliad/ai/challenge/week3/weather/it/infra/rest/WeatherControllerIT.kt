@@ -9,16 +9,17 @@ import io.averkhogliad.ai.challenge.week3.weather.infra.client.*
 import io.averkhogliad.ai.challenge.week3.weather.infra.config.CurrentWeatherCache
 import io.averkhogliad.ai.challenge.week3.weather.infra.config.ForecastWeatherCache
 import io.averkhogliad.ai.challenge.week3.weather.it.IntegrationTest
+import io.kotest.core.extensions.ApplyExtension
 import io.kotest.core.spec.style.FreeSpec
 import io.kotest.extensions.spring.SpringExtension
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SchemaUtils
-import org.jetbrains.exposed.sql.deleteAll
-import org.jetbrains.exposed.sql.selectAll
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.SchemaUtils
+import org.jetbrains.exposed.v1.jdbc.deleteAll
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.test.context.TestConfiguration
@@ -33,9 +34,8 @@ import kotlin.test.assertEquals
 
 
 @IntegrationTest
+@ApplyExtension(SpringExtension::class)
 class WeatherControllerIT : FreeSpec() {
-
-    override fun extensions() = listOf(SpringExtension)
 
     @Autowired
     lateinit var mockMvc: MockMvc

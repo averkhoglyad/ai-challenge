@@ -1,7 +1,7 @@
 ﻿package io.averkhogliad.ai.challenge.week3.cli.infrastructure.config
 
-import io.averkhogliad.ai.challenge.utils.config.Config
-import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
+import io.averkhogliad.ai.challenge.llm.chat.ModelInfo
+import io.averkhogliad.ai.challenge.llm.config.Config
 import io.averkhogliad.ai.challenge.week3.cli.domain.ModelId
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week3.cli.domain.config.LlmConfig

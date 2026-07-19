@@ -1,7 +1,7 @@
 package io.averkhogliad.ai.challenge.week1.infrastructure.config
 
-import io.averkhogliad.ai.challenge.utils.config.Config
-import io.averkhogliad.ai.challenge.utils.llm.ModelInfo
+import io.averkhogliad.ai.challenge.llm.chat.ModelInfo
+import io.averkhogliad.ai.challenge.llm.config.Config
 import io.averkhogliad.ai.challenge.week1.domain.ModelId
 import io.averkhogliad.ai.challenge.week1.domain.config.AppConfig
 import io.averkhogliad.ai.challenge.week1.domain.config.ContextCompressionConfig

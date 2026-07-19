@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week2.unit.bootstrap
 
-import io.averkhogliad.ai.challenge.utils.config.TestConfig
+import io.averkhogliad.ai.challenge.llm.config.TestConfig
 import io.averkhogliad.ai.challenge.week2.bootstrap.ApplicationBootstrap
 import io.averkhogliad.ai.challenge.week2.cli.CliApplication
 import io.kotest.core.spec.style.FreeSpec

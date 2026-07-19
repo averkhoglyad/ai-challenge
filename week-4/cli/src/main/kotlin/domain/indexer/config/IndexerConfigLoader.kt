@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week4.cli.domain.indexer.config
 
-import io.averkhogliad.ai.challenge.utils.config.Config
+import io.averkhogliad.ai.challenge.llm.config.Config
 
 /**
  * Загружает конфигурацию индексатора из [Config].

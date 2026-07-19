@@ -7,8 +7,8 @@ package io.averkhogliad.ai.challenge.week1.domain.config
  * Является точкой входа для получения конфигурации доменного слоя.
  *
  * Зависит только от domain-конфигов ([LlmConfig], [TaskExecutionConfig]).
- * Не зависит от [io.averkhogliad.ai.challenge.utils.config.Config],
- * [io.averkhogliad.ai.challenge.utils.config.ConfigProvider] и application.properties.
+ * Не зависит от [io.averkhogliad.ai.challenge.llm.config.Config],
+ * [io.averkhogliad.ai.challenge.llm.config.ConfigProvider] и application.properties.
  *
  * @property llm Конфигурация LLM-клиента
  * @property defaultExecution Конфигурация выполнения задачи по умолчанию

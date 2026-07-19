@@ -17,9 +17,9 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import java.util.*
+import kotlin.time.Clock
 
 class EventServiceTest : FreeSpec({
 

@@ -8,7 +8,6 @@ import io.averkhogliad.ai.challenge.week3.events.rest.dto.CreateEventRequest
 import io.averkhogliad.ai.challenge.week3.events.rest.dto.PaginatedResponse
 import io.averkhogliad.ai.challenge.week3.events.rest.dto.PaginationMeta
 import io.averkhogliad.ai.challenge.week3.events.rest.dto.UpdateEventRequest
-import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
@@ -17,6 +16,7 @@ import org.springframework.data.domain.Pageable
 import org.springframework.data.domain.Sort
 import org.springframework.stereotype.Service
 import java.util.*
+import kotlin.time.Clock
 
 @Service
 class EventService(

@@ -2,9 +2,9 @@ package io.averkhogliad.ai.challenge.week3.weather.core.repository
 
 import io.averkhogliad.ai.challenge.week3.weather.core.model.GeoCacheEntry
 import io.averkhogliad.ai.challenge.week3.weather.infra.config.WeatherDurationProperties
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
-import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.v1.core.*
+import org.jetbrains.exposed.v1.jdbc.*
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.springframework.stereotype.Repository
 
 

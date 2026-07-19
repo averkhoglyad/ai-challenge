@@ -9,7 +9,7 @@ import io.averkhogliad.ai.challenge.week0.domain.config.TaskExecutionConfig
  *
  * Определяет контракт, который реализуется в infrastructure-слое.
  * Domain services зависят только от этого интерфейса, а не от конкретных
- * реализаций [io.averkhogliad.ai.challenge.utils.llm.LlmClient].
+ * реализаций [io.averkhogliad.ai.challenge.llm.chat.LlmClient].
  *
  * Принцип инверсии зависимостей (DIP): domain определяет интерфейс,
  * infrastructure его реализует.
@@ -62,7 +62,7 @@ enum class ChatRole {
 /**
  * Domain-представление сообщения чата.
  *
- * Аналог [io.averkhogliad.ai.challenge.utils.llm.ChatMessage], но определён
+ * Аналог [io.averkhogliad.ai.challenge.llm.chat.ChatMessage], но определён
  * в domain-слое для соблюдения принципа чистой архитектуры: domain не зависит
  * от utils/infrastructure.
  *

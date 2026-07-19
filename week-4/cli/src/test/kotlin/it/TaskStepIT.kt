@@ -38,8 +38,8 @@ class TaskStepIT : FreeSpec({
     beforeTest {
         tempDbFile = Files.createTempFile("test-taskstep-integration-", ".db").toFile()
         database = SqliteDatabase(tempDbFile.absolutePath)
-        taskStepRepository = SqliteTaskStepRepository(database)
         taskRepository = SqliteTaskRepository(database)
+        taskStepRepository = SqliteTaskStepRepository(database)
         todoTaskService = TodoTaskService(taskRepository)
     }
 
@@ -118,11 +118,13 @@ class TaskStepIT : FreeSpec({
 
     "steps require an open task" {
         runTest {
-            val taskId = TaskId(UUID.randomUUID().toString())
+            // Create task first to satisfy FK constraint
+            val createdTask = todoTaskService.addTask("Test task")
+            val taskId = createdTask.id
 
             // Попытка добавить шаг без открытой задачи должна требовать валидации
             // на уровне CommandHandler (requireTaskOpen). Здесь проверяем, что
-            // TaskStepRepository принимает шаги для любой задачи (нет валидации на уровне репозитория)
+            // TaskStepRepository принимает шаги для любой существующей задачи
             val step = TaskStep(
                 id = TaskStepId(UUID.randomUUID().toString()),
                 taskId = taskId,
@@ -133,7 +135,6 @@ class TaskStepIT : FreeSpec({
             )
             val saved = taskStepRepository.save(step)
 
-            // Репозиторий сохраняет шаг, даже если задача не существует
             saved.text shouldBe "Orphan step"
             taskStepRepository.findById(saved.id) shouldNotBe null
         }
@@ -145,8 +146,10 @@ class TaskStepIT : FreeSpec({
 
     "task-level steps are persisted and sorted by order" {
         runTest {
-            val taskId1 = TaskId(UUID.randomUUID().toString())
-            val taskId2 = TaskId(UUID.randomUUID().toString())
+            val created1 = todoTaskService.addTask("Task 1")
+            val created2 = todoTaskService.addTask("Task 2")
+            val taskId1 = created1.id
+            val taskId2 = created2.id
 
             // Добавляем шаги для двух разных задач
             addStep(taskId1, "Task 1 - Step A", 0)
@@ -167,7 +170,8 @@ class TaskStepIT : FreeSpec({
 
     "completed steps are tracked correctly" {
         runTest {
-            val taskId = TaskId(UUID.randomUUID().toString())
+            val created = todoTaskService.addTask("Test")
+            val taskId = created.id
 
             // Добавляем шаги с разными статусами
             addStep(taskId, "Pending step", 0)
@@ -186,7 +190,8 @@ class TaskStepIT : FreeSpec({
 
     "delete all steps by task id" {
         runTest {
-            val taskId = TaskId(UUID.randomUUID().toString())
+            val created = todoTaskService.addTask("Test")
+            val taskId = created.id
 
             addStep(taskId, "Step 1", 0)
             addStep(taskId, "Step 2", 1)

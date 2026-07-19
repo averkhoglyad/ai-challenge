@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week4.cli.unit.infrastructure.indexer.config
 
-import io.averkhogliad.ai.challenge.utils.config.PropertiesConfig
+import io.averkhogliad.ai.challenge.llm.config.PropertiesConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.config.EmbeddingProviderConfig
 import io.averkhogliad.ai.challenge.week4.cli.domain.indexer.config.loadIndexerConfig
 import io.kotest.assertions.throwables.shouldThrow

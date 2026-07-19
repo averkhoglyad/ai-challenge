@@ -10,10 +10,10 @@ import io.kotest.core.spec.style.FreeSpec
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 class EventSchedulerTest : FreeSpec({
 

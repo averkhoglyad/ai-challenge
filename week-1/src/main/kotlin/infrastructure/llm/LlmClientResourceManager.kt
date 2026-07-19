@@ -1,6 +1,6 @@
 package io.averkhogliad.ai.challenge.week1.infrastructure.llm
 
-import io.averkhogliad.ai.challenge.utils.llm.LlmClient
+import io.averkhogliad.ai.challenge.llm.chat.LlmClient
 import io.averkhogliad.ai.challenge.week1.domain.service.ResourceManager
 
 /**

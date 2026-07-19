@@ -1,8 +1,8 @@
 package io.averkhogliad.ai.challenge.week4.cli.bootstrap
 
-import io.averkhogliad.ai.challenge.utils.config.Config
-import io.averkhogliad.ai.challenge.utils.llm.DefaultLlmClient
-import io.averkhogliad.ai.challenge.utils.llm.LlmClientConfig
+import io.averkhogliad.ai.challenge.llm.chat.DefaultLlmClient
+import io.averkhogliad.ai.challenge.llm.chat.LlmClientConfig
+import io.averkhogliad.ai.challenge.llm.config.Config
 import io.averkhogliad.ai.challenge.week4.cli.application.DialogService
 import io.averkhogliad.ai.challenge.week4.cli.application.ProfileService
 import io.averkhogliad.ai.challenge.week4.cli.application.cache.CachingInvariantService

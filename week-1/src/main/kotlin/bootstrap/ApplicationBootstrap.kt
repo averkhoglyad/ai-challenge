@@ -1,7 +1,7 @@
 package io.averkhogliad.ai.challenge.week1.bootstrap
 
-import io.averkhogliad.ai.challenge.utils.config.Config
-import io.averkhogliad.ai.challenge.utils.llm.*
+import io.averkhogliad.ai.challenge.llm.chat.*
+import io.averkhogliad.ai.challenge.llm.config.Config
 import io.averkhogliad.ai.challenge.week1.application.DialogManager
 import io.averkhogliad.ai.challenge.week1.application.executor.*
 import io.averkhogliad.ai.challenge.week1.cli.CliApplication

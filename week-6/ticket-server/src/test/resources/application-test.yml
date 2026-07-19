@@ -1,0 +1,17 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: ticket-server-test
+  ai:
+    mcp:
+      server:
+        name: ticket-server-test
+        version: 1.0.0
+        enabled: false
+
+logging:
+  level:
+    root: WARN
+    io.averkhogliad.ai.challenge.week6.ticketserver: DEBUG

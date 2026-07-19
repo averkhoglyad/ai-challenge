@@ -38,10 +38,10 @@ data class DialogContext(
      * - Затем добавляются [recentMessages] с ролями user/assistant
      *
      * @param systemPrompt базовый system prompt (инструкции модели)
-     * @return список [io.averkhogliad.ai.challenge.utils.llm.ChatMessage] для отправки в LLM API
+     * @return список [io.averkhogliad.ai.challenge.llm.chat.ChatMessage] для отправки в LLM API
      */
-    fun toMessagesList(systemPrompt: String): List<io.averkhogliad.ai.challenge.utils.llm.ChatMessage> {
-        val messages = mutableListOf<io.averkhogliad.ai.challenge.utils.llm.ChatMessage>()
+    fun toMessagesList(systemPrompt: String): List<io.averkhogliad.ai.challenge.llm.chat.ChatMessage> {
+        val messages = mutableListOf<io.averkhogliad.ai.challenge.llm.chat.ChatMessage>()
 
         // Формируем system-сообщение: systemPrompt + summary (если есть)
         val systemContent = if (summary != null) {
@@ -49,12 +49,12 @@ data class DialogContext(
         } else {
             systemPrompt
         }
-        messages.add(io.averkhogliad.ai.challenge.utils.llm.ChatMessage.system(systemContent))
+        messages.add(io.averkhogliad.ai.challenge.llm.chat.ChatMessage.system(systemContent))
 
         // Добавляем recentMessages, конвертируя из domain.ChatMessage в utils.ChatMessage
         for (msg in recentMessages) {
             messages.add(
-                io.averkhogliad.ai.challenge.utils.llm.ChatMessage(
+                io.averkhogliad.ai.challenge.llm.chat.ChatMessage(
                     role = msg.role.roleName,
                     content = msg.content
                 )

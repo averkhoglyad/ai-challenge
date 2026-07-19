@@ -6,8 +6,8 @@ import io.averkhogliad.ai.challenge.week4.cli.domain.ModelId
  * Immutable конфигурация LLM-клиента.
  *
  * Содержит параметры подключения к LLM API и значения по умолчанию
- * для параметров генерации. Не зависит от [Config][io.averkhogliad.ai.challenge.utils.config.Config],
- * [ConfigProvider][io.averkhogliad.ai.challenge.utils.config.ConfigProvider] и
+ * для параметров генерации. Не зависит от [Config][io.averkhogliad.ai.challenge.llm.config.Config],
+ * [ConfigProvider][io.averkhogliad.ai.challenge.llm.config.ConfigProvider] и
  * [application.properties].
  *
  * Зависит только от domain-модели [ModelId].

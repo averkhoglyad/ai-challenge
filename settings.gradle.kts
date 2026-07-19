@@ -22,6 +22,7 @@ plugins {
 include(":common:config")
 include(":common:llm")
 include(":common:repl")
+include(":common:indexer")
 include(":common:repl-mordant")
 include(":common:test")
 include(":week-0")
@@ -32,5 +33,7 @@ include(":week-3:events-server")
 include(":week-3:weather-server")
 include(":week-3:notification-server")
 include(":week-4:cli")
+include(":week-6:cli")
+include(":week-6:ticket-server")
 
 rootProject.name = "ai-challenge"

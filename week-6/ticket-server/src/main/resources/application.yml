@@ -1,0 +1,16 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: ticket-server
+  ai:
+    mcp:
+      server:
+        name: ticket-server
+        version: 1.0.0
+
+logging:
+  level:
+    root: INFO
+    io.averkhogliad.ai.challenge.week6.ticketserver: DEBUG

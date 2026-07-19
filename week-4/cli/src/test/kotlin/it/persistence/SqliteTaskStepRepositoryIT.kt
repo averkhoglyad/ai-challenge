@@ -26,6 +26,22 @@ class SqliteTaskStepRepositoryIT : FreeSpec({
     beforeEach {
         tempDbFile = Files.createTempFile("test-taskstep-", ".db").toFile()
         database = SqliteDatabase(tempDbFile.absolutePath)
+        // tasks table must exist before task_steps due to FK constraint with PRAGMA foreign_keys = ON
+        database.connection.createStatement().use { stmt ->
+            stmt.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """.trimIndent()
+            )
+            // Disable FK checks for tests that create steps for arbitrary task IDs
+            stmt.execute("PRAGMA foreign_keys = OFF")
+        }
         repository = SqliteTaskStepRepository(database)
     }
 

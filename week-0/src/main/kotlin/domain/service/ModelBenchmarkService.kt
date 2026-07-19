@@ -17,7 +17,7 @@ import kotlinx.coroutines.coroutineScope
  *
  * Зависит только от [LlmPort] (port) и domain-моделей ([ModelId], [TaskResult],
  * [BenchmarkConfig], [TaskExecutionConfig]). Не зависит от конкретных LLM-клиентов
- * и [io.averkhogliad.ai.challenge.utils.llm.ModelInfo].
+ * и [io.averkhogliad.ai.challenge.llm.chat.ModelInfo].
  *
  * ## Как работает
  * 1. Для каждой модели из [BenchmarkConfig.modelIds] создаётся [TaskExecutionConfig] с указанным modelId

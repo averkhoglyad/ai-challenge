@@ -11,11 +11,11 @@ import io.averkhogliad.ai.challenge.week3.weather.infra.cache.WeatherCache
 import io.averkhogliad.ai.challenge.week3.weather.infra.client.DailyData
 import io.averkhogliad.ai.challenge.week3.weather.infra.client.OpenMeteoProvider
 import io.averkhogliad.ai.challenge.week3.weather.infra.client.UnitConverter
-import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import kotlin.time.Clock
 
 
 private val SERVER_TIME_ZONE: TimeZone = TimeZone.currentSystemDefault()
