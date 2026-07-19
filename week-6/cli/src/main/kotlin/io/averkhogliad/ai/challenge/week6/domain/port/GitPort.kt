@@ -7,4 +7,9 @@ interface GitPort {
     suspend fun getCurrentBranch(rootPath: Path): DomainResult<String>
     suspend fun getCurrentCommit(rootPath: Path): DomainResult<String>
     suspend fun checkGitStatus(rootPath: Path): DomainResult<Boolean>
+    suspend fun getDiffBetweenBranches(rootPath: Path, sourceBranch: String, targetBranch: String): DomainResult<String>
+    suspend fun getDiffBetweenCommits(rootPath: Path, base: String, head: String): DomainResult<String>
+    suspend fun getLastCommitHash(rootPath: Path): DomainResult<String>
+    suspend fun isMergeCommit(rootPath: Path): DomainResult<Boolean>
+    suspend fun branchExists(rootPath: Path, branch: String): DomainResult<Boolean>
 }

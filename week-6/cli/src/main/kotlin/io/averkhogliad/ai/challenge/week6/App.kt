@@ -15,12 +15,21 @@ import io.averkhogliad.ai.challenge.llm.embedding.StubEmbeddingClient
 import io.averkhogliad.ai.challenge.week6.application.*
 import io.averkhogliad.ai.challenge.week6.application.mcp.*
 import io.averkhogliad.ai.challenge.week6.application.rag.RagService
+import io.averkhogliad.ai.challenge.week6.application.review.ReviewCodeUseCase
+import io.averkhogliad.ai.challenge.week6.application.review.SaveReviewTool
+import io.averkhogliad.ai.challenge.week6.application.review.SaveReviewUseCase
+import io.averkhogliad.ai.challenge.week6.application.pr.CreatePullRequestUseCase
+import io.averkhogliad.ai.challenge.week6.application.pr.GetPullRequestDiffUseCase
+import io.averkhogliad.ai.challenge.week6.application.pr.ListPullRequestsUseCase
 import io.averkhogliad.ai.challenge.week6.cli.contexts.CopilotContext
 import io.averkhogliad.ai.challenge.week6.cli.contexts.OnboardingContext
 import io.averkhogliad.ai.challenge.week6.cli.contexts.SupportContext
 import io.averkhogliad.ai.challenge.week6.cli.handlers.SupportCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.mcp.*
+import io.averkhogliad.ai.challenge.week6.cli.handlers.review.*
 import io.averkhogliad.ai.challenge.week6.cli.rendering.McpServerInfoRenderer
+import io.averkhogliad.ai.challenge.week6.cli.rendering.DiffRenderer
+import io.averkhogliad.ai.challenge.week6.cli.rendering.ReviewRenderers
 import io.averkhogliad.ai.challenge.week6.domain.error.DomainResult
 import io.averkhogliad.ai.challenge.week6.domain.indexer.port.IndexMetadataStore
 import io.averkhogliad.ai.challenge.week6.domain.indexer.port.IndexedSourceRepository
@@ -30,13 +39,20 @@ import io.averkhogliad.ai.challenge.week6.domain.indexer.usecase.IndexSourcesUse
 import io.averkhogliad.ai.challenge.week6.infrastructure.config.AppConfigLoader
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.DatabaseFactory
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlAppStateRepository
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlIndexedChunkRepository
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlIndexedSourceRepository
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlMcpServerRepository
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlProjectRepository
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlPullRequestRepository
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.SqlReviewRepository
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.AppStateTable
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.IndexChunksTable
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.McpServersTable
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.ProjectSourcesTable
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.ProjectsTable
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.PullRequestsTable
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.ReviewFindingsTable
+import io.averkhogliad.ai.challenge.week6.infrastructure.db.schema.ReviewsTable
 import io.averkhogliad.ai.challenge.week6.infrastructure.git.ProcessGitAdapter
 import io.averkhogliad.ai.challenge.week6.infrastructure.indexer.metadata.InMemoryIndexMetadataStore
 import io.averkhogliad.ai.challenge.week6.infrastructure.mcp.KtorMcpClientAdapter
@@ -53,15 +69,28 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.time.Duration.Companion.seconds
 
 fun main() {
+    val args = emptyArray<String>()
+    val isReviewMode = args.contains("--review")
     val config = AppConfigLoader().load()
     val db: Database = DatabaseFactory.connect(config.dbPath)
 
     transaction(db) {
-        SchemaUtils.create(ProjectsTable, McpServersTable, AppStateTable, ProjectSourcesTable)
+        SchemaUtils.create(
+            ProjectsTable,
+            McpServersTable,
+            AppStateTable,
+            ProjectSourcesTable,
+            IndexChunksTable,
+            ReviewsTable,
+            ReviewFindingsTable,
+            PullRequestsTable
+        )
     }
 
     val projectRepository = SqlProjectRepository()
     val appStateRepository = SqlAppStateRepository()
+    val indexedChunkRepository = SqlIndexedChunkRepository()
+    val reviewRepository = SqlReviewRepository()
 
     // LLM Client
     val llmClientConfig = LlmClientConfig(
@@ -101,6 +130,7 @@ fun main() {
     val checkStalenessUseCase = CheckIndexStalenessUseCase(gitPort, metadataStore)
     val indexSourcesUseCase = IndexSourcesUseCase(
         extractorRegistry, chunkingStrategy, embeddingClient, vectorSearch, gitPort, metadataStore,
+        indexedChunkRepository,
     )
 
     // Project context (needed by tools)
@@ -142,6 +172,18 @@ fun main() {
     val supportContext = SupportContext(supportUseCase)
     val supportCommandHandler = SupportCommandHandler()
 
+    // Review
+    val saveReviewUseCase = SaveReviewUseCase(reviewRepository)
+    val reviewCodeUseCase = ReviewCodeUseCase(llmClient, ragService, saveReviewUseCase)
+    val saveReviewTool = SaveReviewTool()
+    toolRegistry.register(saveReviewTool)
+
+    // PR
+    val prRepository = SqlPullRequestRepository()
+    val createPrUseCase = CreatePullRequestUseCase(prRepository, gitPort)
+    val listPrUseCase = ListPullRequestsUseCase(prRepository)
+    val getPrDiffUseCase = GetPullRequestDiffUseCase(gitPort)
+
     // MCP CLI handlers
     val terminal = Terminal()
     val mcpServerInfoRenderer = McpServerInfoRenderer(terminal)
@@ -151,6 +193,39 @@ fun main() {
     val mcpEnableHandler = McpEnableHandler(toggleMcpServerUseCase)
     val mcpInfoHandler = McpInfoHandler(mcpServerRepository, mcpClientManager)
     val mcpReconnectHandler = McpReconnectHandler(reconnectMcpServerUseCase)
+
+    // Review/PR CLI handlers
+    val reviewRenderers = ReviewRenderers(terminal)
+    val diffRenderer = DiffRenderer(terminal)
+
+    val rootPathProvider: () -> java.nio.file.Path? = {
+        runBlocking {
+            when (val r = getActiveProjectUseCase.execute()) {
+                is DomainResult.Success -> r.value?.rootPath
+                is DomainResult.Failure -> null
+            }
+        }
+    }
+    val projectIdProvider: () -> String? = {
+        runBlocking {
+            when (val r = getActiveProjectUseCase.execute()) {
+                is DomainResult.Success -> r.value?.id
+                is DomainResult.Failure -> null
+            }
+        }
+    }
+    val binPathProvider: () -> java.nio.file.Path =
+        { java.nio.file.Path.of(System.getProperty("java.home")).parent.resolve("bin").resolve("week-6") }
+
+    val reviewHandler = ReviewCommandHandler(reviewCodeUseCase, gitPort, rootPathProvider, projectIdProvider)
+    val reviewHistoryHandler = ReviewHistoryCommandHandler(reviewRepository, reviewRenderers, projectIdProvider)
+    val reviewShowHandler = ReviewShowCommandHandler(reviewRepository, reviewRenderers)
+    val reviewInstallHookHandler = ReviewInstallHookHandler(rootPathProvider, binPathProvider)
+    val reviewRemoveHookHandler = ReviewRemoveHookHandler(rootPathProvider)
+    val prCreateHandler = PrCreateHandler(createPrUseCase, rootPathProvider, projectIdProvider)
+    val prListHandler = PrListHandler(listPrUseCase, projectIdProvider, terminal)
+    val prReviewHandler = PrReviewHandler(reviewCodeUseCase, prRepository, gitPort, rootPathProvider, projectIdProvider)
+    val prDiffHandler = PrDiffHandler(getPrDiffUseCase, prRepository, diffRenderer, rootPathProvider)
 
     val onboardingContext = OnboardingContext(openProjectUseCase)
 
@@ -205,7 +280,22 @@ fun main() {
         mcpInfoHandler = mcpInfoHandler,
         mcpReconnectHandler = mcpReconnectHandler,
         supportCommandHandler = supportCommandHandler,
+        reviewCommandHandler = reviewHandler,
+        reviewHistoryHandler = reviewHistoryHandler,
+        reviewShowHandler = reviewShowHandler,
+        reviewInstallHookHandler = reviewInstallHookHandler,
+        reviewRemoveHookHandler = reviewRemoveHookHandler,
+        prCreateHandler = prCreateHandler,
+        prListHandler = prListHandler,
+        prReviewHandler = prReviewHandler,
+        prDiffHandler = prDiffHandler,
     )
+
+    if (isReviewMode) {
+        val reviewRunner = ReviewRunner(llmClient, ragService, gitPort, saveReviewUseCase, projectContextProvider)
+        runBlocking { reviewRunner.runReview() }
+        return
+    }
 
     val initialContext: ReplContext = if (activeProject != null) copilotContext else onboardingContext
 

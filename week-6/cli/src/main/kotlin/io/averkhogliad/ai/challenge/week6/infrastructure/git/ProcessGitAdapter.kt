@@ -38,6 +38,50 @@ class ProcessGitAdapter : GitPort {
         }
     }
 
+    override suspend fun getDiffBetweenBranches(
+        rootPath: Path,
+        sourceBranch: String,
+        targetBranch: String
+    ): DomainResult<String> {
+        return runGitCommand(rootPath, listOf("diff", "$targetBranch...$sourceBranch"))
+    }
+
+    override suspend fun getDiffBetweenCommits(rootPath: Path, base: String, head: String): DomainResult<String> {
+        return runGitCommand(rootPath, listOf("diff", "$base..$head"))
+    }
+
+    override suspend fun getLastCommitHash(rootPath: Path): DomainResult<String> {
+        return runGitCommand(rootPath, listOf("rev-parse", "HEAD"))
+    }
+
+    override suspend fun isMergeCommit(rootPath: Path): DomainResult<Boolean> {
+        return when (val result = runGitCommand(rootPath, listOf("rev-parse", "HEAD^^2"))) {
+            is DomainResult.Success -> DomainResult.Success(true)
+            is DomainResult.Failure -> {
+                // rev-parse fails for non-merge commits — this is expected
+                // Any other failure (git not installed, corrupted repo) should be propagated
+                if (result.error.message.contains("unknown revision") || result.error.message.contains("fatal:")) {
+                    DomainResult.Success(false)
+                } else {
+                    DomainResult.Failure(result.error)
+                }
+            }
+        }
+    }
+
+    override suspend fun branchExists(rootPath: Path, branch: String): DomainResult<Boolean> {
+        return when (val result = runGitCommand(rootPath, listOf("rev-parse", "--verify", branch))) {
+            is DomainResult.Success -> DomainResult.Success(true)
+            is DomainResult.Failure -> {
+                if (result.error.message.contains("unknown revision") || result.error.message.contains("fatal:")) {
+                    DomainResult.Success(false)
+                } else {
+                    DomainResult.Failure(result.error)
+                }
+            }
+        }
+    }
+
     private fun runGitCommand(directory: Path, args: List<String>): DomainResult<String> {
         return try {
             val process = ProcessBuilder()

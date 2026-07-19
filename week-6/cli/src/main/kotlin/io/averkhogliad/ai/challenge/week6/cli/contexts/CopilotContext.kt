@@ -8,6 +8,7 @@ import io.averkhogliad.ai.challenge.week6.cli.handlers.ListProjectsCommandHandle
 import io.averkhogliad.ai.challenge.week6.cli.handlers.OpenCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.SupportCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.mcp.*
+import io.averkhogliad.ai.challenge.week6.cli.handlers.review.*
 import io.averkhogliad.cli.repl.core.CommandEffect
 import io.averkhogliad.cli.repl.core.CommandHandler
 import io.averkhogliad.cli.repl.core.DefaultInputHandler
@@ -24,6 +25,15 @@ class CopilotContext(
     private val mcpInfoHandler: McpInfoHandler? = null,
     private val mcpReconnectHandler: McpReconnectHandler? = null,
     private val supportCommandHandler: SupportCommandHandler? = null,
+    private val reviewCommandHandler: CommandHandler? = null,
+    private val reviewHistoryHandler: CommandHandler? = null,
+    private val reviewShowHandler: CommandHandler? = null,
+    private val reviewInstallHookHandler: CommandHandler? = null,
+    private val reviewRemoveHookHandler: CommandHandler? = null,
+    private val prCreateHandler: CommandHandler? = null,
+    private val prListHandler: CommandHandler? = null,
+    private val prReviewHandler: CommandHandler? = null,
+    private val prDiffHandler: CommandHandler? = null,
 ) : ReplContext {
 
     override val name: String = "copilot"
@@ -40,6 +50,15 @@ class CopilotContext(
         mcpInfoHandler,
         mcpReconnectHandler,
         supportCommandHandler,
+        reviewCommandHandler,
+        reviewHistoryHandler,
+        reviewShowHandler,
+        reviewInstallHookHandler,
+        reviewRemoveHookHandler,
+        prCreateHandler,
+        prListHandler,
+        prReviewHandler,
+        prDiffHandler,
     )
 
     override val defaultHandler: DefaultInputHandler = object : DefaultInputHandler {

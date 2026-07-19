@@ -12,6 +12,7 @@ import io.averkhogliad.ai.challenge.week6.domain.indexer.model.IndexProgress
 import io.averkhogliad.ai.challenge.week6.domain.indexer.model.IndexedSource
 import io.averkhogliad.ai.challenge.week6.domain.indexer.model.SourceType
 import io.averkhogliad.ai.challenge.week6.domain.indexer.port.IndexMetadataStore
+import io.averkhogliad.ai.challenge.week6.domain.indexer.port.IndexedChunkRepository
 import io.averkhogliad.ai.challenge.week6.domain.port.GitPort
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +29,7 @@ class IndexSourcesUseCase(
     private val vectorSearch: VectorSearchPort,
     private val gitPort: GitPort,
     private val metadataStore: IndexMetadataStore,
+    private val indexedChunkRepository: IndexedChunkRepository? = null,
 ) {
     fun execute(sources: List<IndexedSource>, projectId: String, rootPath: Path): Flow<IndexProgress> = flow {
         emit(IndexProgress.Started(sources.size))
@@ -35,6 +37,7 @@ class IndexSourcesUseCase(
         vectorSearch.clear()
         val allFiles = collectFiles(sources)
         var totalChunks = 0
+        val allIndexedChunks = mutableListOf<IndexedChunk>()
 
         for ((index, file) in allFiles.withIndex()) {
             try {
@@ -51,6 +54,7 @@ class IndexSourcesUseCase(
                             )
                         }
                         vectorSearch.addEmbeddings(indexedChunks)
+                        allIndexedChunks.addAll(indexedChunks)
                         totalChunks += indexedChunks.size
 
                         emit(
@@ -67,6 +71,8 @@ class IndexSourcesUseCase(
                 emit(IndexProgress.Error(file.toString(), e.message ?: "unknown"))
             }
         }
+
+        indexedChunkRepository?.save(projectId, allIndexedChunks)
 
         val branch = gitPort.getCurrentBranch(rootPath).getOrNull()
         val commitHash = gitPort.getCurrentCommit(rootPath).getOrNull()
