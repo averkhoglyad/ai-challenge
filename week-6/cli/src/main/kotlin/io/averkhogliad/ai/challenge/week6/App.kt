@@ -11,7 +11,8 @@ import io.averkhogliad.ai.challenge.indexer.infrastructure.extractor.TextExtract
 import io.averkhogliad.ai.challenge.indexer.infrastructure.search.InMemoryCosineSearchAdapter
 import io.averkhogliad.ai.challenge.llm.chat.DefaultLlmClient
 import io.averkhogliad.ai.challenge.llm.chat.LlmClientConfig
-import io.averkhogliad.ai.challenge.llm.embedding.StubEmbeddingClient
+import io.averkhogliad.ai.challenge.llm.embedding.EmbeddingClientFactory
+import io.averkhogliad.ai.challenge.llm.embedding.config.EmbeddingConfig
 import io.averkhogliad.ai.challenge.week6.application.*
 import io.averkhogliad.ai.challenge.week6.application.fileops.*
 import io.averkhogliad.ai.challenge.week6.application.mcp.*
@@ -28,6 +29,7 @@ import io.averkhogliad.ai.challenge.week6.cli.contexts.OnboardingContext
 import io.averkhogliad.ai.challenge.week6.cli.contexts.SupportContext
 import io.averkhogliad.ai.challenge.week6.cli.handlers.SupportCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.fileops.*
+import io.averkhogliad.ai.challenge.week6.cli.handlers.indexer.IndexCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.mcp.*
 import io.averkhogliad.ai.challenge.week6.cli.handlers.release.ReleaseCommandHandler
 import io.averkhogliad.ai.challenge.week6.cli.handlers.release.ReleaseHistoryHandler
@@ -91,9 +93,9 @@ fun main(args: Array<String>) {
 
     // LLM Client
     val llmClientConfig = LlmClientConfig(
-        baseUrl = System.getenv("LLM_BASE_URL") ?: "http://localhost:11434/v1",
-        apiKey = System.getenv("LLM_API_KEY") ?: "ollama",
-        model = System.getenv("LLM_MODEL") ?: "qwen2.5:7b",
+        baseUrl = config.llmBaseUrl,
+        apiKey = config.llmApiKey,
+        model = config.llmModel,
         connectTimeout = 10.seconds,
         requestTimeout = 120.seconds,
         rateLimitEnabled = false,
@@ -106,7 +108,9 @@ fun main(args: Array<String>) {
     val gitPort = ProcessGitAdapter()
 
     // Embedding (from :common:llm)
-    val embeddingClient = StubEmbeddingClient()
+    val embeddingClient = EmbeddingClientFactory.create(
+        EmbeddingConfig(provider = config.embeddingProviderConfig)
+    )
 
     // Indexer (from :common:indexer)
     val extractorRegistry = DocumentExtractorRegistry(
@@ -233,20 +237,21 @@ fun main(args: Array<String>) {
     }
     val rootPathProvider: () -> java.nio.file.Path? = { activeProjectProvider()?.rootPath }
     val projectIdProvider: () -> String? = { activeProjectProvider()?.id }
-    val binPathProvider: () -> java.nio.file.Path =
-        { java.nio.file.Path.of(System.getProperty("java.home")).parent.resolve("bin").resolve("week-6") }
+    val launcherPathProvider: () -> java.nio.file.Path? = {
+        System.getProperty("week6.launcher.path")
+            ?.takeIf(String::isNotBlank)
+            ?.let(java.nio.file.Path::of)
+    }
 
     val reviewHandler = ReviewCommandHandler(reviewCodeUseCase, gitPort, rootPathProvider, projectIdProvider)
     val reviewHistoryHandler = ReviewHistoryCommandHandler(reviewRepository, reviewRenderers, projectIdProvider)
     val reviewShowHandler = ReviewShowCommandHandler(reviewRepository, reviewRenderers)
-    val reviewInstallHookHandler = ReviewInstallHookHandler(rootPathProvider, binPathProvider)
+    val reviewInstallHookHandler = ReviewInstallHookHandler(rootPathProvider, launcherPathProvider)
     val reviewRemoveHookHandler = ReviewRemoveHookHandler(rootPathProvider)
     val prCreateHandler = PrCreateHandler(createPrUseCase, rootPathProvider, projectIdProvider)
     val prListHandler = PrListHandler(listPrUseCase, projectIdProvider, terminal)
     val prReviewHandler = PrReviewHandler(reviewCodeUseCase, prRepository, gitPort, rootPathProvider, projectIdProvider)
     val prDiffHandler = PrDiffHandler(getPrDiffUseCase, prRepository, diffRenderer, rootPathProvider)
-
-    val onboardingContext = OnboardingContext(openProjectUseCase)
 
     val activeProject = runBlocking {
         when (val result = getActiveProjectUseCase.execute()) {
@@ -255,36 +260,17 @@ fun main(args: Array<String>) {
         }
     }
 
-    // Blocking indexing with progress
+    // Blocking indexing with progress rendered by the CLI layer
+    val startupIndexingUseCase = StartupIndexingUseCase(
+        sourceRepository,
+        collectDefaultSourcesUseCase,
+        indexSourcesUseCase,
+    )
+
     if (activeProject != null) {
-        try {
-            var sources = runBlocking { sourceRepository.findByProjectId(activeProject.id) }
-            if (sources.isEmpty()) {
-                sources = collectDefaultSourcesUseCase.execute(activeProject.id, activeProject.rootPath)
-                runBlocking {
-                    sources.forEach { sourceRepository.addSource(it) }
-                }
-            }
-            println("Индексация документации...")
-            runBlocking {
-                indexSourcesUseCase.execute(sources, activeProject.id, activeProject.rootPath)
-                    .collect { progress ->
-                        when (progress) {
-                            is io.averkhogliad.ai.challenge.week6.domain.indexer.model.IndexProgress.SourceComplete ->
-                                println("  [${progress.index}/${progress.total}] ${progress.sourcePath} (${progress.chunkCount} чанков)")
-
-                            is io.averkhogliad.ai.challenge.week6.domain.indexer.model.IndexProgress.Completed ->
-                                println("Индекс готов: ${progress.totalChunks} чанков, модель: ${progress.model}")
-
-                            is io.averkhogliad.ai.challenge.week6.domain.indexer.model.IndexProgress.Error ->
-                                System.err.println("Ошибка: ${progress.source}: ${progress.cause}")
-
-                            else -> {}
-                        }
-                    }
-            }
-        } catch (e: Exception) {
-            System.err.println("[App] Startup indexing failed: ${e.message}")
+        val startupIndexingRenderer = StartupIndexingRenderer(terminal)
+        runBlocking {
+            startupIndexingUseCase.execute(activeProject).collect(startupIndexingRenderer::render)
         }
     }
 
@@ -347,6 +333,7 @@ fun main(args: Array<String>) {
     val refactorUseCase = RefactorUseCase(refactorAgentOrchestrator, diffRenderer, projectContextProvider)
     val configExclusionsHandler = ConfigExclusionsHandler(projectSettingsRepo, projectContextProvider)
     val refactorCommandHandler = RefactorCommandHandler(refactorUseCase)
+    val indexCommandHandler = IndexCommandHandler(startupIndexingUseCase, activeProjectProvider)
 
     val copilotContext = CopilotContext(
         openProjectUseCase = openProjectUseCase,
@@ -374,15 +361,31 @@ fun main(args: Array<String>) {
         fileListCommandHandler = fileListCommandHandler,
         configExclusionsHandler = configExclusionsHandler,
         refactorCommandHandler = refactorCommandHandler,
+        indexCommandHandler = indexCommandHandler,
         releaseCommandHandler = releaseCommandHandler,
         releaseSuggestHandler = releaseSuggestHandler,
         releaseHistoryHandler = releaseHistoryHandler,
         releaseShowHandler = releaseShowHandler,
     )
 
+    val onboardingContext = OnboardingContext(
+        openProjectUseCase = openProjectUseCase,
+        listProjectsUseCase = listProjectsUseCase,
+        mcpListHandler = mcpListHandler,
+        mcpAddHandler = mcpAddHandler,
+        mcpRemoveHandler = mcpRemoveHandler,
+        mcpEnableHandler = mcpEnableHandler,
+        mcpInfoHandler = mcpInfoHandler,
+        mcpReconnectHandler = mcpReconnectHandler,
+    )
+
     if (isReviewMode) {
-        val reviewRunner = ReviewRunner(llmClient, ragService, gitPort, saveReviewUseCase, projectContextProvider)
-        runBlocking { reviewRunner.runReview() }
+        try {
+            val reviewRunner = ReviewRunner(llmClient, ragService, gitPort, saveReviewUseCase, projectContextProvider)
+            runBlocking { reviewRunner.runReview() }
+        } finally {
+            embeddingClient.close()
+        }
         return
     }
 
@@ -398,9 +401,10 @@ fun main(args: Array<String>) {
         outputWriter = outputWriter,
     )
 
-    // Shutdown hook for MCP cleanup
+    // Shutdown hook for resource cleanup
     Runtime.getRuntime().addShutdownHook(Thread {
         runBlocking { mcpClientManager.closeAll() }
+        embeddingClient.close()
     })
 
     runBlocking { engine.start() }

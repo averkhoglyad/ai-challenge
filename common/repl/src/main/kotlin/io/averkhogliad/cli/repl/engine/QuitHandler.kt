@@ -5,6 +5,7 @@ import io.averkhogliad.cli.repl.core.CommandHandler
 
 class QuitHandler : CommandHandler {
     override val name: String = "/quit"
+    override val aliases: List<String> = listOf("/q", "/exit")
     override val description: String = "Exit the REPL"
 
     override suspend fun execute(rawInput: String): CommandEffect = CommandEffect.Exit

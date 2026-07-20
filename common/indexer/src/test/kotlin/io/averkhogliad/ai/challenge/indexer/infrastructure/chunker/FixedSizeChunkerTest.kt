@@ -19,6 +19,8 @@ class FixedSizeChunkerTest : FreeSpec({
 
             chunks shouldHaveSize 1
             chunks[0].text shouldBe "short text"
+            chunks[0].metadata["start_line"] shouldBe "1"
+            chunks[0].metadata["end_line"] shouldBe "1"
         }
 
         "splits long text into multiple chunks" {

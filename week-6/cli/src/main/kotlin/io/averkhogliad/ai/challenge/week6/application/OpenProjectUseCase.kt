@@ -17,6 +17,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import java.util.logging.Logger
 
 class OpenProjectUseCase(
     private val projectRepository: ProjectRepository,
@@ -27,6 +28,7 @@ class OpenProjectUseCase(
     private val projectSettingsRepository: ProjectSettingsRepository? = null,
 ) {
     private val scope = CoroutineScope(Dispatchers.Default)
+    private val logger = Logger.getLogger(OpenProjectUseCase::class.java.name)
 
     companion object {
         private const val ACTIVE_PROJECT_KEY = "active_project_id"
@@ -83,7 +85,7 @@ class OpenProjectUseCase(
                     defaults.forEach { srcRepo.addSource(it) }
                     indexUC.execute(defaults, project.id, project.rootPath).collect { /* background */ }
                 } catch (e: Exception) {
-                    System.err.println("[OpenProject] Background indexing failed: ${e.message}")
+                    logger.warning("Background indexing failed: ${e.message}")
                 }
             }
         }

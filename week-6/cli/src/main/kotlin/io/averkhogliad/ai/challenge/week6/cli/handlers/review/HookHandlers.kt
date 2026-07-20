@@ -7,7 +7,7 @@ import java.nio.file.Path
 
 class ReviewInstallHookHandler(
     private val rootPath: () -> Path?,
-    private val binPath: () -> Path,
+    private val launcherPath: () -> Path?,
 ) : CommandHandler {
 
     override val name: String = "/review install-hook"
@@ -19,8 +19,12 @@ class ReviewInstallHookHandler(
 
     override suspend fun execute(rawInput: String): CommandEffect {
         val rp = rootPath() ?: return CommandEffect.Print("No active project.", isError = true)
+        val executable = launcherPath() ?: return CommandEffect.Print(
+            "Cannot determine the application launcher. Run the installed CLI distribution.",
+            isError = true,
+        )
 
-        val result = GitHookInstaller.install(rp, binPath())
+        val result = GitHookInstaller.install(rp, executable)
         return when (result) {
             is GitHookInstaller.Result.Success -> CommandEffect.Print(result.message)
             is GitHookInstaller.Result.Failure -> CommandEffect.Print(result.message, isError = true)

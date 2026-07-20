@@ -23,7 +23,13 @@ class OpenCommandHandler(
         }
 
         return when (val result = openProjectUseCase.execute(path)) {
-            is DomainResult.Success -> CommandEffect.Navigate("copilot")
+            is DomainResult.Success -> {
+                val project = result.value
+                CommandEffect.Navigate(
+                    targetContextName = "copilot",
+                    message = "Открыт проект: ${project.name}  (${project.rootPath})",
+                )
+            }
             is DomainResult.Failure -> CommandEffect.DisplayDomainError(result.error)
         }
     }

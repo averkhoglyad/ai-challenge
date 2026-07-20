@@ -16,13 +16,13 @@ class CommandDispatcher(
                 }
             }
 
-            contextStack.current.defaultHandler?.let { default ->
-                return default.handle(rawInput)
-            }
-
             val builtin = builtinHandlers.find { it.canHandle(rawInput) }
             if (builtin != null) {
                 return builtin.execute(rawInput)
+            }
+
+            contextStack.current.defaultHandler?.let { default ->
+                return default.handle(rawInput)
             }
 
             return CommandEffect.Print("Unknown command: $rawInput", isError = true)

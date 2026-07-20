@@ -4,7 +4,10 @@ import kotlinx.coroutines.flow.Flow
 
 sealed interface CommandEffect {
     data class Print(val message: String, val isError: Boolean = false) : CommandEffect
-    data class Navigate(val targetContextName: String) : CommandEffect
+    data class Navigate(
+        val targetContextName: String,
+        val message: String? = null,
+    ) : CommandEffect
     data object GoBack : CommandEffect
     data object Exit : CommandEffect
     data object None : CommandEffect

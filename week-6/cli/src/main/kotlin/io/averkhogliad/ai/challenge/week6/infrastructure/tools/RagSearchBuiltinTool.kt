@@ -37,8 +37,11 @@ class RagSearchBuiltinTool(
             ?: return ToolResult.Error("Missing required parameter: query")
 
         return try {
-            // Check index staleness before search
             val stalenessNote = checkStaleness()
+            if (stalenessNote == INDEX_MISSING_WARNING) {
+                return ToolResult.Success(stalenessNote)
+            }
+
             val results = ragService.search(query, topK = 5)
 
             if (results.isEmpty()) {
@@ -54,17 +57,23 @@ class RagSearchBuiltinTool(
                         appendLine("⚠ $stalenessNote")
                     }
                     appendLine()
-                    results.forEachIndexed { index, pair ->
-                        val pct = "%.2f".format(pair.second)
-                        appendLine("--- Result ${index + 1} (score: $pct) ---")
-                        appendLine(pair.first)
+                    results.forEachIndexed { index, result ->
+                        val pct = "%.2f".format(result.score)
+                        val citation = when {
+                            result.startLine != null && result.endLine != null ->
+                                "${result.sourcePath}:${result.startLine}-${result.endLine}"
+
+                            else -> result.sourcePath
+                        }
+                        appendLine("--- Result ${index + 1} (score: $pct, source: $citation) ---")
+                        appendLine(result.text)
                         appendLine()
                     }
                 }
                 ToolResult.Success(formatted)
             }
         } catch (e: Exception) {
-            ToolResult.Error("Search failed: ${e.message}")
+            ToolResult.Success("⚠ RAG unavailable: ${e.message ?: "unknown error"}")
         }
     }
 
@@ -72,10 +81,14 @@ class RagSearchBuiltinTool(
         val uc = checkStalenessUseCase ?: return null
         val ctx = contextProvider?.getContext()?.getOrNull() ?: return null
         return when (val result = uc.execute(ctx.projectId, ctx.rootPath)) {
-            StalenessResult.NoIndex -> "Индекс отсутствует — результаты могут быть неполными"
+            StalenessResult.NoIndex -> INDEX_MISSING_WARNING
             is StalenessResult.Stale -> "Индекс устарел: ${result.reason}"
             StalenessResult.Fresh -> null
             StalenessResult.NotApplicable -> null
         }
+    }
+
+    private companion object {
+        const val INDEX_MISSING_WARNING = "⚠ Индекс отсутствует — поиск по документации недоступен"
     }
 }

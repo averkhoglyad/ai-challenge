@@ -16,6 +16,10 @@ class AgentLoopService(
     private val toolRegistry: ToolRegistry,
     private val projectContextProvider: ProjectContextProvider,
 ) {
+    private companion object {
+        const val NO_ANSWER_MESSAGE =
+            "Не могу ответить на этот вопрос по доступной информации проекта. Уточните вопрос или добавьте документацию."
+    }
 
     fun processQuery(
         query: String,
@@ -104,13 +108,9 @@ class AgentLoopService(
                     tools = toolDefinitions.ifEmpty { null },
                 )
 
-                if (finalResponse.content != null) {
-                    emit(finalResponse.content!!)
-                }
+                emit(finalResponse.content.orFallback())
             } else {
-                if (response.content != null) {
-                    emit(response.content!!)
-                }
+                emit(response.content.orFallback())
             }
         } catch (e: Exception) {
             emit("Ошибка при обработке запроса: ${e.message}")
@@ -123,6 +123,19 @@ class AgentLoopService(
     ): String {
         val sb = StringBuilder()
         sb.appendLine("Ты помощник, отвечающий на вопросы о структуре и документации проекта.")
+        sb.appendLine(
+            "Для вопросов о конкретном проекте, его файлах, структуре, коде или документации сначала используй " +
+                    "подходящие read-only инструменты: list_files, search_code, read_file и search_docs. " +
+                    "Не отвечай по предположениям."
+        )
+        sb.appendLine(
+            "Никогда не оставляй ответ пустым. Сообщай о недостатке информации только после попытки получить её " +
+                    "доступными инструментами; предложи уточнить вопрос или добавить документацию."
+        )
+        sb.appendLine(
+            "Подкрепляй каждый содержательный вывод ссылкой на файл в формате `path/to/file`. " +
+                    "Для выводов по документации обязательно указывай также номер строки в формате `path/to/file:123`."
+        )
 
         if (ctx != null) {
             sb.appendLine()
@@ -155,4 +168,7 @@ class AgentLoopService(
 
         return sb.toString()
     }
+
+    private fun String?.orFallback(): String =
+        takeIf { !it.isNullOrBlank() } ?: NO_ANSWER_MESSAGE
 }

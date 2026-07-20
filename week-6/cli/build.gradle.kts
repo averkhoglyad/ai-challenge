@@ -1,3 +1,5 @@
+import org.gradle.jvm.application.tasks.CreateStartScripts
+
 plugins {
     id("buildsrc.convention.kotlin-jvm")
     application
@@ -58,6 +60,30 @@ tasks.register<Test>("integrationTest") {
 
 application {
     mainClass = "io.averkhogliad.ai.challenge.week6.AppKt"
+}
+
+// Gradle's standard launchers know their own paths only at runtime. Add that path as
+// a JVM property after generating the scripts, so `/review install-hook` can reuse it.
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        val scriptOutputDir = requireNotNull(outputDir)
+        val scriptName = requireNotNull(applicationName)
+        val unixScript = scriptOutputDir.resolve(scriptName)
+        val windowsScript = scriptOutputDir.resolve("$scriptName.bat")
+
+        unixScript.writeText(
+            unixScript.readText().replace(
+                "set -- \\\n        -classpath \"\$CLASSPATH\"",
+                "set -- \\\n        \"-Dweek6.launcher.path=\$APP_HOME/bin/\${app_path##*/}\" \\\n        -classpath \"\$CLASSPATH\"",
+            )
+        )
+        windowsScript.writeText(
+            windowsScript.readText().replace(
+                "-classpath \"%CLASSPATH%\"",
+                "\"-Dweek6.launcher.path=%~f0\" -classpath \"%CLASSPATH%\"",
+            )
+        )
+    }
 }
 
 tasks.withType<JavaExec>().configureEach {

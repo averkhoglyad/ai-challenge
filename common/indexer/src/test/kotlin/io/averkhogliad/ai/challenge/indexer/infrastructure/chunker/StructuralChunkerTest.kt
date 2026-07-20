@@ -20,7 +20,11 @@ class StructuralChunkerTest : FreeSpec({
 
             chunks shouldHaveSize 2
             chunks[0].title shouldBe "Title1"
+            chunks[0].metadata["start_line"] shouldBe "1"
+            chunks[0].metadata["end_line"] shouldBe "2"
             chunks[1].title shouldBe "Title2"
+            chunks[1].metadata["start_line"] shouldBe "3"
+            chunks[1].metadata["end_line"] shouldBe "4"
         }
 
         "splits plain text by paragraphs" {

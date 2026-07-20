@@ -7,6 +7,14 @@ import io.averkhogliad.ai.challenge.llm.embedding.EmbeddingClient
 import io.averkhogliad.ai.challenge.llm.embedding.EmbeddingRequest
 import io.averkhogliad.ai.challenge.week6.domain.indexer.port.IndexedChunkRepository
 
+data class RagSearchResult(
+    val text: String,
+    val sourcePath: String,
+    val startLine: Int?,
+    val endLine: Int?,
+    val score: Float,
+)
+
 class RagService(
     private val extractorRegistry: DocumentExtractorRegistry,
     private val chunkingStrategy: ChunkingStrategy,
@@ -15,12 +23,20 @@ class RagService(
     private val indexedChunkRepository: IndexedChunkRepository? = null,
 ) {
 
-    suspend fun search(query: String, topK: Int = 5): List<Pair<String, Float>> {
+    suspend fun search(query: String, topK: Int = 5): List<RagSearchResult> {
         val response = embeddingClient.generate(EmbeddingRequest(listOf(query)))
         val queryEmbedding = response.embeddings.firstOrNull() ?: return emptyList()
 
         return vectorSearch.searchWithScores(queryEmbedding.vector, topK)
-            .map { (indexedChunk, score) -> indexedChunk.chunk.text to score }
+            .map { (indexedChunk, score) ->
+                RagSearchResult(
+                    text = indexedChunk.chunk.text,
+                    sourcePath = indexedChunk.chunk.source,
+                    startLine = indexedChunk.chunk.metadata["start_line"]?.toIntOrNull(),
+                    endLine = indexedChunk.chunk.metadata["end_line"]?.toIntOrNull(),
+                    score = score,
+                )
+            }
     }
 
     suspend fun loadIndexFromDb(projectId: String) {

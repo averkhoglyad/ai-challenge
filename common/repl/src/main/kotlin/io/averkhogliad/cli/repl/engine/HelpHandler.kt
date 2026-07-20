@@ -6,6 +6,7 @@ import io.averkhogliad.cli.repl.dispatcher.ContextStack
 
 class HelpHandler(private val contextStack: ContextStack) : CommandHandler {
     override val name: String = "/help"
+    override val aliases: List<String> = listOf("/h")
     override val description: String = "Show available commands"
 
     override suspend fun execute(rawInput: String): CommandEffect {

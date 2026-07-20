@@ -44,7 +44,7 @@ class ReviewCodeUseCase(
 
         // Get RAG context if available
         val ragContext = try {
-            ragService?.search("code review changes $truncatedDiff".take(500))?.joinToString("\n") { it.first }
+            ragService?.search("code review changes $truncatedDiff".take(500))?.joinToString("\n") { it.text }
         } catch (e: Exception) {
             null
         }

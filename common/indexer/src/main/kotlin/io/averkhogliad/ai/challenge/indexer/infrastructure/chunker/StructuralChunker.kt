@@ -24,21 +24,31 @@ class StructuralChunker(
         val lines = document.content.lines()
         var currentSection = StringBuilder()
         var currentTitle: String? = null
+        var sectionStartLine = 1
 
-        for (line in lines) {
+        for ((index, line) in lines.withIndex()) {
             if (line.startsWith("#")) {
                 if (currentSection.isNotEmpty()) {
-                    sections.add(createChunk(document, currentSection.toString(), currentTitle))
+                    sections.add(
+                        createChunk(
+                            document,
+                            currentSection.toString(),
+                            currentTitle,
+                            sectionStartLine,
+                            index,
+                        )
+                    )
                     currentSection.clear()
                 }
                 currentTitle = line.trimStart('#').trim()
+                sectionStartLine = index + 1
             } else {
                 currentSection.appendLine(line)
             }
         }
 
         if (currentSection.isNotEmpty()) {
-            sections.add(createChunk(document, currentSection.toString(), currentTitle))
+            sections.add(createChunk(document, currentSection.toString(), currentTitle, sectionStartLine, lines.size))
         }
 
         return sections
@@ -49,17 +59,33 @@ class StructuralChunker(
             .split("\n\n")
             .filter { it.isNotBlank() }
             .mapIndexed { index, paragraph ->
-                createChunk(document, paragraph, "Paragraph ${index + 1}")
+                val startOffset = document.content.indexOf(paragraph)
+                createChunk(
+                    document,
+                    paragraph,
+                    "Paragraph ${index + 1}",
+                    document.content.substring(0, startOffset).count { it == '\n' } + 1,
+                    document.content.substring(0, startOffset + paragraph.length).count { it == '\n' } + 1,
+                )
             }
     }
 
-    private fun createChunk(document: Document, text: String, title: String?): Chunk {
+    private fun createChunk(
+        document: Document,
+        text: String,
+        title: String?,
+        startLine: Int,
+        endLine: Int,
+    ): Chunk {
         return Chunk(
             id = UUID.randomUUID(),
             text = text,
             source = document.path.toString(),
             title = title,
-            metadata = document.metadata,
+            metadata = document.metadata + mapOf(
+                "start_line" to startLine.toString(),
+                "end_line" to endLine.toString(),
+            ),
         )
     }
 }

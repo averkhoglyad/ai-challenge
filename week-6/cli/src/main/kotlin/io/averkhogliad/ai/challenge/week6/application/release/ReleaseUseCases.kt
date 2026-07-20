@@ -113,7 +113,7 @@ class EnhanceWithRagContextUseCase(
 ) {
     suspend fun execute(): ReleaseContext = try {
         val entries = ragService?.search("similar changes in previous releases", topK = 3).orEmpty()
-        ReleaseContext(entries.map { it.first }, warning = null)
+        ReleaseContext(entries.map { it.text }, warning = null)
     } catch (_: Exception) {
         ReleaseContext(emptyList(), warning = "RAG context unavailable; generated changelog uses git history only")
     }

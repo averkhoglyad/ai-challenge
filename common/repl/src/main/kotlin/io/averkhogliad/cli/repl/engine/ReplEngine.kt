@@ -18,7 +18,7 @@ class ReplEngine(
     private val outputWriter: OutputWriter
 ) {
     private val contextStack = ContextStack(initialContext)
-    private val builtinHandlers = listOf(HelpHandler(contextStack), QuitHandler())
+    private val builtinHandlers = listOf(HelpHandler(contextStack), QuitHandler(), BackHandler(contextStack))
     private val dispatcher = CommandDispatcher(contextStack, builtinHandlers)
     private val registeredContexts = mutableMapOf<String, ReplContext>()
 
@@ -67,6 +67,7 @@ class ReplEngine(
         is CommandEffect.Navigate -> {
             val target = registeredContexts[effect.targetContextName]
             if (target != null) {
+                effect.message?.let { outputWriter.write(it) }
                 activateContext(target)
             } else {
                 handleEffect(

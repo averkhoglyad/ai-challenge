@@ -21,7 +21,7 @@ class FixedSizeChunker(
     override fun chunk(document: Document): List<Chunk> {
         val text = document.content
         if (text.length <= chunkSize) {
-            return listOf(createChunk(document, text, 0))
+            return listOf(createChunk(document, text, 0, 0))
         }
 
         val chunks = mutableListOf<Chunk>()
@@ -30,7 +30,7 @@ class FixedSizeChunker(
         while (start < text.length) {
             val end = minOf(start + chunkSize, text.length)
             val chunkText = text.substring(start, end)
-            chunks.add(createChunk(document, chunkText, chunks.size))
+            chunks.add(createChunk(document, chunkText, chunks.size, start))
             start += chunkSize - overlap
             if (end == text.length) break
         }
@@ -38,12 +38,19 @@ class FixedSizeChunker(
         return chunks
     }
 
-    private fun createChunk(document: Document, text: String, index: Int): Chunk {
+    private fun createChunk(document: Document, text: String, index: Int, startOffset: Int): Chunk {
+        val endOffset = startOffset + text.length
+        val startLine = document.content.substring(0, startOffset).count { it == '\n' } + 1
+        val endLine = document.content.substring(0, endOffset).count { it == '\n' } + 1
         return Chunk(
             id = UUID.randomUUID(),
             text = text,
             source = document.path.toString(),
-            metadata = document.metadata + ("chunk_index" to index.toString()),
+            metadata = document.metadata + mapOf(
+                "chunk_index" to index.toString(),
+                "start_line" to startLine.toString(),
+                "end_line" to endLine.toString(),
+            ),
         )
     }
 }
