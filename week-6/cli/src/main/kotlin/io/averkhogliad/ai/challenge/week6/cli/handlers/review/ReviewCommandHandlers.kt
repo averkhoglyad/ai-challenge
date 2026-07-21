@@ -9,9 +9,7 @@ import io.averkhogliad.ai.challenge.week6.cli.rendering.ReviewRenderers
 import io.averkhogliad.ai.challenge.week6.domain.error.DomainResult
 import io.averkhogliad.ai.challenge.week6.domain.port.GitPort
 import io.averkhogliad.ai.challenge.week6.domain.pr.PrStatus
-import io.averkhogliad.ai.challenge.week6.domain.pr.PullRequest
 import io.averkhogliad.ai.challenge.week6.domain.pr.PullRequestRepository
-import io.averkhogliad.ai.challenge.week6.domain.review.Review
 import io.averkhogliad.ai.challenge.week6.domain.review.ReviewRepository
 import io.averkhogliad.ai.challenge.week6.domain.review.ReviewTrigger
 import io.averkhogliad.cli.repl.core.CommandEffect
@@ -101,7 +99,7 @@ class ReviewHistoryCommandHandler(
 ) : CommandHandler {
 
     override val name: String = "/review history"
-    override val aliases: List<String> = listOf("/review history")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Show review history: /review history [--limit N]"
 
     override fun canHandle(rawInput: String): Boolean =
@@ -123,7 +121,7 @@ class ReviewShowCommandHandler(
 ) : CommandHandler {
 
     override val name: String = "/review show"
-    override val aliases: List<String> = listOf("/review show")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Show review details: /review show <id>"
 
     override fun canHandle(rawInput: String): Boolean =
@@ -147,7 +145,7 @@ class PrCreateHandler(
 ) : CommandHandler {
 
     override val name: String = "/pr create"
-    override val aliases: List<String> = listOf("/pr create")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Create a PR: /pr create <title> [--source <branch>] [--target <branch>]"
 
     override fun canHandle(rawInput: String): Boolean =
@@ -193,7 +191,7 @@ class PrListHandler(
 ) : CommandHandler {
 
     override val name: String = "/pr list"
-    override val aliases: List<String> = listOf("/pr list")
+    override val aliases: List<String> = emptyList()
     override val description: String = "List PRs: /pr list [--status open|closed|merged|draft]"
 
     override fun canHandle(rawInput: String): Boolean =
@@ -236,7 +234,7 @@ class PrDiffHandler(
 ) : CommandHandler {
 
     override val name: String = "/pr diff"
-    override val aliases: List<String> = listOf("/pr diff")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Show PR diff: /pr diff <id>"
 
     override fun canHandle(rawInput: String): Boolean =
@@ -272,7 +270,7 @@ class PrReviewHandler(
 ) : CommandHandler {
 
     override val name: String = "/pr review"
-    override val aliases: List<String> = listOf("/pr review")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Review a PR: /pr review <id>"
 
     override fun canHandle(rawInput: String): Boolean =

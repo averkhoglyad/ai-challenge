@@ -1,32 +1,37 @@
-package io.averkhogliad.ai.challenge.week6
+package io.averkhogliad.ai.challenge.week6.application.review
 
 import io.averkhogliad.ai.challenge.llm.chat.LlmClient
 import io.averkhogliad.ai.challenge.week6.application.ProjectContextProvider
 import io.averkhogliad.ai.challenge.week6.application.rag.RagService
-import io.averkhogliad.ai.challenge.week6.application.review.ReviewCodeUseCase
-import io.averkhogliad.ai.challenge.week6.application.review.SaveReviewUseCase
+import io.averkhogliad.ai.challenge.week6.domain.model.ProjectContext
 import io.averkhogliad.ai.challenge.week6.domain.port.GitPort
 import io.averkhogliad.ai.challenge.week6.domain.review.ReviewTrigger
-import java.nio.file.Path
 
-class ReviewRunner(
-    private val llmClient: LlmClient,
-    private val ragService: RagService,
-    private val gitPort: GitPort,
-    private val saveReviewUseCase: SaveReviewUseCase,
-    private val projectContextProvider: ProjectContextProvider,
+open class ReviewFromDbUseCase(
+    protected val ragService: RagService,
+    protected val gitPort: GitPort,
+    protected val llmClient: LlmClient,
+    protected val saveReviewUseCase: SaveReviewUseCase,
+    protected val projectContextProvider: ProjectContextProvider,
 ) {
-    suspend fun runReview(projectRoot: Path? = null) {
+    open suspend fun execute() {
+        val ctx = getContext() ?: return
+        println("🔍 Loading index from database...")
+        ragService.loadIndexFromDb(ctx.projectId)
+        executePostIndexSteps(ctx, ReviewTrigger.AUTO)
+    }
+
+    protected suspend fun getContext(): ProjectContext? {
         val ctx = projectContextProvider.getContext().getOrNull()
         if (ctx == null) {
             println("No active project. Use the REPL to open a project first.")
-            return
+            return null
         }
+        return ctx
+    }
 
-        println("🔍 Loading index from database...")
-        ragService.loadIndexFromDb(ctx.projectId)
-
-        val rootPath = projectRoot ?: ctx.rootPath
+    protected suspend fun executePostIndexSteps(ctx: ProjectContext, trigger: ReviewTrigger) {
+        val rootPath = ctx.rootPath
 
         val headHash = gitPort.getLastCommitHash(rootPath).getOrNull()
         if (headHash == null) {
@@ -52,7 +57,7 @@ class ReviewRunner(
         val flow = reviewCodeUseCase.execute(
             projectId = ctx.projectId,
             diff = diff,
-            trigger = ReviewTrigger.AUTO,
+            trigger = trigger,
             commitHash = headHash,
             branch = branch,
         )

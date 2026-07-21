@@ -22,6 +22,7 @@ import io.averkhogliad.ai.challenge.week6.application.pr.ListPullRequestsUseCase
 import io.averkhogliad.ai.challenge.week6.application.rag.RagService
 import io.averkhogliad.ai.challenge.week6.application.release.*
 import io.averkhogliad.ai.challenge.week6.application.review.ReviewCodeUseCase
+import io.averkhogliad.ai.challenge.week6.application.review.ReviewFromDbUseCase
 import io.averkhogliad.ai.challenge.week6.application.review.SaveReviewTool
 import io.averkhogliad.ai.challenge.week6.application.review.SaveReviewUseCase
 import io.averkhogliad.ai.challenge.week6.cli.contexts.CopilotContext
@@ -43,6 +44,7 @@ import io.averkhogliad.ai.challenge.week6.domain.indexer.port.IndexedSourceRepos
 import io.averkhogliad.ai.challenge.week6.domain.indexer.usecase.CheckIndexStalenessUseCase
 import io.averkhogliad.ai.challenge.week6.domain.indexer.usecase.CollectDefaultSourcesUseCase
 import io.averkhogliad.ai.challenge.week6.domain.indexer.usecase.IndexSourcesUseCase
+import io.averkhogliad.ai.challenge.week6.infrastructure.config.AppConfig
 import io.averkhogliad.ai.challenge.week6.infrastructure.config.AppConfigLoader
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.DatabaseFactory
 import io.averkhogliad.ai.challenge.week6.infrastructure.db.repository.*
@@ -67,7 +69,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import kotlin.time.Duration.Companion.seconds
 
 fun main(args: Array<String>) {
-    val isReviewMode = args.contains("--review")
     val config = AppConfigLoader().load()
     val db: Database = DatabaseFactory.connect(config.dbPath)
 
@@ -85,6 +86,64 @@ fun main(args: Array<String>) {
         )
     }
 
+    if (args.contains("--review")) {
+        runReview(config, db)
+    } else {
+        runCliApp(args, config, db)
+    }
+}
+
+private fun runReview(config: AppConfig, db: Database) {
+    val projectRepository = SqlProjectRepository()
+    val appStateRepository = SqlAppStateRepository()
+    val indexedChunkRepository = SqlIndexedChunkRepository()
+    val reviewRepository = SqlReviewRepository()
+
+    val llmClientConfig = LlmClientConfig(
+        baseUrl = config.llmBaseUrl,
+        apiKey = config.llmApiKey,
+        model = config.llmModel,
+        connectTimeout = 10.seconds,
+        requestTimeout = 120.seconds,
+        rateLimitEnabled = false,
+        minInterval = 0.5.seconds,
+        maxRequestsPerMinute = 60,
+    )
+    val llmClient = DefaultLlmClient(llmClientConfig)
+
+    val gitPort = ProcessGitAdapter()
+
+    val embeddingClient = EmbeddingClientFactory.create(
+        EmbeddingConfig(provider = config.embeddingProviderConfig)
+    )
+
+    val extractorRegistry = DocumentExtractorRegistry(
+        listOf(TextExtractor(), MarkdownExtractor(), HtmlExtractor())
+    )
+    val chunkingStrategy = ChunkingStrategyFactory.create(
+        ChunkingConfig(strategy = ChunkingStrategyType.STRUCTURAL)
+    )
+    val vectorSearch = InMemoryCosineSearchAdapter()
+
+    val ragService =
+        RagService(extractorRegistry, chunkingStrategy, embeddingClient, vectorSearch, indexedChunkRepository)
+
+    val getActiveProjectUseCase = GetActiveProjectUseCase(appStateRepository, projectRepository)
+    val projectContextProvider = ProjectContextProvider(getActiveProjectUseCase)
+
+    val saveReviewUseCase = SaveReviewUseCase(reviewRepository)
+
+    val reviewFromDbUseCase =
+        ReviewFromDbUseCase(ragService, gitPort, llmClient, saveReviewUseCase, projectContextProvider)
+
+    try {
+        runBlocking { reviewFromDbUseCase.execute() }
+    } finally {
+        embeddingClient.close()
+    }
+}
+
+private fun runCliApp(args: Array<String>, config: AppConfig, db: Database) {
     val projectRepository = SqlProjectRepository()
     val appStateRepository = SqlAppStateRepository()
     val indexedChunkRepository = SqlIndexedChunkRepository()
@@ -141,7 +200,8 @@ fun main(args: Array<String>) {
     // Tools
     val toolRegistry = ToolRegistryImpl()
     val ragSearchTool = RagSearchBuiltinTool(ragService, checkStalenessUseCase, projectContextProvider)
-    toolRegistry.register(GitBuiltinTool(gitPort, projectContextProvider))
+    val gitToolFactory = GitBuiltinTool(gitPort, projectContextProvider)
+    gitToolFactory.createTools().forEach { toolRegistry.register(it) }
     toolRegistry.register(ragSearchTool)
 
     // Project settings repository (used by OpenProjectUseCase and FileOps tools)
@@ -378,16 +438,6 @@ fun main(args: Array<String>) {
         mcpInfoHandler = mcpInfoHandler,
         mcpReconnectHandler = mcpReconnectHandler,
     )
-
-    if (isReviewMode) {
-        try {
-            val reviewRunner = ReviewRunner(llmClient, ragService, gitPort, saveReviewUseCase, projectContextProvider)
-            runBlocking { reviewRunner.runReview() }
-        } finally {
-            embeddingClient.close()
-        }
-        return
-    }
 
     val initialContext: ReplContext = if (activeProject != null) copilotContext else onboardingContext
 

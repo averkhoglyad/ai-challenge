@@ -11,7 +11,7 @@ class ReviewInstallHookHandler(
 ) : CommandHandler {
 
     override val name: String = "/review install-hook"
-    override val aliases: List<String> = listOf("/review install-hook")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Install post-commit git hook for automatic code review"
 
     override fun canHandle(rawInput: String): Boolean =
@@ -37,7 +37,7 @@ class ReviewRemoveHookHandler(
 ) : CommandHandler {
 
     override val name: String = "/review remove-hook"
-    override val aliases: List<String> = listOf("/review remove-hook")
+    override val aliases: List<String> = emptyList()
     override val description: String = "Remove post-commit git hook"
 
     override fun canHandle(rawInput: String): Boolean =

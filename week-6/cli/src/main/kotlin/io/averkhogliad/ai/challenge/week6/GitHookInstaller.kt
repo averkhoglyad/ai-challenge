@@ -112,7 +112,7 @@ $BLOCK_END"""
     private fun reviewCommand(launcherPath: Path): String {
         val path = launcherPath.toAbsolutePath().toString()
         return if (path.endsWith(".bat", ignoreCase = true)) {
-            "cmd.exe /c \"\\\"$path\\\" --review\""
+            "cmd.exe //c \"$path\" --review"
         } else {
             "'${path.replace("'", "'\\\"'\\\"'")}' --review"
         }
